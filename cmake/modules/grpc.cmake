@@ -25,14 +25,15 @@ elseif(NOT USE_BUNDLED_GRPC)
 else()
 	include(cares)
 	include(protobuf)
+	include(openssl)
 	find_package(PkgConfig)
 	if(NOT PKG_CONFIG_FOUND)
 		message(FATAL_ERROR "pkg-config binary not found")
 	endif()
 	set(GRPC_SRC "${PROJECT_BINARY_DIR}/grpc-prefix/src/grpc")
 	set(GRPC_INCLUDE "${GRPC_SRC}/include")
-	set(GRPC_LIB "${GRPC_SRC}/libs/opt/libgrpc_unsecure.a")
-	set(GRPCPP_LIB "${GRPC_SRC}/libs/opt/libgrpc++_unsecure.a")
+	set(GRPC_LIB "${GRPC_SRC}/libs/opt/libgrpc.a")
+	set(GRPCPP_LIB "${GRPC_SRC}/libs/opt/libgrpc++.a")
 	set(GRPC_CPP_PLUGIN "${GRPC_SRC}/bins/opt/grpc_cpp_plugin")
 
 	get_filename_component(PROTOC_DIR ${PROTOC} PATH)
@@ -40,20 +41,30 @@ else()
 	if(NOT TARGET grpc)
 		message(STATUS "Found pkg-config executable: ${PKG_CONFIG_EXECUTABLE}")
 		message(STATUS "Using bundled grpc in '${GRPC_SRC}'")
+
 		ExternalProject_Add(grpc
 			PREFIX "${PROJECT_BINARY_DIR}/grpc-prefix"
-			DEPENDS protobuf zlib c-ares
-			URL "http://download.draios.com/dependencies/grpc-1.8.1.tar.gz"
-			URL_MD5 "2fc42c182a0ed1b48ad77397f76bb3bc"
+			DEPENDS openssl protobuf c-ares
+			GIT_REPOSITORY https://github.com/grpc/grpc.git
+			GIT_TAG v1.32.0
+			GIT_SUBMODULES "third_party/abseil-cpp third_party/re2"
+			INSTALL_COMMAND ""
 			CONFIGURE_COMMAND ""
-			# TODO what if using system openssl, protobuf or cares?
-			BUILD_COMMAND CFLAGS=-Wno-implicit-fallthrough HAS_SYSTEM_ZLIB=false LDFLAGS=-static PATH=${PROTOC_DIR}:$ENV{PATH} PKG_CONFIG_PATH=${OPENSSL_BUNDLE_DIR}:${PROTOBUF_SRC}:${CARES_SRC} PKG_CONFIG=${PKG_CONFIG_EXECUTABLE} make grpc_cpp_plugin static_cxx static_c
 			BUILD_IN_SOURCE 1
 			BUILD_BYPRODUCTS ${GRPC_LIB} ${GRPCPP_LIB}
-			# TODO s390x support
-			# TODO what if using system zlib
-			PATCH_COMMAND rm -rf third_party/zlib && ln -s ${ZLIB_SRC} third_party/zlib && wget https://download.sysdig.com/dependencies/grpc-1.8.1-Makefile.patch && patch < grpc-1.8.1-Makefile.patch
-			INSTALL_COMMAND "")
+			BUILD_COMMAND
+				CFLAGS=-Wno-implicit-fallthrough
+				PATH=${PROTOC_DIR}:$ENV{PATH}
+				PKG_CONFIG_PATH=${PROTOBUF_SRC}:${CARES_SRC}:${OPENSSL_BUNDLE_DIR}
+				HAS_SYSTEM_ZLIB=true
+				HAS_SYSTEM_PROTOBUF=true
+				HAS_SYSTEM_CARES=true
+				HAS_EMBEDDED_OPENSSL_ALPN=false
+				HAS_SYSTEM_OPENSSL_ALPN=true
+				LDFLAGS=-L${PROTOBUF_SRC}/target/lib
+				LD_LIBRARY_PATH=$ENV{LD_LIBRARY_PATH}:${PROTOBUF_SRC}/target/lib:${CARES_SRC}/target/lib
+				make static_c static_cxx grpc_cpp_plugin
+		)
 	endif()
 endif()
 
