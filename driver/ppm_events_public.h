@@ -609,7 +609,7 @@ or GPL2.txt for full copies of the license.
  * Execve additional flags
  */
 #define PPM_EXE_WRITABLE		(1 << 0)
-  
+
 /*
  * Execveat flags
  */
@@ -1521,6 +1521,8 @@ struct ppm_evt_hdr {
 #define PPM_IOCTL_GET_PROBE_VERSION _IO(PPM_IOCTL_MAGIC, 21)
 #define PPM_IOCTL_SET_FULLCAPTURE_PORT_RANGE _IO(PPM_IOCTL_MAGIC, 22)
 #define PPM_IOCTL_SET_STATSD_PORT _IO(PPM_IOCTL_MAGIC, 23)
+#define PPM_IOCTL_GET_API_VERSION _IO(PPM_IOCTL_MAGIC, 24)
+#define PPM_IOCTL_GET_SCHEMA_VERSION _IO(PPM_IOCTL_MAGIC, 25)
 /* Begin StackRox Section */
 #define PPM_IOCTL_EXCLUDE_NS_OF_PID _IO(PPM_IOCTL_MAGIC, 40)
 /* End StackRox Section */
