@@ -20,6 +20,15 @@ or GPL2.txt for full copies of the license.
 
 #include "ppm_api_version.h"
 
+#define PROBE_VERSION "${PROBE_VERSION}"
+
+/* taken from driver/SCHEMA_VERSION */
+#define PPM_SCHEMA_CURRENT_VERSION_MAJOR ${PPM_SCHEMA_CURRENT_VERSION_MAJOR}
+#define PPM_SCHEMA_CURRENT_VERSION_MINOR ${PPM_SCHEMA_CURRENT_VERSION_MINOR}
+#define PPM_SCHEMA_CURRENT_VERSION_PATCH ${PPM_SCHEMA_CURRENT_VERSION_PATCH}
+
+#include "ppm_api_version.h"
+
 #define DRIVER_VERSION "${DRIVER_VERSION}"
 
 #define DRIVER_NAME "${DRIVER_NAME}"
@@ -27,6 +36,8 @@ or GPL2.txt for full copies of the license.
 #define DRIVER_DEVICE_NAME "${DRIVER_DEVICE_NAME}"
 
 #define DRIVER_COMMIT "${GIT_COMMIT}"
+
+#define PROBE_COMMIT "${GIT_COMMIT}"
 
 #ifndef KBUILD_MODNAME
 #define KBUILD_MODNAME DRIVER_NAME

@@ -611,14 +611,6 @@ public:
 	}
 
 	/*!
-	  \brief Returns the minimum API version required by the userspace library
-	*/
-	inline uint64_t get_scap_api_version() const
-	{
-		return SCAP_MINIMUM_DRIVER_API_VERSION;
-	}
-
-	/*!
 	  \brief Returns the schema version supported by the driver
 	*/
 	inline uint64_t get_driver_schema_version() const
