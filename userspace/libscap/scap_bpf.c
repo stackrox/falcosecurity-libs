@@ -773,14 +773,15 @@ static int32_t populate_syscall_routing_table_map(scap_t *handle)
 
 static int32_t populate_syscall_table_map(scap_t *handle)
 {
-	static struct syscall_evt_pair empty_syscall_event = {0};
+	static const struct syscall_evt_pair uninterested_pair = { .flags = UF_UNINTERESTING };
 	int j;
 
 	for(j = 0; j < SYSCALL_TABLE_SIZE; ++j)
 	{
 		const struct syscall_evt_pair *p = &g_syscall_table[j];
-		if (g_bpf_drop_syscalls[j]) {
-			p = &empty_syscall_event;
+		if (!handle->syscalls_of_interest[j])
+		{
+			p = &uninterested_pair;
 		}
 		if(bpf_map_update_elem(handle->m_bpf_map_fds[SYSDIG_SYSCALL_TABLE], &j, p, BPF_ANY) != 0)
 		{
