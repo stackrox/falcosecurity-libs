@@ -1101,6 +1101,12 @@ public:
 	}
 
 	/*=============================== Events related ===============================*/
+	/*!
+	  \brief Enables simple_consumer mode on sinsp, at driver level.
+	  This will avoid tracing syscalls flagged with EF_DROP_SIMPLE_CONS.
+	  Must be called before sinsp opening.
+	*/
+	void set_simple_consumer();
 
 	bool setup_cycle_writer(std::string base_file_name, int rollover_mb, int duration_seconds, int file_limit, unsigned long event_limit, bool compress);
 	void import_ipv4_interface(const sinsp_ipv4_ifinfo& ifinfo);
@@ -1206,6 +1212,7 @@ private:
 	void import_ifaddr_list();
 	void import_user_list();
 	void add_protodecoders();
+	void fill_syscalls_of_interest(scap_open_args *oargs);
 	void remove_thread(int64_t tid, bool force);
 
 	void fill_ppm_sc_of_interest(scap_open_args *oargs, const std::unordered_set<uint32_t> &ppm_sc_of_interest);
@@ -1260,6 +1267,9 @@ private:
 	scap_t* m_h;
 	uint64_t m_nevts;
 	int64_t m_filesize;
+
+	bool m_simpleconsumer;
+
 	scap_mode_t m_mode = SCAP_MODE_NONE;
 
 	// If non-zero, reading from this fd and m_input_filename contains "fd
@@ -1356,6 +1366,9 @@ public:
 	uint64_t m_firstevent_ts;
 	sinsp_filter* m_filter;
 	std::string m_filterstring;
+#endif
+	unordered_set<uint32_t> m_ppm_sc_of_interest;
+
 	//
 	// Internal stats
 	//

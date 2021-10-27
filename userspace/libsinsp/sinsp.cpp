@@ -70,6 +70,7 @@ std::atomic<int> sinsp::instance_count{0};
 
 sinsp::sinsp(bool static_container, const std::string &static_id, const std::string &static_name, const std::string &static_image) :
 	m_external_event_processor(),
+	m_simpleconsumer(false),
 	m_evt(this),
 	m_lastevent_ts(0),
 	m_host_root(scap_get_host_root()),
@@ -77,6 +78,8 @@ sinsp::sinsp(bool static_container, const std::string &static_id, const std::str
 	m_usergroup_manager(this),
 	m_suppressed_comms(),
 	m_inited(false)
+	m_ppm_sc_of_interest(),
+	m_suppressed_comms()
 {
 	++instance_count;
 #if !defined(MINIMAL_BUILD) && !defined(CYGWING_AGENT) && defined(HAS_CAPTURE)
@@ -443,9 +446,40 @@ void sinsp::set_import_users(bool import_users)
 	m_usergroup_manager.m_import_users = import_users;
 }
 
-/*=============================== OPEN METHODS ===============================*/
+void sinsp::fill_syscalls_of_interest(scap_open_args *oargs)
+{
+	// Fallback to set all events as interesting
+	if (m_mode != SCAP_MODE_LIVE  || m_ppm_sc_of_interest.empty())
+	{
+		for(int i = 0; i < PPM_SC_MAX; i++)
+		{
+			m_ppm_sc_of_interest.insert(i);
+		}
+	}
 
-void sinsp::open_common(scap_open_args* oargs)
+	/*
+	 * in case of simple consumer (driver side)
+	 * set all droppable events as non interesting (if they are syscall driven)
+	 */
+	if (m_simpleconsumer)
+	{
+		for (int i = 0; i < PPM_SC_MAX; i++)
+		{
+			if (g_infotables.m_syscall_info_table[i].flags & EF_DROP_SIMPLE_CONS)
+			{
+				m_ppm_sc_of_interest.erase(i);
+			}
+		}
+	}
+
+	// Finally, set scap_open_args syscalls_of_interest
+	for (int i = 0; i < PPM_SC_MAX; i++)
+	{
+		oargs->ppm_sc_of_interest.ppm_sc[i] = m_ppm_sc_of_interest.find(i) != m_ppm_sc_of_interest.end();
+	}
+}
+
+void sinsp::open_live_common(uint32_t timeout_ms, scap_mode_t mode)
 {
 	char error[SCAP_LASTERR_SIZE] = {0};
 	g_logger.log("Trying to open the right engine!");
@@ -453,10 +487,21 @@ void sinsp::open_common(scap_open_args* oargs)
 	/* Reset the thread manager */
 	m_thread_manager->clear();
 
-	/* We need to save the actual mode and the engine used by the inspector. */
-	m_mode = oargs->mode;
+	//
+	// Start the capture
+	//
+	m_mode = mode;
+	scap_open_args oargs;
 
-	if(oargs->mode != SCAP_MODE_CAPTURE)
+	oargs.mode = mode;
+	oargs.fname = NULL;
+	oargs.proc_callback = NULL;
+	oargs.proc_callback_context = NULL;
+	oargs.udig = m_udig;
+
+	fill_syscalls_of_interest(&oargs);
+
+	if(!m_filter_proc_table_when_saving)
 	{
 		oargs->proc_callback = ::on_new_entry_from_proc;
 		oargs->proc_callback_context = this;
@@ -554,7 +599,13 @@ void sinsp::open_savefile(const std::string& filename, int fd)
 		params.fname = NULL;
 		m_filesize = 0;
 	}
-	else
+	oargs.import_users = m_import_users;
+	fill_syscalls_of_interest(&oargs);
+
+	int32_t scap_rc;
+	m_h = scap_open(oargs, error, &scap_rc);
+
+	if(m_h == NULL)
 	{
 		if(filename.empty())
 		{
@@ -650,6 +701,11 @@ std::string sinsp::generate_gvisor_config(std::string socket_path)
 	return gvisor_config::generate(socket_path);
 }
 
+void sinsp::set_simple_consumer()
+{
+	m_simpleconsumer = true;
+}
+
 int64_t sinsp::get_file_size(const std::string& fname, char *error)
 {
 	static std::string err_str = "Could not determine capture file size: ";
@@ -730,6 +786,89 @@ std::string sinsp::get_error_desc(const std::string& msg)
 	return errstr;
 }
 
+void sinsp::open_int()
+{
+	char error[SCAP_LASTERR_SIZE] = {0};
+
+	//
+	// Reset the thread manager
+	//
+	m_thread_manager->clear();
+
+	//
+	// Start the capture
+	//
+	m_mode = SCAP_MODE_CAPTURE;
+	scap_open_args oargs;
+	oargs.mode = SCAP_MODE_CAPTURE;
+	if(m_input_fd != 0)
+	{
+		oargs.fd = m_input_fd;
+	}
+	else
+	{
+		oargs.fd = 0;
+		oargs.fname = m_input_filename.c_str();
+	}
+	oargs.proc_callback = NULL;
+	oargs.proc_callback_context = NULL;
+	oargs.import_users = m_import_users;
+	oargs.start_offset = 0;
+	fill_syscalls_of_interest(&oargs);
+
+	add_suppressed_comms(oargs);
+
+	int32_t scap_rc;
+
+	m_h = scap_open(oargs, error, &scap_rc);
+
+	if(m_h == NULL)
+	{
+		throw scap_open_exception(error, scap_rc);
+	}
+
+	if(m_input_fd != 0)
+	{
+		// We can't get a reliable filesize
+		m_filesize = 0;
+	}
+	else
+	{
+		m_filesize = get_file_size(m_input_filename, error);
+
+		if(m_filesize < 0)
+		{
+			throw sinsp_exception(error);
+		}
+	}
+
+	init();
+}
+
+void sinsp::open(const std::string &filename)
+{
+	if(filename.empty())
+	{
+		open();
+		return;
+	}
+
+	m_input_filename = filename;
+
+	g_logger.log("starting offline capture");
+
+	open_int();
+}
+
+void sinsp::fdopen(int fd)
+{
+	m_input_fd = fd;
+
+	g_logger.log("starting offline capture");
+
+	open_int();
+}
+
 void sinsp::close()
 {
 	if(m_h)
@@ -753,6 +892,15 @@ void sinsp::close()
 		delete m_filter;
 		m_filter = NULL;
 	}
+
+	if(m_evttype_filter != NULL)
+	{
+		delete m_evttype_filter;
+		m_evttype_filter = NULL;
+	}
+#endif
+
+	m_ppm_sc_of_interest.clear();
 }
 
 //

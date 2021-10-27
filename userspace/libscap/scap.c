@@ -47,7 +47,83 @@ const char* scap_getlasterr(scap_t* handle)
 #if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_BPF) || defined(HAS_ENGINE_MODERN_BPF)
 scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs, const struct scap_vtable* vtable)
 {
-	char filename[SCAP_MAX_PATH_SIZE] = {0};
+	if(suppressed_comms)
+	{
+		uint32_t i;
+		const char *comm;
+		for(i = 0, comm = suppressed_comms[i]; comm && i < SCAP_MAX_SUPPRESSED_COMMS; i++, comm = suppressed_comms[i])
+		{
+			int32_t res;
+			if((res = scap_suppress_events_comm(handle, comm)) != SCAP_SUCCESS)
+			{
+				return res;
+			}
+		}
+	}
+
+	return SCAP_SUCCESS;
+}
+
+#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
+scap_t* scap_open_live_int(char *error, int32_t *rc,
+			   proc_entry_callback proc_callback,
+			   void* proc_callback_context,
+			   bool import_users,
+			   const char *bpf_probe,
+			   const char **suppressed_comms,
+			   interesting_ppm_sc_set *ppm_sc_of_interest)
+{
+	snprintf(error, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
+	*rc = SCAP_NOT_SUPPORTED;
+	return NULL;
+}
+#endif
+
+#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
+scap_t* scap_open_udig_int(char *error, int32_t *rc,
+			   proc_entry_callback proc_callback,
+			   void* proc_callback_context,
+			   bool import_users,
+			   const char **suppressed_comms)
+{
+	snprintf(error, SCAP_LASTERR_SIZE, "udig capture not supported on %s", PLATFORM_NAME);
+	*rc = SCAP_NOT_SUPPORTED;
+	return NULL;
+}
+#else
+
+static uint32_t get_max_consumers()
+{
+#ifndef _WIN32
+	uint32_t max;
+	FILE *pfile = fopen("/sys/module/" SCAP_PROBE_MODULE_NAME "/parameters/max_consumers", "r");
+	if(pfile != NULL)
+	{
+		int w = fscanf(pfile, "%"PRIu32, &max);
+		if(w == 0)
+		{
+			return 0;
+		}
+
+		fclose(pfile);
+		return max;
+	}
+#endif
+
+	return 0;
+}
+
+#ifndef _WIN32
+scap_t* scap_open_live_int(char *error, int32_t *rc,
+			   proc_entry_callback proc_callback,
+			   void* proc_callback_context,
+			   bool import_users,
+			   const char *bpf_probe,
+			   const char **suppressed_comms,
+			   interesting_ppm_sc_set *ppm_sc_of_interest)
+{
+	uint32_t j;
+	char filename[SCAP_MAX_PATH_SIZE];
 	scap_t* handle = NULL;
 
 	//
@@ -107,6 +183,12 @@ scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs, cons
 	handle->m_driver_procinfo = NULL;
 	handle->m_fd_lookup_limit = 0;
 
+#ifdef CYGWING_AGENT
+	handle->m_whh = NULL;
+	handle->m_win_buf_handle = NULL;
+	handle->m_win_descs_handle = NULL;
+#endif
+
 	//
 	// Create the interface list
 	//
@@ -141,14 +223,160 @@ scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs, cons
 		return NULL;
 	}
 
+	if (ppm_sc_of_interest)
+	{
+		for (int i = 0; i < PPM_SC_MAX; i++)
+		{
+			// We need to convert from PPM_SC to SYSCALL_NR, using the routing table
+			for(int syscall_nr = 0; syscall_nr < SYSCALL_TABLE_SIZE; syscall_nr++)
+			{
+				// Find the match between the ppm_sc and the syscall_nr
+				if(g_syscall_code_routing_table[syscall_nr] == i)
+				{
+					// UF_NEVER_DROP syscalls must be always traced
+					if (ppm_sc_of_interest->ppm_sc[i] || g_syscall_table[syscall_nr].flags & UF_NEVER_DROP)
+					{
+						handle->syscalls_of_interest[syscall_nr] = true;
+					}
+					break;
+				}
+			}
+		}
+	}
+	else
+	{
+		// fallback to trace all syscalls
+		for (int i = 0; i < SYSCALL_TABLE_SIZE; i++)
+		{
+			handle->syscalls_of_interest[i] = true;
+		}
+	}
+
+
+
 	//
 	// Open and initialize all the devices
 	//
 	if((*rc = handle->m_vtable->init(handle, oargs)) != SCAP_SUCCESS)
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "%s", handle->m_lasterr);
-		scap_close(handle);
-		return NULL;
+		if((*rc = scap_bpf_load(handle, bpf_probe)) != SCAP_SUCCESS)
+		{
+			snprintf(error, SCAP_LASTERR_SIZE, "%s", handle->m_lasterr);
+			scap_close(handle);
+			return NULL;
+		}
+	}
+	else
+	{
+		int len;
+		uint32_t all_scanned_devs;
+
+		//
+		// Allocate the device descriptors.
+		//
+		len = RING_BUF_SIZE * 2;
+
+		for(j = 0, all_scanned_devs = 0; j < handle->m_ndevs && all_scanned_devs < handle->m_ncpus; ++all_scanned_devs)
+		{
+			//
+			// Open the device
+			//
+			snprintf(filename, sizeof(filename), "%s/dev/" PROBE_DEVICE_NAME "%d", scap_get_host_root(), all_scanned_devs);
+
+			if((handle->m_devs[j].m_fd = open(filename, O_RDWR | O_SYNC)) < 0)
+			{
+				if(errno == ENODEV)
+				{
+					//
+					// This CPU is offline, so we just skip it
+					//
+					continue;
+				}
+				else if(errno == EBUSY)
+				{
+					uint32_t curr_max_consumers = get_max_consumers();
+					snprintf(error, SCAP_LASTERR_SIZE, "Too many consumers attached to device %s. Current value for /sys/module/" SCAP_PROBE_MODULE_NAME "/parameters/max_consumers is '%"PRIu32"'.", filename, curr_max_consumers);
+				}
+				else
+				{
+					snprintf(error, SCAP_LASTERR_SIZE, "error opening device %s. Make sure you have root credentials and that the " PROBE_NAME " module is loaded.", filename);
+				}
+
+				scap_close(handle);
+				*rc = SCAP_FAILURE;
+				return NULL;
+			}
+
+			// Set close-on-exec for the fd
+			if (fcntl(handle->m_devs[j].m_fd, F_SETFD, FD_CLOEXEC) == -1) {
+				snprintf(error, SCAP_LASTERR_SIZE, "Can not set close-on-exec flag for fd for device %s (%s)", filename, scap_strerror(handle, errno));
+				scap_close(handle);
+				*rc = SCAP_FAILURE;
+				return NULL;
+			}
+
+			//
+			// Map the ring buffer
+			//
+			handle->m_devs[j].m_buffer = (char*)mmap(0,
+						len,
+						PROT_READ,
+						MAP_SHARED,
+						handle->m_devs[j].m_fd,
+						0);
+
+			if(handle->m_devs[j].m_buffer == MAP_FAILED)
+			{
+				// we cleanup this fd and then we let scap_close() take care of the other ones
+				close(handle->m_devs[j].m_fd);
+
+				scap_close(handle);
+				snprintf(error, SCAP_LASTERR_SIZE, "error mapping the ring buffer for device %s", filename);
+				*rc = SCAP_FAILURE;
+				return NULL;
+			}
+
+			//
+			// Map the ppm_ring_buffer_info that contains the buffer pointers
+			//
+			handle->m_devs[j].m_bufinfo = (struct ppm_ring_buffer_info*)mmap(0,
+						sizeof(struct ppm_ring_buffer_info),
+						PROT_READ | PROT_WRITE,
+						MAP_SHARED,
+						handle->m_devs[j].m_fd,
+						0);
+
+			if(handle->m_devs[j].m_bufinfo == MAP_FAILED)
+			{
+				// we cleanup this fd and then we let scap_close() take care of the other ones
+				munmap(handle->m_devs[j].m_buffer, len);
+				close(handle->m_devs[j].m_fd);
+
+				scap_close(handle);
+
+				snprintf(error, SCAP_LASTERR_SIZE, "error mapping the ring buffer info for device %s", filename);
+				*rc = SCAP_FAILURE;
+				return NULL;
+			}
+
+			++j;
+		}
+
+		for (int i = 0; i < SYSCALL_TABLE_SIZE; i++)
+		{
+			if (!handle->syscalls_of_interest[i])
+			{
+				// Kmod driver event_mask check uses event_types instead of syscall nr
+				enum ppm_event_type enter_ev = g_syscall_table[i].enter_event_type;
+				enum ppm_event_type exit_ev = g_syscall_table[i].exit_event_type;
+				// Filter unmapped syscalls (that have a g_syscall_table entry with both enter_ev and exit_ev 0ed)
+				if (enter_ev != 0 && exit_ev != 0)
+				{
+					scap_unset_eventmask(handle, enter_ev);
+					scap_unset_eventmask(handle, exit_ev);
+				}
+			}
+		}
 	}
 
 	*rc = check_api_compatibility(handle, handle->m_lasterr);
@@ -562,6 +790,47 @@ scap_t* scap_open_offline_int(scap_open_args* oargs, int* rc, char* error)
 #ifdef HAS_ENGINE_NODRIVER
 scap_t* scap_open_nodriver_int(char *error, int32_t *rc, scap_open_args *oargs)
 {
+	gzFile gzfile = gzopen(fname, "rb");
+	if(gzfile == NULL)
+	{
+		snprintf(error, SCAP_LASTERR_SIZE, "can't open file %s", fname);
+		*rc = SCAP_FAILURE;
+		return NULL;
+	}
+	scap_reader_t* reader = scap_reader_open_gzfile(gzfile);
+
+	return scap_open_offline_int(reader, error, rc, NULL, NULL, true, 0, NULL);
+}
+
+scap_t* scap_open_offline_fd(int fd, char *error, int32_t *rc)
+{
+	gzFile gzfile = gzdopen(fd, "rb");
+	if(gzfile == NULL)
+	{
+		snprintf(error, SCAP_LASTERR_SIZE, "can't open fd %d", fd);
+		*rc = SCAP_FAILURE;
+		return NULL;
+	}
+	scap_reader_t* reader = scap_reader_open_gzfile(gzfile);
+
+	return scap_open_offline_int(reader, error, rc, NULL, NULL, true, 0, NULL);
+}
+
+scap_t* scap_open_live(char *error, int32_t *rc)
+{
+	return scap_open_live_int(error, rc, NULL, NULL, true, NULL, NULL, NULL);
+}
+
+scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
+			       proc_entry_callback proc_callback,
+			       void* proc_callback_context,
+			       bool import_users)
+{
+#if !defined(HAS_CAPTURE)
+	snprintf(error, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
+	*rc = SCAP_NOT_SUPPORTED;
+	return NULL;
+#else
 	char filename[SCAP_MAX_PATH_SIZE];
 	scap_t* handle = NULL;
 
@@ -730,6 +999,66 @@ scap_t* scap_open_plugin_int(char *error, int32_t *rc, scap_open_args* oargs)
 
 	return handle;
 }
+
+scap_t* scap_open(scap_open_args args, char *error, int32_t *rc)
+{
+	switch(args.mode)
+	{
+	case SCAP_MODE_CAPTURE:
+	{
+		gzFile gzfile;
+
+		if(args.fd != 0)
+		{
+			gzfile = gzdopen(args.fd, "rb");
+		}
+		else
+		{
+			gzfile = gzopen(args.fname, "rb");
+		}
+
+		if(gzfile == NULL)
+		{
+			if(args.fd != 0)
+			{
+				snprintf(error, SCAP_LASTERR_SIZE, "can't open fd %d", args.fd);
+			}
+			else
+			{
+				snprintf(error, SCAP_LASTERR_SIZE, "can't open file %s", args.fname);
+			}
+			*rc = SCAP_FAILURE;
+			return NULL;
+		}
+
+		scap_reader_t* reader = scap_reader_open_gzfile(gzfile);
+		return scap_open_offline_int(reader, error, rc,
+					     args.proc_callback, args.proc_callback_context,
+					     args.import_users, args.start_offset,
+					     args.suppressed_comms);
+	}
+	case SCAP_MODE_LIVE:
+#ifndef CYGWING_AGENT
+		if(args.udig)
+		{
+			return scap_open_udig_int(error, rc, args.proc_callback,
+						args.proc_callback_context,
+						args.import_users,
+						args.suppressed_comms);
+		}
+		else
+		{
+			return scap_open_live_int(error, rc, args.proc_callback,
+						args.proc_callback_context,
+						args.import_users,
+						args.bpf_probe,
+						args.suppressed_comms,
+						&args.ppm_sc_of_interest);
+		}
+#else
+		snprintf(error,	SCAP_LASTERR_SIZE, "scap_open: live mode currently not supported on Windows.");
+		*rc = SCAP_NOT_SUPPORTED;
+		return NULL;
 #endif
 
 scap_t* scap_open(scap_open_args* oargs, char *error, int32_t *rc)
