@@ -90,9 +90,7 @@ struct ppm_consumer_t {
 	uint16_t fullcapture_port_range_start;
 	uint16_t fullcapture_port_range_end;
 	uint16_t statsd_port;
-	unsigned long buffer_bytes_dim; /* Every consumer will have its per-CPU buffer dim in bytes. */
-	DECLARE_BITMAP(syscalls_mask, SYSCALL_TABLE_SIZE);
-	u32 tracepoints_attached;
+	DECLARE_BITMAP(events_mask, PPM_EVENT_MAX);
 };
 
 typedef struct ppm_consumer_t ppm_consumer_t;

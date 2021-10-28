@@ -233,7 +233,6 @@ static struct pid_namespace *global_excluded_pid_ns = NULL;
 
 /* End StackRox section */
 
-DECLARE_BITMAP(g_events_mask, PPM_EVENT_MAX);
 static struct ppm_device *g_ppm_devs;
 static struct class *g_ppm_class;
 static unsigned int g_ppm_numdevs;
@@ -872,7 +871,7 @@ static int ppm_open(struct inode *inode, struct file *filp)
 	consumer->statsd_port = PPM_PORT_STATSD;
 	/* Begin StackRox section */
 	/* Commenting out the following line that is in sysdig open-source driver */
-	//bitmap_fill(g_events_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
+	//bitmap_fill(consumer->events_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
 	/* End StackRox section */
 	reset_ring_buffer(ring);
 	ring->open = true;
@@ -1474,7 +1473,11 @@ cleanup_ioctl_procinfo:
 	{
 		vpr_info("PPM_IOCTL_ZERO_SYSCALLS, consumer %p\n", consumer_id);
 
-		bitmap_zero(consumer->syscalls_mask, SYSCALL_TABLE_SIZE);
+		bitmap_zero(consumer->events_mask, PPM_EVENT_MAX);
+
+		/* Used for dropping events so they must stay on */
+		set_bit(PPME_DROP_E, consumer->events_mask);
+		set_bit(PPME_DROP_X, consumer->events_mask);
 
 		ret = 0;
 		goto cleanup_ioctl;
@@ -1491,7 +1494,7 @@ cleanup_ioctl_procinfo:
 			goto cleanup_ioctl;
 		}
 
-		set_bit(syscall_to_set, consumer->syscalls_mask);
+		set_bit(syscall_to_set, consumer->events_mask);
 
 		ret = 0;
 		goto cleanup_ioctl;
@@ -1508,7 +1511,7 @@ cleanup_ioctl_procinfo:
 			goto cleanup_ioctl;
 		}
 
-		clear_bit(syscall_to_unset, consumer->syscalls_mask);
+		clear_bit(syscall_to_unset, consumer->events_mask);
 
 		ret = 0;
 		goto cleanup_ioctl;
@@ -2241,7 +2244,7 @@ static int record_event_consumer_for(struct task_struct* task,
 	/*
 	 * Moved this to record_event_all_consumers.
 
-	if (!test_bit(event_type, g_events_mask))
+	if (!test_bit(event_type, consumer->events_mask))
 		return res;
 	*/
 
