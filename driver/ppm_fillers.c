@@ -104,7 +104,7 @@ or GPL2.txt for full copies of the license.
 #ifndef UDIG
 static inline struct pid_namespace *pid_ns_for_children(struct task_struct *task)
 {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0))
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 15, 0)
 	return task->nsproxy->pid_ns;
 #else
 	return task->nsproxy->pid_ns_for_children;

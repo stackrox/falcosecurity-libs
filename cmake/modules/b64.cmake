@@ -7,7 +7,7 @@ if(B64_INCLUDE)
 	# we already have b64
 elseif(NOT USE_BUNDLED_B64)
 	find_path(B64_INCLUDE NAMES b64/encode.h)
-	find_library(B64_LIB NAMES b64)
+	find_library(B64_LIB NAMES libb64.a b64)
 	if(B64_INCLUDE AND B64_LIB)
 		message(STATUS "Found b64: include: ${B64_INCLUDE}, lib: ${B64_LIB}")
 	else()

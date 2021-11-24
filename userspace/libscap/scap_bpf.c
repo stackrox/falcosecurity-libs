@@ -32,6 +32,9 @@ limitations under the License.
 #include <ctype.h>
 #include <time.h>
 #include <dirent.h>
+/* Begin StackRox */
+#include <unistd.h>
+/* End StackRox */
 
 #include "scap.h"
 #include "scap-int.h"
@@ -50,6 +53,8 @@ limitations under the License.
 // is possible, but at the moment is not very worth the effort considering the
 // subset of features needed.
 //
+
+unsigned char g_bpf_drop_syscalls[SYSCALL_TABLE_SIZE] = {};
 
 struct bpf_map_data {
 	int fd;
@@ -402,7 +407,7 @@ static int32_t load_tracepoint(scap_t* handle, const char *event, struct bpf_ins
 	struct perf_event_attr attr = {};
 	enum bpf_prog_type program_type;
 	size_t insns_cnt;
-	char buf[256];
+	char buf[SCAP_MAX_PATH_SIZE];
 	bool raw_tp;
 	int efd;
 	int err;
@@ -496,7 +501,7 @@ static int32_t load_tracepoint(scap_t* handle, const char *event, struct bpf_ins
 	}
 	else
 	{
-		strcpy(buf, "/sys/kernel/debug/tracing/events/");
+	        snprintf(buf, sizeof(buf), "%s/sys/kernel/debug/tracing/events/", scap_get_host_root());
 		strcat(buf, event);
 		strcat(buf, "/id");
 
@@ -768,11 +773,15 @@ static int32_t populate_syscall_routing_table_map(scap_t *handle)
 
 static int32_t populate_syscall_table_map(scap_t *handle)
 {
+	static struct syscall_evt_pair empty_syscall_event = {0};
 	int j;
 
 	for(j = 0; j < SYSCALL_TABLE_SIZE; ++j)
 	{
 		const struct syscall_evt_pair *p = &g_syscall_table[j];
+		if (g_bpf_drop_syscalls[j]) {
+			p = &empty_syscall_event;
+		}
 		if(bpf_map_update_elem(handle->m_bpf_map_fds[SYSDIG_SYSCALL_TABLE], &j, p, BPF_ANY) != 0)
 		{
 			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "SYSDIG_SYSCALL_TABLE bpf_map_update_elem < 0");
@@ -1212,57 +1221,42 @@ static int32_t set_runtime_params(scap_t *handle)
 		return SCAP_FAILURE;
 	}
 
-	FILE *f = fopen("/proc/sys/net/core/bpf_jit_enable", "w");
-	if(!f)
+	FILE *f;
+	if ((f = fopen("/proc/sys/net/core/bpf_jit_enable", "w")) != NULL)
 	{
-		// snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't open /proc/sys/net/core/bpf_jit_enable");
-		// return SCAP_FAILURE;
+		if(fprintf(f, "1") != 1)
+		{
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't write to /proc/sys/net/core/bpf_jit_enable");
+			fclose(f);
+			return SCAP_FAILURE;
+		}
 
-		// Not every kernel has BPF_JIT enabled. Fix this after COS changes.
-		return SCAP_SUCCESS;
-	}
-
-	if(fprintf(f, "1") != 1)
-	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't write to /proc/sys/net/core/bpf_jit_enable");
 		fclose(f);
-		return SCAP_FAILURE;
 	}
 
-	fclose(f);
-
-	f = fopen("/proc/sys/net/core/bpf_jit_harden", "w");
-	if(!f)
+	if ((f = fopen("/proc/sys/net/core/bpf_jit_harden", "w")) != NULL)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't open /proc/sys/net/core/bpf_jit_harden");
-		return SCAP_FAILURE;
-	}
+		if(fprintf(f, "0") != 1)
+		{
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't write to /proc/sys/net/core/bpf_jit_harden");
+			fclose(f);
+			return SCAP_FAILURE;
+		}
 
-	if(fprintf(f, "0") != 1)
-	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't write to /proc/sys/net/core/bpf_jit_harden");
 		fclose(f);
-		return SCAP_FAILURE;
 	}
 
-	fclose(f);
-
-	f = fopen("/proc/sys/net/core/bpf_jit_kallsyms", "w");
-	if(!f)
+	if ((f = fopen("/proc/sys/net/core/bpf_jit_kallsyms", "w")) != NULL)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't open /proc/sys/net/core/bpf_jit_kallsyms");
-		return SCAP_FAILURE;
-	}
+		if(fprintf(f, "1") != 1)
+		{
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't write to /proc/sys/net/core/bpf_jit_kallsyms");
+			fclose(f);
+			return SCAP_FAILURE;
+		}
 
-	if(fprintf(f, "1") != 1)
-	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Can't write to /proc/sys/net/core/bpf_jit_kallsyms");
 		fclose(f);
-		return SCAP_FAILURE;
 	}
-
-	fclose(f);
-
 	return SCAP_SUCCESS;
 }
 
@@ -1306,6 +1300,15 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 #else
 	int online_cpu;
 	int j;
+	/* Begin StackRox */
+	int hotplug_enabled = 0;
+	char hotplug_filename[SCAP_MAX_PATH_SIZE];
+
+	snprintf(hotplug_filename, sizeof(hotplug_filename), "%s/sys/devices/system/cpu/hotplug/states", scap_get_host_root());
+	if(access(hotplug_filename, F_OK) == 0) {
+		hotplug_enabled = 1;
+	}
+	/* End StackRox */
 
 	if(set_runtime_params(handle) != SCAP_SUCCESS)
 	{
@@ -1358,13 +1361,15 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 		};
 		int pmu_fd;
 
-		if(j > 0)
+		/* Begin StackRox */
+		if(hotplug_enabled == 1 && j > 0)
+		/* End StackRox */
 		{
 			char filename[SCAP_MAX_PATH_SIZE];
 			int online;
 			FILE *fp;
 
-			snprintf(filename, sizeof(filename), "/sys/devices/system/cpu/cpu%d/online", j);
+			snprintf(filename, sizeof(filename), "%s/sys/devices/system/cpu/cpu%d/online", scap_get_host_root(), j);
 
 			fp = fopen(filename, "r");
 			if(fp == NULL)

@@ -110,11 +110,15 @@ private:
 class SINSP_PUBLIC sinsp_chisel
 {
 public:
-	sinsp_chisel(sinsp* inspector, string filename);
+	/* Begin StackRox Section */
+	sinsp_chisel(sinsp* inspector, string filename, bool is_file = true);
+	/* End StackRox Section */
 	~sinsp_chisel();
 	static void add_lua_package_path(lua_State* ls, const char* path);
 	static void get_chisel_list(vector<chisel_desc>* chisel_descs);
-	void load(string cmdstr);
+	/* Begin StackRox Section */
+	void load(string cmdstr, bool is_file = true);
+	/* End StackRox Section */
 	string get_name()
 	{
 		return m_filename;
@@ -125,6 +129,7 @@ public:
 	void set_args(string args);
 	void set_args(vector<pair<string, string>> args);
 	bool run(sinsp_evt* evt);
+	bool process(sinsp_evt* evt);
 	void do_timeout(sinsp_evt* evt);
 	void do_end_of_sample();
 	void on_init();
