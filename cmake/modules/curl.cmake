@@ -4,6 +4,7 @@
 option(USE_BUNDLED_CURL "Enable building of the bundled curl" ${USE_BUNDLED_DEPS})
 
 include(openssl)
+include(zlib)
 
 if(CURL_INCLUDE_DIR)
 	# we already have curl
