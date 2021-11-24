@@ -1574,11 +1574,10 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 	char *cgroup_path[MAX_CGROUP_PATHS];
 	volatile unsigned int off = (unsigned int)*len;
 
-	off_bounded = off & SCRATCH_SIZE_HALF;
 	if (off > SCRATCH_SIZE_HALF)
 		return PPM_FAILURE_BUFFER_FULL;
 
-	int res = bpf_probe_read_str(&buf[off_bounded],
+	int res = bpf_probe_read_str(&buf[off & SCRATCH_SIZE_HALF],
 				     SCRATCH_SIZE_HALF,
 				     subsys_name);
 	if (res == -EFAULT || res == 0)
@@ -1586,13 +1585,11 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 
 	off += res - 1;
 
-	off_bounded = off & SCRATCH_SIZE_HALF;
 	if (off > SCRATCH_SIZE_HALF)
 		return PPM_FAILURE_BUFFER_FULL;
 
-	buf[off_bounded] = '=';
+	buf[off & SCRATCH_SIZE_HALF] = '=';
 	++off;
-	off_bounded = off & SCRATCH_SIZE_HALF;
 
 	#pragma unroll MAX_CGROUP_PATHS
 	for (int k = 0; k < MAX_CGROUP_PATHS; ++k) {
@@ -1645,9 +1642,9 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 	if (off > SCRATCH_SIZE_HALF)
 		return PPM_FAILURE_BUFFER_FULL;
 
-	buf[off_bounded] = 0;
+	buf[off & SCRATCH_SIZE_HALF] = 0;
 	++off;
-	*len = off;
+	*len = (int)off;
 
 	return PPM_SUCCESS;
 }
