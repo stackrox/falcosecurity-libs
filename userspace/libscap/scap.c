@@ -972,6 +972,8 @@ scap_t* scap_open_plugin_int(char *error, int32_t *rc, scap_open_args* oargs)
 
 	handle->m_debug_log_fn = oargs->debug_log_fn;
 
+	handle->plugin_api_vers = PPM_PLUGIN_VERSION(PLUGIN_API_VERSION_MAJOR, PLUGIN_API_VERSION_MINOR, PLUGIN_API_VERSION_PATCH);
+
 	//
 	// Extract machine information
 	//
@@ -2400,6 +2402,14 @@ int32_t scap_get_boot_time(char* last_err, uint64_t *boot_time)
 	*boot_time = 0;
 #endif
 	return SCAP_SUCCESS;
+}
+
+/*!
+  \brief Returns the framework API version
+*/
+uint64_t scap_get_plugin_api_version(scap_t* handle)
+{
+	return handle->plugin_api_vers;
 }
 
 /* Begin StackRox Section */
