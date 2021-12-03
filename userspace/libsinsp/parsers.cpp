@@ -311,6 +311,7 @@ void sinsp_parser::process_event(sinsp_evt *evt)
 	case PPME_SYSCALL_OPENAT_X:
 	case PPME_SYSCALL_OPENAT_2_X:
 	case PPME_SYSCALL_OPENAT2_X:
+	case PPME_SYSCALL_OPEN_BY_HANDLE_AT_X:
 		parse_open_openat_creat_exit(evt);
 		break;
 	case PPME_SYSCALL_SELECT_E:
@@ -747,11 +748,11 @@ bool sinsp_parser::reset(sinsp_evt *evt)
 			//
 			// The copy_file_range syscall has the peculiarity of using two fds
 			// Set as m_lastevent_fd the output fd
-			// 
+			//
 			if(etype == PPME_SYSCALL_COPY_FILE_RANGE_X)
 			{
 				sinsp_evt_param *parinfo;
-				
+
 				parinfo = evt->get_param(1);
 				ASSERT(parinfo->m_len == sizeof(int64_t));
 				tinfo->m_lastevent_fd = *(int64_t *)parinfo->m_val;
@@ -1848,10 +1849,10 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 			}
 			char fullpath[SCAP_MAX_PATH_SIZE];
 			sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE,
-										   sdir.c_str(), 
+										   sdir.c_str(),
 										   (uint32_t)sdir.length(),
-										   pathname, 
-										   namelen, 
+										   pathname,
+										   namelen,
 										   m_inspector->m_is_windows);
 			evt->m_tinfo->m_exepath = fullpath;
 		}
@@ -2134,10 +2135,17 @@ void sinsp_parser::parse_open_openat_creat_exit(sinsp_evt *evt)
 		return;
 	}
 
-	//
-	// Load the enter event so we can access its arguments
-	//
-	lastevent_retrieved = retrieve_enter_event(enter_evt, evt);
+
+	if(etype != PPME_SYSCALL_OPEN_BY_HANDLE_AT_X)
+	{
+		//
+		// Load the enter event so we can access its arguments
+		//
+		if(!retrieve_enter_event(enter_evt, evt))
+		{
+			return;
+		}
+	}
 
 	//
 	// Check the return value
@@ -2287,6 +2295,21 @@ void sinsp_parser::parse_open_openat_creat_exit(sinsp_evt *evt)
 
 		parse_dirfd(evt, name, dirfd, &sdir);
 	}
+	else if (etype == PPME_SYSCALL_OPEN_BY_HANDLE_AT_X)
+	{
+		/*
+		 * Flags
+		 */
+		parinfo = evt->get_param(2);
+		ASSERT(parinfo->m_len == sizeof(uint32_t));
+		flags = *(uint32_t *)parinfo->m_val;
+
+		/*
+		 * Path
+		 */
+		parinfo = evt->get_param(3);
+		name = parinfo->m_val;
+	}
 	else
 	{
 		ASSERT(false);
@@ -2299,8 +2322,15 @@ void sinsp_parser::parse_open_openat_creat_exit(sinsp_evt *evt)
 	//mode = *(uint32_t*)parinfo->m_val;
 
 	char fullpath[SCAP_MAX_PATH_SIZE];
-	sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE, sdir.c_str(), (uint32_t)sdir.length(),
-		name, namelen, m_inspector->m_is_windows);
+	if (etype != PPME_SYSCALL_OPEN_BY_HANDLE_AT_X)
+	{
+		sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE, sdir.c_str(), (uint32_t)sdir.length(),
+			name, namelen, m_inspector->m_is_windows);
+	}
+    else
+	{
+		strcpy(fullpath, name);
+	}
 
 	if(fd >= 0)
 	{
@@ -3307,7 +3337,7 @@ void sinsp_parser::parse_thread_exit(sinsp_evt *evt)
 	}
 }
 
-inline bool sinsp_parser::update_ipv4_addresses_and_ports(sinsp_fdinfo_t* fdinfo, 
+inline bool sinsp_parser::update_ipv4_addresses_and_ports(sinsp_fdinfo_t* fdinfo,
 	uint32_t tsip, uint16_t tsport, uint32_t tdip, uint16_t tdport)
 {
 	if(fdinfo->m_type == SCAP_FD_IPV4_SOCK)
