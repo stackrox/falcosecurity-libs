@@ -797,11 +797,11 @@ bool sinsp_parser::reset(sinsp_evt *evt)
 			//
 			// The copy_file_range syscall has the peculiarity of using two fds
 			// Set as m_lastevent_fd the output fd
-			// 
+			//
 			if(etype == PPME_SYSCALL_COPY_FILE_RANGE_X)
 			{
 				sinsp_evt_param *parinfo;
-				
+
 				parinfo = evt->get_param(1);
 				ASSERT(parinfo->m_len == sizeof(int64_t));
 				tinfo->m_lastevent_fd = *(int64_t *)parinfo->m_val;
@@ -2065,6 +2065,14 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 											namelen, 
 											m_inspector->m_is_windows);
 			}
+			char fullpath[SCAP_MAX_PATH_SIZE];
+			sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE,
+										   sdir.c_str(),
+										   (uint32_t)sdir.length(),
+										   pathname,
+										   namelen,
+										   m_inspector->m_is_windows);
+			evt->m_tinfo->m_exepath = fullpath;
 		}
 		evt->m_tinfo->m_exepath = fullpath;
 	}
@@ -2637,9 +2645,15 @@ void sinsp_parser::parse_open_openat_creat_exit(sinsp_evt *evt)
 	//mode = *(uint32_t*)parinfo->m_val;
 
 	char fullpath[SCAP_MAX_PATH_SIZE];
-
-	sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE, sdir.c_str(), (uint32_t)sdir.length(),
-		name, namelen, m_inspector->m_is_windows);
+	if (etype != PPME_SYSCALL_OPEN_BY_HANDLE_AT_X)
+	{
+		sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE, sdir.c_str(), (uint32_t)sdir.length(),
+			name, namelen, m_inspector->m_is_windows);
+	}
+    else
+	{
+		strcpy(fullpath, name);
+	}
 
 	if(fd >= 0)
 	{

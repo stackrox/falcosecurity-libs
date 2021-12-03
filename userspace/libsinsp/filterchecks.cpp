@@ -291,6 +291,22 @@ bool sinsp_filter_check_fd::extract_fdname_from_creator(sinsp_evt *evt, OUT uint
 
 			return true;
 		}
+	case PPME_SYSCALL_OPEN_BY_HANDLE_AT_X:
+		{
+			sinsp_evt_param *parinfo;
+			char *fullpath;
+
+			parinfo = evt->get_param(3);
+	        fullpath = parinfo->m_val;
+			m_tstr = fullpath;
+
+			if(sanitize_strings)
+			{
+				sanitize_string(m_tstr);
+			}
+
+			return true;
+		}	
 	default:
 		m_tstr = "";
 		return true;
