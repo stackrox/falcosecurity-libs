@@ -645,16 +645,9 @@ public:
 	/*!
 	  \brief Returns the framework plugin api version as a string with static storage
 	*/
-	inline const char *get_plugin_api_version_str() const
+	inline const char *get_plugin_api_version() const
 	{
-		static char vers_str[32];
-
-		uint64_t vers = scap_get_plugin_api_version(m_h);
-		snprintf(vers_str, sizeof(vers_str), "%lu.%lu.%lu",
-					PPM_PLUGIN_VERSION_MAJOR(vers),
-					PPM_PLUGIN_VERSION_MINOR(vers),
-					PPM_PLUGIN_VERSION_PATCH(vers));
-		return vers_str;
+		return PLUGIN_API_VERSION_STR;
 	}
 
 	/*!

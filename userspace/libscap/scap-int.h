@@ -104,8 +104,6 @@ struct scap
 
 	// The return value from the last call to next_batch().
 	ss_plugin_rc m_input_plugin_last_batch_res;
-
-	uint64_t plugin_api_vers;
 };
 
 //

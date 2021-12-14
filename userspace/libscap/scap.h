@@ -1109,21 +1109,6 @@ uint64_t scap_get_driver_schema_version(scap_t* handle);
  * since Epoch, so we need to compute it as `time_from_the_boot(bpf_ktime_get_boot_ns) + boot_time`.
  */
 int32_t scap_get_boot_time(char* last_err, uint64_t *boot_time);
-/* extract components from an API version number */
-#define PPM_PLUGIN_VERSION_MAJOR(ver) ((((ver) >> 44)) & (((1 << 19) - 1)))
-#define PPM_PLUGIN_VERSION_MINOR(ver) (((ver) >> 24) & (((1 << 20) - 1)))
-#define PPM_PLUGIN_VERSION_PATCH(ver) (((ver) & ((1 << 24) - 1)))
-
-/* build an API version number from components */
-#define PPM_PLUGIN_VERSION(major, minor, patch) \
-	(((major) & (((1ULL << 19) - 1) << 44)) | \
-	((minor) & (((1ULL << 20) - 1) << 24)) | \
-	((major) & (((1ULL << 24) - 1))))
-
-/**
- * Get plugin API version supported by the framework
- */
-uint64_t scap_get_plugin_api_version(scap_t* handle);
 
 #ifdef __cplusplus
 }
