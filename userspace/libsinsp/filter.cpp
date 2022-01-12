@@ -177,7 +177,7 @@ bool flt_compare_string(cmpop op, char* operand1, char* operand2)
 		return (strncmp(operand1, operand2, strlen(operand2)) == 0);
 	case CO_BSTARTSWITH:
 		throw sinsp_exception("'bstartswith' not supported for string filters");
-	case CO_ENDSWITH: 
+	case CO_ENDSWITH:
 		return (sinsp_utils::endswith(operand1, operand2));
 	case CO_GLOB:
 		return sinsp_utils::glob_match(operand2, operand1);
@@ -213,8 +213,16 @@ bool flt_compare_buffer(cmpop op, char* operand1, char* operand2, uint32_t op1_l
 	case CO_STARTSWITH:
 		return op2_len <= op1_len && (memcmp(operand1, operand2, op2_len) == 0);
 	case CO_BSTARTSWITH:
-		return op2_len <= op1_len && (memcmp(operand1, operand2, op2_len) == 0);
-	case CO_ENDSWITH: 
+	{
+		std::vector<char> hex_chars(operand2, operand2 + op2_len);
+		std::vector<char> hex_bytes;
+		if(!sinsp_utils::unhex(hex_chars, hex_bytes))
+		{
+			return false;
+		}
+		return hex_bytes.size() <= op1_len && (memcmp(operand1, &hex_bytes[0], hex_bytes.size()) == 0);
+	}
+	case CO_ENDSWITH:
 		return (sinsp_utils::endswith(operand1, operand2, op1_len, op2_len));
 	case CO_GLOB:
 		throw sinsp_exception("'glob' not supported for buffer filters");
