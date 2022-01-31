@@ -7,7 +7,7 @@ if(JQ_INCLUDE)
 	# we already have jq
 elseif(NOT USE_BUNDLED_JQ)
 	find_path(JQ_INCLUDE jq.h PATH_SUFFIXES jq)
-	find_library(JQ_LIB NAMES jq)
+	find_library(JQ_LIB NAMES libjq.a jq)
 	if(JQ_INCLUDE AND JQ_LIB)
 		message(STATUS "Found jq: include: ${JQ_INCLUDE}, lib: ${JQ_LIB}")
 	else()
@@ -45,7 +45,7 @@ else()
 			URL "https://download.falco.org/dependencies/jq-1.6.tar.gz"
 			URL_HASH "SHA256=787518068c35e244334cc79b8e56b60dbab352dff175b7f04a94f662b540bfd9"
 			CONFIGURE_COMMAND ./configure --disable-maintainer-mode --enable-all-static --disable-dependency-tracking --with-oniguruma=builtin --prefix=${JQ_INSTALL_DIR}
-			BUILD_COMMAND ${CMD_MAKE} LDFLAGS=-all-static
+			BUILD_COMMAND ${CMD_MAKE} LDFLAGS=-all-static CFLAGS=-fPIC
 			BUILD_IN_SOURCE 1
 			BUILD_BYPRODUCTS ${JQ_LIB} ${ONIGURUMA_LIB}
 			INSTALL_COMMAND ${CMD_MAKE} install)

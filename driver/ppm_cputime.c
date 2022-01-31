@@ -231,7 +231,7 @@ static void cputime_advance(cputime_t *counter, cputime_t new)
  * runtime accounting.
  */
 static void cputime_adjust(struct task_cputime *curr,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)) || (PPM_RHEL_RELEASE_CODE > 0 && PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(7, 6))
 			   struct prev_cputime *prev,
 #else
 			   struct cputime *prev,

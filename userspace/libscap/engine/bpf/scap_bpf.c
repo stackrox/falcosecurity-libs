@@ -32,6 +32,9 @@ limitations under the License.
 #include <ctype.h>
 #include <time.h>
 #include <dirent.h>
+/* Begin StackRox */
+#include <unistd.h>
+/* End StackRox */
 
 #define SCAP_HANDLE_T struct bpf_engine
 
@@ -1402,6 +1405,17 @@ int32_t scap_bpf_load(
 {
 	int online_cpu;
 	int j;
+
+	/* Begin StackRox */
+	int hotplug_enabled = 0;
+	char hotplug_filename[SCAP_MAX_PATH_SIZE];
+
+	snprintf(hotplug_filename, sizeof(hotplug_filename), "%s/sys/devices/system/cpu/hotplug/states", scap_get_host_root());
+	if(access(hotplug_filename, F_OK) == 0) {
+		hotplug_enabled = 1;
+	}
+	/* End StackRox */
+
 	struct scap_bpf_engine_params* bpf_args = oargs->engine_params;
 
 	if(set_runtime_params(handle) != SCAP_SUCCESS)
@@ -1468,7 +1482,9 @@ int32_t scap_bpf_load(
 		int ret;
 		struct scap_device *dev;
 
-		if(j > 0)
+		/* Begin StackRox */
+		if(hotplug_enabled == 1 && j > 0)
+		/* End StackRox */
 		{
 			char filename[SCAP_MAX_PATH_SIZE];
 			int online;

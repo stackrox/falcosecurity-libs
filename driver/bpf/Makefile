@@ -55,6 +55,7 @@ $(obj)/probe.o: $(src)/probe.c \
 		$(KBUILD_EXTRA_CPPFLAGS) \
 		$(DEBUG) \
 		-D__KERNEL__ \
+		-DKBUILD_MODNAME=\"collector\" \
 		-D__BPF_TRACING__ \
 		-Wno-gnu-variable-sized-type-not-at-end \
 		-Wno-address-of-packed-member \
