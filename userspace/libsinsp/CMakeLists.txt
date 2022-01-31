@@ -53,6 +53,8 @@ if(NOT MINIMAL_BUILD)
 	endif() # NOT WIN32
 endif()
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+
 if(NOT WIN32 AND NOT APPLE)
 	if(NOT MINIMAL_BUILD)
 		include(grpc)
@@ -194,6 +196,8 @@ endif()
 
 add_library(sinsp STATIC ${SINSP_SOURCES})
 
+set_target_properties(sinsp PROPERTIES COMPILE_FLAGS "-fPIC")
+
 set(SINSP_LIBRARIES
 	scap
 	"${CURL_LIBRARIES}"
@@ -242,12 +246,12 @@ if(NOT WIN32)
 				list(APPEND SINSP_LIBRARIES "${GRPC_LIBRARIES}")
 			endif() # USE_BUNDLED_GRPC
 
+			if(NOT NO_LINK_GRPC_LIBS)
+				list(APPEND SINSP_LIBRARIES "${GRPCPP_LIB}" "${GRPC_LIB}" "${PROTOBUF_LIB}" "${CARES_LIB}")
+			endif()
+
 			list(APPEND SINSP_LIBRARIES
-				"${GRPCPP_LIB}"
-				"${GRPC_LIB}"
 				"${GPR_LIB}"
-				"${PROTOBUF_LIB}"
-				"${CARES_LIB}"
 				"${JQ_LIB}"
 				"${B64_LIB}")
 
@@ -315,3 +319,5 @@ if (BUILD_LIBSINSP_EXAMPLES)
 	add_subdirectory(examples)
 endif()
 
+add_library(sinsp-wrapper SHARED wrapper.cpp)
+target_link_libraries(sinsp-wrapper sinsp)

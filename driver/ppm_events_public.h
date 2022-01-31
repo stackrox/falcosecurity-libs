@@ -1824,6 +1824,9 @@ struct ppm_evt_hdr {
 #define PPM_IOCTL_ZERO_SYSCALLS _IO(PPM_IOCTL_MAGIC, 28) // this replaces PPM_IOCTL_MASK_ZERO_EVENTS
 #define PPM_IOCTL_ENABLE_SYSCALL   _IO(PPM_IOCTL_MAGIC, 29) // this replaces PPM_IOCTL_MASK_SET_EVENT
 #define PPM_IOCTL_DISABLE_SYSCALL _IO(PPM_IOCTL_MAGIC, 30) // this replaces PPM_IOCTL_MASK_UNSET_EVENT
+/* Begin StackRox Section */
+#define PPM_IOCTL_EXCLUDE_NS_OF_PID _IO(PPM_IOCTL_MAGIC, 40)
+/* End StackRox Section */
 #endif // CYGWING_AGENT
 
 extern const struct ppm_name_value socket_families[];

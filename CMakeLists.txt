@@ -1,3 +1,4 @@
+
 #
 # Copyright (C) 2022 The Falco Authors.
 #
@@ -81,6 +82,12 @@ option(CREATE_TEST_TARGETS "Enable make-targets for unit testing" ON)
 if(CREATE_TEST_TARGETS AND NOT WIN32)
 	include(gtest)
 endif()
+
+if(NOT WIN32 AND NOT APPLE)
+	option(NO_LINK_GRPC_LIBS "Do not link gRPC libraries" OFF)
+endif()
+
+option(BUILD_USERSPACE "Build userspace libraries" ON)
 
 include(libscap)
 include(libsinsp)

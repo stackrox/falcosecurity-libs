@@ -28,6 +28,8 @@ static inline bool validate_buffer_bytes_dim(unsigned long buf_bytes_dim, unsign
 {
 	return ((buf_bytes_dim > (2 * page_size)) && ((buf_bytes_dim % page_size) == 0) && ((buf_bytes_dim & (buf_bytes_dim - 1)) == 0));
 }
+static const __u32 RING_BUF_SIZE = 16 * 1024 * 1024;
+static const __u32 MIN_USERSPACE_READ_SIZE = 128 * 1024;
 
 /*
  * This gets mapped to user level, so we want to keep it as clean as possible

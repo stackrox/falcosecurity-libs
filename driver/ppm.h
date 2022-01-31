@@ -25,6 +25,11 @@ or GPL2.txt for full copies of the license.
 #endif /* _DEBUG */
 
 #endif /* UDIG */
+typedef u64 nanoseconds;
+
+/* Begin StackRox Section */
+#include <linux/pid_namespace.h>
+/* End StackRox Section */
 
 #define RW_SNAPLEN_EVENT 4096
 #define DPI_LOOKAHEAD_SIZE 16
@@ -65,6 +70,9 @@ struct ppm_ring_buffer_context {
 struct ppm_consumer_t {
 	unsigned int id; // numeric id for the consumer (ie: registration index)
 	struct task_struct *consumer_id;
+	/* Begin StackRox Section */
+	struct pid_namespace *excluded_pid_ns;
+	/* End StackRox Section */
 #ifdef __percpu
 	struct ppm_ring_buffer_context __percpu *ring_buffers;
 #else
@@ -135,9 +143,9 @@ extern const struct syscall_evt_pair g_syscall_ia32_table[];
 extern void ppm_syscall_get_arguments(struct task_struct *task, struct pt_regs *regs, unsigned long *args);
 #endif
 
-#define NS_TO_SEC(_ns) ((_ns) / 1000000000)
-#define MORE_THAN_ONE_SECOND_AHEAD(_ns1, _ns2) ((_ns1) - (_ns2) > 1000000000)
 #define SECOND_IN_NS 1000000000
 #define USECOND_IN_NS 1000
 
+#define NS_TO_SEC(_ns) ((_ns) / SECOND_IN_NS)
+#define MORE_THAN_ONE_SECOND_AHEAD(_ns1, _ns2) ((_ns1) - (_ns2) > SECOND_IN_NS)
 #endif /* PPM_H_ */

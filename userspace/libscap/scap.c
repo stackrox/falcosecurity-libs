@@ -283,6 +283,52 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc, scap_open_args *oargs)
 	}
 
 	//
+	// Map the ring buffer.
+	//
+	if(udig_alloc_ring(
+#if CYGWING_AGENT || _WIN32
+		&(handle->m_win_buf_handle),
+#else
+		&(handle->m_devs[0].m_fd),
+#endif
+		(uint8_t**)&handle->m_devs[0].m_buffer,
+		&handle->m_devs[0].m_buffer_size,
+		error) != SCAP_SUCCESS)
+	{
+		scap_close(handle);
+		*rc = SCAP_FAILURE;
+		return NULL;
+	}
+
+	// Set close-on-exec for the fd
+#ifndef _WIN32
+	if(fcntl(handle->m_devs[0].m_fd, F_SETFD, FD_CLOEXEC) == -1) {
+		snprintf(error, SCAP_LASTERR_SIZE, "Can not set close-on-exec flag for fd for device %s (%s)", filename, scap_strerror(handle, errno));
+		scap_close(handle);
+		*rc = SCAP_FAILURE;
+		return NULL;
+	}
+#endif
+
+	//
+	// Map the ppm_ring_buffer_info that contains the buffer pointers
+	//
+	if(udig_alloc_ring_descriptors(
+#if CYGWING_AGENT || _WIN32
+		&(handle->m_win_descs_handle),
+#else
+		&(handle->m_devs[0].m_bufinfo_fd),
+#endif
+		&handle->m_devs[0].m_bufinfo,
+		&handle->m_devs[0].m_bufstatus,
+		error) != SCAP_SUCCESS)
+	{
+		scap_close(handle);
+		*rc = SCAP_FAILURE;
+		return NULL;
+	}
+
+	//
 	// Additional initializations
 	//
 	scap_stop_dropping_mode(handle);
@@ -612,7 +658,7 @@ scap_t* scap_open_nodriver_int(char *error, int32_t *rc, scap_open_args *oargs)
 	if((*rc = scap_proc_scan_proc_dir(handle, filename, proc_scan_err)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
-		snprintf(error, SCAP_LASTERR_SIZE, "error creating the process list: %s. Make sure you have root credentials.", proc_scan_err);
+		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live() error creating the process list: %s. Make sure you have root credentials.", proc_scan_err);
 		return NULL;
 	}
 
@@ -857,9 +903,476 @@ uint32_t scap_get_ndevs(scap_t* handle)
 
 int32_t scap_readbuf(scap_t* handle, uint32_t cpuid, OUT char** buf, OUT uint32_t* len)
 {
-	// engines do not even necessarily have a concept of a buffer
-	// that you read events from
-	return SCAP_NOT_SUPPORTED;
+	uint32_t thead;
+	uint32_t ttail;
+	uint64_t read_size;
+
+#ifndef _WIN32
+	if(handle->m_bpf)
+	{
+		return scap_bpf_readbuf(handle, cpuid, buf, len);
+	}
+#endif
+
+	//
+	// Read the pointers.
+	//
+	get_buf_pointers(handle->m_devs[cpuid].m_bufinfo,
+	                 &thead,
+	                 &ttail,
+	                 &read_size);
+
+	//
+	// Remember read_size so we can update the tail at the next call
+	//
+	handle->m_devs[cpuid].m_lastreadsize = (uint32_t)read_size;
+
+	//
+	// Return the results
+	//
+	*len = (uint32_t)read_size;
+	*buf = handle->m_devs[cpuid].m_buffer + ttail;
+
+	return SCAP_SUCCESS;
+}
+
+static uint64_t buf_size_used(scap_t* handle, uint32_t cpu)
+{
+	uint64_t read_size;
+
+	if (handle->m_bpf)
+	{
+#ifndef _WIN32
+		uint64_t thead;
+		uint64_t ttail;
+
+		scap_bpf_get_buf_pointers(handle->m_devs[cpu].m_buffer, &thead, &ttail, &read_size);
+#endif
+	}
+	else
+	{
+		uint32_t thead;
+		uint32_t ttail;
+
+		get_buf_pointers(handle->m_devs[cpu].m_bufinfo, &thead, &ttail, &read_size);
+	}
+
+	return read_size;
+}
+
+static bool are_buffers_empty(scap_t* handle)
+{
+	uint32_t j;
+
+	for(j = 0; j < handle->m_ndevs; j++)
+	{
+		if(buf_size_used(handle, j) > BUFFER_EMPTY_THRESHOLD_B)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int32_t refill_read_buffers(scap_t* handle)
+{
+	uint32_t j;
+	uint32_t ndevs = handle->m_ndevs;
+
+	if(are_buffers_empty(handle))
+	{
+#ifdef _WIN32
+		Sleep((DWORD)handle->m_buffer_empty_wait_time_us / 1000);
+#else
+		usleep(handle->m_buffer_empty_wait_time_us);
+#endif
+		handle->m_buffer_empty_wait_time_us = MIN(handle->m_buffer_empty_wait_time_us * 2,
+							  BUFFER_EMPTY_WAIT_TIME_US_MAX);
+	}
+	else
+	{
+		handle->m_buffer_empty_wait_time_us = BUFFER_EMPTY_WAIT_TIME_US_START;
+	}
+
+	//
+	// Refill our data for each of the devices
+	//
+
+	for(j = 0; j < ndevs; j++)
+	{
+		struct scap_device *dev = &(handle->m_devs[j]);
+
+		int32_t res = scap_readbuf(handle,
+		                           j,
+		                           &dev->m_sn_next_event,
+		                           &dev->m_sn_len);
+
+		if(res != SCAP_SUCCESS)
+		{
+			return res;
+		}
+	}
+
+	//
+	// Note: we might return a spurious timeout here in case the previous loop extracted valid data to parse.
+	//       It's ok, since this is rare and the caller will just call us again after receiving a
+	//       SCAP_TIMEOUT.
+	//
+	return SCAP_TIMEOUT;
+}
+
+#endif // HAS_CAPTURE
+
+#ifndef _WIN32
+static inline int32_t scap_next_live(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
+#else
+static int32_t scap_next_live(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
+#endif
+{
+#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
+	//
+	// this should be prevented at open time
+	//
+	ASSERT(false);
+	return SCAP_FAILURE;
+#else
+	uint32_t j;
+	uint64_t max_ts = 0xffffffffffffffffLL;
+	scap_evt* pe = NULL;
+	uint32_t ndevs = handle->m_ndevs;
+
+	*pcpuid = 65535;
+
+	for(j = 0; j < ndevs; j++)
+	{
+		scap_device* dev = &(handle->m_devs[j]);
+
+		if(dev->m_sn_len == 0)
+		{
+			//
+			// If we don't have data from this ring, but we are
+			// still occupying, free the resources for the
+			// producer rather than sitting on them.
+			//
+			if(dev->m_lastreadsize > 0)
+			{
+				scap_advance_tail(handle, j);
+			}
+
+			continue;
+		}
+
+		if(handle->m_bpf)
+		{
+#ifndef _WIN32
+			pe = scap_bpf_evt_from_perf_sample(dev->m_sn_next_event);
+#endif
+		}
+		else
+		{
+			pe = (scap_evt *) dev->m_sn_next_event;
+		}
+
+		//
+		// We want to consume the event with the lowest timestamp
+		//
+		if(pe->ts < max_ts)
+		{
+			if(pe->len > dev->m_sn_len)
+			{
+				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_next buffer corruption");
+
+				//
+				// if you get the following assertion, first recompile the driver and libscap
+				//
+				ASSERT(false);
+				return SCAP_FAILURE;
+			}
+
+			*pevent = pe;
+			*pcpuid = j;
+			max_ts = pe->ts;
+		}
+	}
+
+	//
+	// Check which buffer has been picked
+	//
+	if(*pcpuid != 65535)
+	{
+		struct scap_device *dev = &handle->m_devs[*pcpuid];
+
+		//
+		// Update the pointers.
+		//
+		if(handle->m_bpf)
+		{
+#ifndef _WIN32
+			scap_bpf_advance_to_evt(handle, *pcpuid, true,
+						dev->m_sn_next_event,
+						&dev->m_sn_next_event,
+						&dev->m_sn_len);
+#endif
+		}
+		else
+		{
+			ASSERT(dev->m_sn_len >= (*pevent)->len);
+			dev->m_sn_len -= (*pevent)->len;
+			dev->m_sn_next_event += (*pevent)->len;
+		}
+
+		return SCAP_SUCCESS;
+	}
+	else
+	{
+		//
+		// All the buffers have been consumed. Check if there's enough data to keep going or
+		// if we should wait.
+		//
+		return refill_read_buffers(handle);
+	}
+#endif
+}
+
+#ifndef _WIN32
+static inline int32_t scap_next_udig(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
+#else
+static int32_t scap_next_udig(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
+#endif
+{
+#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
+	//
+	// this should be prevented at open time
+	//
+	ASSERT(false);
+	return SCAP_FAILURE;
+#else
+	uint32_t j;
+	uint64_t max_ts = 0xffffffffffffffffLL;
+	scap_evt* pe = NULL;
+	uint32_t ndevs = handle->m_ndevs;
+
+	*pcpuid = 65535;
+
+	for(j = 0; j < ndevs; j++)
+	{
+		scap_device* dev = &(handle->m_devs[j]);
+
+		if(dev->m_sn_len == 0)
+		{
+			//
+			// If we don't have data from this ring, but we are
+			// still occupying, free the resources for the
+			// producer rather than sitting on them.
+			//
+			if(dev->m_lastreadsize > 0)
+			{
+				scap_advance_tail(handle, j);
+			}
+
+			continue;
+		}
+
+		pe = (scap_evt *) dev->m_sn_next_event;
+
+		//
+		// We want to consume the event with the lowest timestamp
+		//
+		if(pe->ts < max_ts)
+		{
+			if(pe->len > dev->m_sn_len)
+			{
+				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_next buffer corruption");
+
+				//
+				// if you get the following assertion, first recompile the driver and libscap
+				//
+				ASSERT(false);
+				return SCAP_FAILURE;
+			}
+
+			*pevent = pe;
+			*pcpuid = j;
+			max_ts = pe->ts;
+		}
+	}
+
+	//
+	// Check which buffer has been picked
+	//
+	if(*pcpuid != 65535)
+	{
+		struct scap_device *dev = &handle->m_devs[*pcpuid];
+		ASSERT(dev->m_sn_len >= (*pevent)->len);
+		dev->m_sn_len -= (*pevent)->len;
+		dev->m_sn_next_event += (*pevent)->len;
+
+		return SCAP_SUCCESS;
+	}
+	else
+	{
+		//
+		// All the buffers have been consumed. Check if there's enough data to keep going or
+		// if we should wait.
+		//
+		return refill_read_buffers(handle);
+	}
+#endif
+}
+
+#ifndef _WIN32
+static int32_t scap_next_nodriver(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
+{
+	static scap_evt evt;
+	evt.len = 0;
+	evt.tid = -1;
+	evt.type = PPME_SYSDIGEVENT_X;
+	evt.nparams = 0;
+
+	usleep(100000);
+
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
+	evt.ts = tv.tv_sec * (uint64_t) 1000000000 + tv.tv_usec * 1000;
+	*pevent = &evt;
+	return SCAP_SUCCESS;
+}
+#endif // _WIN32
+
+static inline uint64_t get_timestamp_ns()
+{
+	uint64_t ts;
+
+#ifdef _WIN32
+	FILETIME ft;
+	static const uint64_t EPOCH = ((uint64_t) 116444736000000000ULL);
+
+	GetSystemTimePreciseAsFileTime(&ft);
+
+	uint64_t ftl = (((uint64_t)ft.dwHighDateTime) << 32) + ft.dwLowDateTime;
+	ftl -= EPOCH;
+
+	ts = ftl * 100;
+#else
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	ts = tv.tv_sec * (uint64_t) 1000000000 + tv.tv_usec * 1000;
+#endif
+
+	return ts;
+}
+
+static int32_t scap_next_plugin(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
+{
+	ss_plugin_event *plugin_evt;
+	int32_t res = SCAP_FAILURE;
+
+	if(handle->m_input_plugin_batch_idx >= handle->m_input_plugin_batch_nevts)
+	{
+		if(handle->m_input_plugin_last_batch_res != SS_PLUGIN_SUCCESS)
+		{
+			if(handle->m_input_plugin_last_batch_res != SCAP_TIMEOUT && handle->m_input_plugin_last_batch_res != SCAP_EOF)
+			{
+				const char *errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
+				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s", errstr);
+			}
+			int32_t tres = handle->m_input_plugin_last_batch_res;
+			handle->m_input_plugin_last_batch_res = SCAP_SUCCESS;
+			return tres;
+		}
+
+		int32_t plugin_res = handle->m_input_plugin->next_batch(handle->m_input_plugin->state,
+									handle->m_input_plugin->handle,
+									&(handle->m_input_plugin_batch_nevts),
+									&(handle->m_input_plugin_batch_evts));
+		handle->m_input_plugin_last_batch_res = plugin_rc_to_scap_rc(plugin_res);
+
+		if(handle->m_input_plugin_batch_nevts == 0)
+		{
+			if(handle->m_input_plugin_last_batch_res == SCAP_SUCCESS)
+			{
+				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "unexpected 0 size event returned by plugin %s", handle->m_input_plugin->name);
+				ASSERT(false);
+				return SCAP_FAILURE;
+			}
+			else
+			{
+				if(handle->m_input_plugin_last_batch_res != SCAP_TIMEOUT && handle->m_input_plugin_last_batch_res != SCAP_EOF)
+				{
+					const char *errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
+					snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s", errstr);
+				}
+				return handle->m_input_plugin_last_batch_res;
+			}
+		}
+
+		handle->m_input_plugin_batch_idx = 0;
+	}
+
+	uint32_t pos = handle->m_input_plugin_batch_idx;
+
+	plugin_evt = &(handle->m_input_plugin_batch_evts[pos]);
+
+	handle->m_input_plugin_batch_idx++;
+
+	res = SCAP_SUCCESS;
+
+	/*
+	 * | scap_evt | len_id (4B) | len_pl (4B) | id | payload |
+	 * Note: we need to use 4B for len_id too because the PPME_PLUGINEVENT_E has
+	 * EF_LARGE_PAYLOAD flag!
+	 */
+	uint32_t reqsize = sizeof(scap_evt) + 4 + 4 + 4 + plugin_evt->datalen;
+	if(handle->m_input_plugin_evt_storage_len < reqsize)
+	{
+		uint8_t *tmp = (uint8_t*)realloc(handle->m_input_plugin_evt_storage, reqsize);
+		if (tmp)
+		{
+			handle->m_input_plugin_evt_storage = tmp;
+			handle->m_input_plugin_evt_storage_len = reqsize;
+		}
+		else
+		{
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s", "failed to alloc space for plugin storage");
+			ASSERT(false);
+			return SCAP_FAILURE;
+		}
+	}
+
+	scap_evt* evt = (scap_evt*)handle->m_input_plugin_evt_storage;
+	evt->len = reqsize;
+	evt->tid = -1;
+	evt->type = PPME_PLUGINEVENT_E;
+	evt->nparams = 2;
+
+	uint8_t* buf = handle->m_input_plugin_evt_storage + sizeof(scap_evt);
+
+	const uint32_t plugin_id_size = 4;
+	memcpy(buf, &plugin_id_size, sizeof(plugin_id_size));
+	buf += sizeof(plugin_id_size);
+
+	uint32_t datalen = plugin_evt->datalen;
+	memcpy(buf, &(datalen), sizeof(datalen));
+	buf += sizeof(datalen);
+
+	memcpy(buf, &(handle->m_input_plugin->id), sizeof(handle->m_input_plugin->id));
+	buf += sizeof(handle->m_input_plugin->id);
+
+	memcpy(buf, plugin_evt->data, plugin_evt->datalen);
+
+	if(plugin_evt->ts != UINT64_MAX)
+	{
+		evt->ts = plugin_evt->ts;
+	}
+	else
+	{
+		evt->ts = get_timestamp_ns();
+	}
+
+	*pevent = evt;
+	return res;
 }
 
 uint64_t scap_max_buf_used(scap_t* handle)
@@ -1334,7 +1847,7 @@ int32_t scap_disable_dynamic_snaplen(scap_t* handle)
 
 const char* scap_get_host_root()
 {
-	char* p = getenv(SCAP_HOST_ROOT_ENV_VAR_NAME);
+	char* p = getenv("COLLECTOR_HOST_ROOT");
 	static char env_str[SCAP_MAX_PATH_SIZE + 1];
 	static bool inited = false;
 	if (! inited) {
@@ -1559,3 +2072,23 @@ int32_t scap_get_boot_time(char* last_err, uint64_t *boot_time)
 #endif
 	return SCAP_SUCCESS;
 }
+
+/* Begin StackRox Section */
+int scap_ioctl(scap_t* handle, int devnum, unsigned long request, void* arg) {
+	int ioctl_ret = 0;
+
+	if (devnum >= handle->m_ndevs) {
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed, invalid device number %d", devnum);
+		ASSERT(false);
+		return SCAP_FAILURE;
+	}
+
+	ioctl_ret = ioctl(handle->m_devs[devnum].m_fd, request, arg);
+	if (ioctl_ret != 0) {
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed due to ioctl error (%s)", strerror(errno));
+		return SCAP_FAILURE;
+	}
+
+	return SCAP_SUCCESS;
+}
+/* End StackRox Section */
