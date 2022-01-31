@@ -73,17 +73,17 @@ public:
 	/*!
 	  \brief Return the name of the process containing this thread, e.g. "top".
 	*/
-	std::string get_comm() const;
+	inline const std::string& get_comm() const { return m_comm; }
 
 	/*!
 	  \brief Return the name of the process containing this thread from argv[0], e.g. "/bin/top".
 	*/
-	std::string get_exe() const;
+	inline const std::string& get_exe() const { return m_exe; }
 
 	/*!
 	  \brief Return the full executable path of the process containing this thread, e.g. "/bin/top".
 	*/
-	std::string get_exepath() const;
+	inline const std::string& get_exepath() const { return m_exepath; }
 
 	/*!
 	  \brief Return the working directory of the process containing this thread.
@@ -109,6 +109,11 @@ public:
 	{
 		return (m_tid == m_pid) || m_flags & PPM_CL_IS_MAIN_THREAD;
 	}
+
+	/*!
+	  \brief Resets local fd cache
+	*/
+	void reset_fd_cache();
 
 	/*!
 	  \brief Get the main thread of the process containing this thread.
@@ -458,13 +463,11 @@ VISIBILITY_PRIVATE
 class threadinfo_map_t
 {
 public:
-	typedef std::function<bool(const sinsp_threadinfo&)> const_visitor_t;
-	typedef std::function<bool(sinsp_threadinfo&)> visitor_t;
 	typedef std::shared_ptr<sinsp_threadinfo> ptr_t;
 
-	inline void put(sinsp_threadinfo* tinfo)
+	inline void put(ptr_t tinfo)
 	{
-		m_threads[tinfo->m_tid] = ptr_t(tinfo);
+		m_threads[tinfo->m_tid] = std::move(tinfo);
 	}
 
 	inline sinsp_threadinfo* get(uint64_t tid)
@@ -497,19 +500,8 @@ public:
 		m_threads.clear();
 	}
 
-	bool const_loop(const_visitor_t callback) const
-	{
-		for (const auto& it : m_threads)
-		{
-			if (!callback(*it.second.get()))
-			{
-				return false;
-			}
-		}
-		return true;
-	}
-
-	bool loop(visitor_t callback)
+	template <typename Visitor>
+	inline bool loop(const Visitor& callback)
 	{
 		for (auto& it : m_threads)
 		{
@@ -566,7 +558,7 @@ public:
 	sinsp_thread_manager(sinsp* inspector);
 	void clear();
 
-	bool add_thread(sinsp_threadinfo *threadinfo, bool from_scap_proctable);
+	bool add_thread(std::shared_ptr<sinsp_threadinfo> threadinfo, bool from_scap_proctable);
 	void remove_thread(int64_t tid, bool force);
 	// Returns true if the table is actually scanned
 	// NOTE: this is implemented in sinsp.cpp so we can inline it from there
@@ -633,7 +625,7 @@ public:
 	void set_m_max_n_proc_lookups(int32_t val) { m_max_n_proc_lookups = val; }
 	void set_m_max_n_proc_socket_lookups(int32_t val) { m_max_n_proc_socket_lookups = val; }
 private:
-	void increment_mainthread_childcount(sinsp_threadinfo* threadinfo);
+	void increment_mainthread_childcount(sinsp_threadinfo* threadinfo, bool create_if_needed);
 	inline void clear_thread_pointers(sinsp_threadinfo& threadinfo);
 	void free_dump_fdinfos(std::vector<scap_fdinfo*>* fdinfos_to_free);
 	void thread_to_scap(sinsp_threadinfo& tinfo, scap_threadinfo* sctinfo);
@@ -644,7 +636,7 @@ private:
 	std::weak_ptr<sinsp_threadinfo> m_last_tinfo;
 	uint64_t m_last_flush_time_ns;
 	uint32_t m_n_drops;
-	const uint32_t m_thread_table_absolute_max_size = 131072;
+	const uint32_t m_thread_table_absolute_max_size = 524288;
 	uint32_t m_max_thread_table_size;
 	int32_t m_n_proc_lookups = 0;
 	uint64_t m_n_proc_lookups_duration_ns = 0;

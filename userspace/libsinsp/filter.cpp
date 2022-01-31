@@ -160,7 +160,7 @@ bool flt_compare_string(cmpop op, char* operand1, char* operand2)
 #endif
 	case CO_STARTSWITH:
 		return (strncmp(operand1, operand2, strlen(operand2)) == 0);
-	case CO_ENDSWITH: 
+	case CO_ENDSWITH:
 		return (sinsp_utils::endswith(operand1, operand2));
 	case CO_GLOB:
 		return sinsp_utils::glob_match(operand2, operand1);
@@ -193,7 +193,7 @@ bool flt_compare_buffer(cmpop op, char* operand1, char* operand2, uint32_t op1_l
 		throw sinsp_exception("'icontains' not supported for buffer filters");
 	case CO_STARTSWITH:
 		return (memcmp(operand1, operand2, op2_len) == 0);
-	case CO_ENDSWITH: 
+	case CO_ENDSWITH:
 		return (sinsp_utils::endswith(operand1, operand2, op1_len, op2_len));
 	case CO_GLOB:
 		throw sinsp_exception("'glob' not supported for buffer filters");
@@ -2392,5 +2392,13 @@ std::list<gen_event_filter_factory::filter_fieldclass_info> sinsp_filter_factory
 
 	return ret;
 }
+// Begin StackRox
+extern sinsp_filter_check_list g_filterlist;
+sinsp_filter_check_iface* sinsp_filter_check_iface::get(const std::string& field_name, sinsp* inspector) {
+  sinsp_filter_check* check = g_filterlist.new_filter_check_from_fldname(field_name, inspector, true);
+  check->parse_field_name(field_name.c_str(), true, false);
+  return check;
+}
+// End StackRox
 
 #endif // HAS_FILTERING

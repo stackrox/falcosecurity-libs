@@ -11,6 +11,22 @@ or GPL2.txt for full copies of the license.
 
 #include <linux/version.h>
 
+/* StackRox: kconfig.h without asm required for 5.4.*-generic compilation */
+#include <linux/kconfig.h>
+#undef CONFIG_CC_HAS_ASM_INLINE
+
+// This define exists so that /collector/kernel-modules/build-kos can determine
+// that this version of sysdig supports the backported eBPF found in RHEL 7.6
+#define SUPPORTS_RHEL76_EBPF
+
+#ifdef RHEL_RELEASE_CODE
+
+#if RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7, 6)
+#error RHEL version must be >= 7.6
+#endif
+
+#else /* RHEL_RELEASE_CODE */
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 #error Kernel version must be >= 4.14 with eBPF enabled
 #endif
@@ -28,6 +44,9 @@ or GPL2.txt for full copies of the license.
 #define BPF_SUPPORTS_RAW_TRACEPOINTS
 #endif
 
+#define RHEL_RELEASE_VERSION(X,Y) 0
+
+#endif /* RHEL_RELEASE_CODE */
 /* Redefine asm_volatile_goto to work around clang not supporting it
  */
 #include <linux/types.h>

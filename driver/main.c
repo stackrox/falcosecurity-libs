@@ -40,6 +40,12 @@ or GPL2.txt for full copies of the license.
 #include <linux/tracepoint.h>
 #include <linux/cpu.h>
 #include <linux/jiffies.h>
+
+/* Begin StackRox section */
+#include <linux/hash.h>
+#include <linux/pid_namespace.h>
+/* End StackRox section */
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26))
 #include <linux/file.h>
 #else
@@ -58,7 +64,7 @@ or GPL2.txt for full copies of the license.
 #endif
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("the Falco authors");
+MODULE_AUTHOR("StackRox, Inc.");
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 35))
     #define TRACEPOINT_PROBE_REGISTER(p1, p2) tracepoint_probe_register(p1, p2)
@@ -129,6 +135,20 @@ static void reset_ring_buffer(struct ppm_ring_buffer_context *ring);
 void ppm_task_cputime_adjusted(struct task_struct *p, cputime_t *ut, cputime_t *st);
 #endif
 
+/* Begin StackRox Section */
+static int record_event_consumer_for(struct task_struct *task,
+	struct ppm_consumer_t *consumer,
+	enum ppm_event_type event_type,
+	enum syscall_flags drop_flags,
+	nanoseconds ns,
+	struct event_data_t *event_datap);
+
+static void record_event_all_consumers_for(struct task_struct* task,
+	enum ppm_event_type event_type,
+	enum syscall_flags drop_flags,
+	struct event_data_t *event_datap);
+/* End StackRox Section */
+
 #ifndef CONFIG_HAVE_SYSCALL_TRACEPOINTS
  #error The kernel must have HAVE_SYSCALL_TRACEPOINTS in order to work
 #endif
@@ -153,6 +173,26 @@ TRACEPOINT_PROBE(signal_deliver_probe, int sig, struct siginfo *info, struct k_s
 #ifdef CAPTURE_PAGE_FAULTS
 TRACEPOINT_PROBE(page_fault_probe, unsigned long address, struct pt_regs *regs, unsigned long error_code);
 #endif
+
+/* Begin StackRox section */
+
+static int s_syscallIds[PPM_EVENT_MAX];
+static int s_syscallIdsCount = 0;
+
+module_param_array(s_syscallIds, int, &s_syscallIdsCount, 0444);
+MODULE_PARM_DESC(s_syscallIds, "An array of integers representing entries from ppm_syscall_code");
+
+static int exclude_initns = 0;
+module_param(exclude_initns, int, 0444);
+MODULE_PARM_DESC(exclude_initns, "Exclude events from processes in the init namespace if nonzero");
+
+static int exclude_selfns = 0;
+module_param(exclude_selfns, int, 0444);
+MODULE_PARM_DESC(exclude_selfns, "Exclude events from processes in the same namespace as the consumer");
+
+static struct pid_namespace *global_excluded_pid_ns = NULL;
+
+/* End StackRox section */
 
 DECLARE_BITMAP(g_events_mask, PPM_EVENT_MAX);
 static struct ppm_device *g_ppm_devs;
@@ -237,6 +277,296 @@ inline void ppm_syscall_get_arguments(struct task_struct *task, struct pt_regs *
 #endif
 }
 
+/* Begin StackRox Section */
+
+// A hashtable for storing a set of pointers. Used for storing the set of excluded PID namespaces.
+struct ptr_table {
+	int log_capacity;  // actual capacity is 1 << log_capacity
+	int size;
+	int used_slots;
+	void* table[];
+};
+
+#define PTR_TABLE_FREEAGAIN ((void *) 0x1)
+#define PTR_TABLE_IS_FREE(p) (p <= PTR_TABLE_FREEAGAIN)
+
+static struct ptr_table* g_excluded_pid_ns_table = NULL;
+static DEFINE_SPINLOCK(g_excluded_pid_ns_table_lock);
+
+#define EXCLUDED_PID_NS_TABLE_INITIAL_CAPACITY 32
+
+static inline int ptr_table_capacity(struct ptr_table* table) {
+	return 1 << table->log_capacity;
+}
+
+// Finds a value in a pointer hashtable. The return value is the pointer to the element if the value was found,
+// otherwise it is the pointer to the first free slot (or NULL if there are no free slots in the table).
+static inline void** ptr_table_find(struct ptr_table* table, void* ptr) {
+	int hash_index;
+	void** p, **startp, **endp, **firstfree = NULL;
+
+	hash_index = (int) hash_ptr(ptr, table->log_capacity);
+	startp = &table->table[hash_index];
+	endp = table->table + ptr_table_capacity(table);
+
+	p = startp;
+	for (p = startp; p != endp; ++p) {
+		if (!*p || *p == ptr) return p;
+		if (!firstfree && PTR_TABLE_IS_FREE(*p)) firstfree = p;
+		++p;
+	}
+	for (p = table->table; p != startp; ++p) {
+		if (!*p || *p == ptr) return p;
+		if (!firstfree && PTR_TABLE_IS_FREE(*p)) firstfree = p;
+		++p;
+	}
+	return firstfree;
+}
+
+// Removes a value from a pointer hashtable. Returns true if the value was removed, false otherwise.
+static inline bool ptr_table_remove(struct ptr_table* table, void* ptr) {
+	void** p;
+
+	p = ptr_table_find(table, ptr);
+	if (p && *p == ptr) {
+		*p = PTR_TABLE_FREEAGAIN;
+		--table->size;
+		vpr_info("Table stats after removing: capacity = %d, used_slots = %d, size = %d\n",
+		         ptr_table_capacity(table), table->used_slots, table->size);
+		return true;
+	}
+	return false;
+}
+
+// Adds a value to a pointer hashtable. Returns true if the value was inserted, false otherwise. Note that this does
+// NOT trigger an automatic rehashing; rather, the caller must ensure that the table has sufficient capacity.
+static inline bool ptr_table_add(struct ptr_table* table, void* ptr) {
+	void** p;
+
+	p = ptr_table_find(table, ptr);
+	if (!p) return false;  // no more space
+	if (*p == ptr) return false;  // element already present
+	if (!*p) ++table->used_slots;  // only increment used_slots if the slot is really free, not "free again".
+	*p = ptr;
+	++table->size;
+
+	vpr_info("Table stats after adding: capacity = %d, used_slots = %d, size = %d\n",
+	         ptr_table_capacity(table), table->used_slots, table->size);
+	return true;
+}
+
+// Creates a new pointer hashtable, populating it with the contents of old_table (if any).
+static struct ptr_table* ptr_table_create(int new_capacity, struct ptr_table* old_table) {
+	struct ptr_table* new_table;
+	void** oldp, **oldendp, **newp;
+	void* ptr;
+	int new_log_capacity;
+
+	// Make sure the new capacity is a power of 2.
+	new_log_capacity = ilog2(new_capacity - 1) + 1;
+	new_capacity = 1 << new_log_capacity;
+	if (old_table && new_capacity < old_table->size) return NULL;
+	new_table = (struct ptr_table *) kmalloc(sizeof(struct ptr_table) + new_capacity * sizeof(void*), GFP_KERNEL);
+	if (!new_table) return NULL;
+	new_table->log_capacity = new_log_capacity;
+	new_table->size = 0;
+	new_table->used_slots = 0;
+	memset(new_table->table, 0, new_capacity * sizeof(void*));
+
+	if (!old_table) return new_table;
+
+	for (oldp = old_table->table, oldendp = oldp + ptr_table_capacity(old_table); oldp != oldendp; ++oldp) {
+		ptr = *oldp;
+		if (PTR_TABLE_IS_FREE(ptr)) {
+			continue;
+		}
+		newp = ptr_table_find(new_table, ptr);
+		ASSERT(newp && !*newp);
+		*newp = ptr;
+		++new_table->size;
+		++new_table->used_slots;
+	}
+
+	return new_table;
+}
+
+// Checks if the given PID namespace is in the set of excluded namespaces.
+static inline bool is_excluded_pid_ns(struct pid_namespace* pid_ns) {
+	struct ptr_table* table;
+	void** p;
+
+	rcu_read_lock();
+	table = rcu_dereference(g_excluded_pid_ns_table);
+	if (!table) goto notfound;
+	p = ptr_table_find(table, pid_ns);
+
+	if (p && *p == pid_ns) goto found;
+
+notfound:
+	rcu_read_unlock();
+	return false;
+
+found:
+	rcu_read_unlock();
+	return true;
+}
+
+// Removes the given PID namespace from the set of excluded namespaces.
+static void remove_excluded_pid_ns(struct pid_namespace* pid_ns) {
+	struct ptr_table* table;
+
+	vpr_info("Un-excluding PID namespace %p\n", pid_ns);
+	spin_lock(&g_excluded_pid_ns_table_lock);
+	smp_wmb();
+
+	table = g_excluded_pid_ns_table;
+	if (!table) goto exit;
+
+	ptr_table_remove(table, pid_ns);
+
+exit:
+	smp_wmb();
+	spin_unlock(&g_excluded_pid_ns_table_lock);
+}
+
+// Adds the given PID namespace to the set of excluded namespaces.
+static int add_excluded_pid_ns(struct pid_namespace* pid_ns) {
+	struct ptr_table* table, *new_table = NULL;
+	int ret = 0, new_capacity;
+
+	vpr_info("Excluding PID namespace %p\n", pid_ns);
+	spin_lock(&g_excluded_pid_ns_table_lock);
+	smp_wmb();
+	table = g_excluded_pid_ns_table;
+	if (!table) {
+		table = ptr_table_create(EXCLUDED_PID_NS_TABLE_INITIAL_CAPACITY, NULL);
+		ptr_table_add(table, pid_ns);
+		rcu_assign_pointer(g_excluded_pid_ns_table, table);
+		goto exit;
+	}
+	ptr_table_add(table, pid_ns);
+	if (table->used_slots * 2 < ptr_table_capacity(table)) goto exit;
+	new_capacity = (table->size << 2) + 3;
+	if (new_capacity < EXCLUDED_PID_NS_TABLE_INITIAL_CAPACITY) new_capacity = EXCLUDED_PID_NS_TABLE_INITIAL_CAPACITY;
+	vpr_info("Rehashing excluded PID namespace table (old capacity = %d, new capacity = %d)\n",
+	         ptr_table_capacity(table), new_capacity);
+	new_table = ptr_table_create(new_capacity, table);
+	if (!new_table) {
+		ret = -ENOMEM;
+		goto exit;
+    }
+    rcu_assign_pointer(g_excluded_pid_ns_table, new_table);
+
+exit:
+	smp_wmb();
+	spin_unlock(&g_excluded_pid_ns_table_lock);
+	if (new_table) {
+		synchronize_rcu();
+		kfree(table);
+	}
+	return ret;
+}
+
+static void reset_excluded_pid_namespaces(void) {
+	struct ptr_table* table;
+	vpr_info("Resetting excluded PID namespace table\n");
+
+	spin_lock(&g_excluded_pid_ns_table_lock);
+	smp_wmb();
+	table = g_excluded_pid_ns_table;
+
+	rcu_assign_pointer(g_excluded_pid_ns_table, NULL);
+
+	smp_wmb();
+	spin_unlock(&g_excluded_pid_ns_table_lock);
+
+	if (table) {
+		synchronize_rcu();
+		kfree(table);
+	}
+}
+
+// Checks if the given task should be ignored globally.
+static bool exclude_task_globally(struct task_struct* task) {
+	struct pid_namespace* pid_ns;
+
+	pid_ns = task_active_pid_ns(task);
+	if (pid_ns == global_excluded_pid_ns) return true;
+	return is_excluded_pid_ns(pid_ns);
+}
+
+static void emit_procexit(struct task_struct* p) {
+	struct event_data_t event_data;
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
+	if (unlikely(p->flags & PF_KTHREAD)) {
+#else
+	if (unlikely(p->flags & PF_BORROWED_MM)) {
+#endif
+		/*
+		 * We are not interested in kernel threads
+		 */
+		return;
+	}
+
+	event_data.category = PPMC_CONTEXT_SWITCH;
+	event_data.event_info.context_data.sched_prev = p;
+	event_data.event_info.context_data.sched_next = p;
+
+	record_event_all_consumers_for(p, PPME_PROCEXIT_1_E, UF_NEVER_DROP, &event_data);
+}
+
+// Sends a procexit event for all processes in the given pid namespace to the consumers. This is required to notify
+// consumers that they no longer need to maintain any information about the respective processes.
+static void simulate_procexits(struct pid_namespace* pid_ns) {
+	struct task_struct* p;
+
+	rcu_read_lock();
+	for_each_process(p) {
+		task_lock(p);
+
+		if (task_active_pid_ns(p) != pid_ns) goto next;
+		emit_procexit(p);
+
+next:
+		task_unlock(p);
+	}
+
+	rcu_read_unlock();
+}
+
+// Handle the PPM_IOCTL_EXCLUDE_NS_OF_PID ioctl. The argument is the PID whose namespace to exclude.
+static int handle_exclude_namespace_ioctl(unsigned long arg) {
+	pid_t pid_nr;
+	struct pid* pid;
+	struct pid_namespace* pid_ns;
+	int ret;
+
+	pid_nr = (pid_t) arg;
+	if (!pid_nr) {
+		reset_excluded_pid_namespaces();
+		return 0;
+	}
+
+	vpr_info("Excluding PID namespace of PID %d\n", pid_nr);
+	rcu_read_lock();
+	pid = find_pid_ns(pid_nr, &init_pid_ns);
+	pid_ns = ns_of_pid(pid);
+	rcu_read_unlock();
+
+	if (!pid_ns) {
+		vpr_info("Couldn't find valid PID namespace for PID %d\n", pid_nr);
+		return -EINVAL;
+	}
+	ret = add_excluded_pid_ns(pid_ns);
+	if (ret != 0) {
+		return ret;
+	}
+	simulate_procexits(pid_ns);
+	return 0;
+}
+/* End StackRox Section */
+
 /* compat tracepoint functions */
 static int compat_register_trace(void *func, const char *probename, struct tracepoint *tp)
 {
@@ -309,6 +639,7 @@ static void check_remove_consumer(struct ppm_consumer_t *consumer, int remove_fr
 static int ppm_open(struct inode *inode, struct file *filp)
 {
 	int ret;
+	int syscallIndex;
 	int in_list = false;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 	int ring_no = iminor(filp->f_path.dentry->d_inode);
@@ -355,6 +686,14 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		}
 
 		consumer->consumer_id = consumer_id;
+
+		/* Begin StackRox section */
+		if (exclude_selfns) {
+			consumer->excluded_pid_ns = task_active_pid_ns(consumer_id);
+		} else {
+			consumer->excluded_pid_ns = NULL;
+		}
+		/* End StackRox section */
 
 		/*
 		 * Initialize the ring buffers array
@@ -434,6 +773,11 @@ static int ppm_open(struct inode *inode, struct file *filp)
 
 	vpr_info("opening ring %d, consumer %p\n", ring_no, consumer->consumer_id);
 
+        /* In the following section we process the incoming syscall Ids, if any, and set the set
+           syscalls we want to extract based on in
+        */
+
+
 	/*
 	 * ring->preempt_count is not reset to 0 on purpose, to prevent a race condition:
 	 * if the same device is quickly closed and then reopened, record_event() might still be executing
@@ -452,9 +796,33 @@ static int ppm_open(struct inode *inode, struct file *filp)
 	consumer->fullcapture_port_range_start = 0;
 	consumer->fullcapture_port_range_end = 0;
 	consumer->statsd_port = PPM_PORT_STATSD;
-	bitmap_fill(g_events_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
+	/* Begin StackRox section */
+	/* Commenting out the following line that is in sysdig open-source driver */
+	//bitmap_fill(g_events_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
+	/* End StackRox section */
 	reset_ring_buffer(ring);
 	ring->open = true;
+
+	/* Begin StackRox section */
+	if (s_syscallIdsCount > 0) {
+		bitmap_zero(g_events_mask, PPM_EVENT_MAX); /* Zero out so that no syscall squeaks past us */
+		vpr_info("Number of syscall Ids = %d\n", s_syscallIdsCount);
+		for (syscallIndex = 0; syscallIndex < s_syscallIdsCount; syscallIndex++) {
+			int id = s_syscallIds[syscallIndex];
+			if (id >= 0 && id < PPM_EVENT_MAX) {
+				u32 idToSet = (u32)id;
+				vpr_info("%d: Syscall Id to include = %d\n", syscallIndex, idToSet);
+				set_bit(idToSet, g_events_mask);
+			}
+		}
+		set_bit(PPME_DROP_X, g_events_mask);
+		set_bit(PPME_SYSDIGEVENT_E, g_events_mask);
+		set_bit(PPME_CONTAINER_E, g_events_mask);
+		set_bit(PPME_CONTAINER_X, g_events_mask);
+	} else {
+		bitmap_fill(g_events_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
+	}
+	/* End StackRox section */
 
 	if (!g_tracepoint_registered) {
 		pr_info("starting capture\n");
@@ -998,6 +1366,13 @@ cleanup_ioctl_procinfo:
 		ret = 0;
 		goto cleanup_ioctl;
 	}
+	/* Begin StackRox Section */
+	case PPM_IOCTL_EXCLUDE_NS_OF_PID:
+	{
+		ret = handle_exclude_namespace_ioctl(arg);
+		goto cleanup_ioctl;
+	}
+	/* End StackRox Section */
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 	case PPM_IOCTL_GET_VTID:
 	case PPM_IOCTL_GET_VPID:
@@ -1318,12 +1693,17 @@ static const unsigned char compat_nas[21] = {
 
 
 #ifdef _HAS_SOCKETCALL
-static enum ppm_event_type parse_socketcall(struct event_filler_arguments *filler_args, struct pt_regs *regs)
+/* Begin StackRox Section */
+static enum ppm_event_type parse_socketcall_for(struct task_struct* task, struct event_filler_arguments *filler_args, struct pt_regs *regs)
+/* End StackRox Section */
 {
 	unsigned long __user args[6] = {};
 	unsigned long __user *scargs;
 	int socketcall_id;
-	ppm_syscall_get_arguments(current, regs, args);
+
+	/* Begin StackRox Section */
+	ppm_syscall_get_arguments(task, regs, args);
+	/* End StackRox Section */
 	socketcall_id = args[0];
 	scargs = (unsigned long __user *)args[1];
 
@@ -1406,13 +1786,13 @@ static enum ppm_event_type parse_socketcall(struct event_filler_arguments *fille
 }
 #endif /* _HAS_SOCKETCALL */
 
-static inline void record_drop_e(struct ppm_consumer_t *consumer,
+static inline void record_drop_e_for(struct task_struct* task, struct ppm_consumer_t *consumer,
                                  nanoseconds ns,
                                  enum syscall_flags drop_flags)
 {
 	struct event_data_t event_data = {0};
 
-	if (record_event_consumer(consumer, PPME_DROP_E, UF_NEVER_DROP, ns, &event_data) == 0) {
+	if (record_event_consumer_for(task, consumer, PPME_DROP_E, UF_NEVER_DROP, ns, &event_data) == 0) {
 		consumer->need_to_insert_drop_e = 1;
 	} else {
 		if (consumer->need_to_insert_drop_e == 1 && !(drop_flags & UF_ATOMIC)) {
@@ -1423,13 +1803,13 @@ static inline void record_drop_e(struct ppm_consumer_t *consumer,
 	}
 }
 
-static inline void record_drop_x(struct ppm_consumer_t *consumer,
+static inline void record_drop_x_for(struct task_struct* task, struct ppm_consumer_t *consumer,
                                  nanoseconds ns,
                                  enum syscall_flags drop_flags)
 {
 	struct event_data_t event_data = {0};
 
-	if (record_event_consumer(consumer, PPME_DROP_X, UF_NEVER_DROP, ns, &event_data) == 0) {
+	if (record_event_consumer_for(task, consumer, PPME_DROP_X, UF_NEVER_DROP, ns, &event_data) == 0) {
 		consumer->need_to_insert_drop_x = 1;
 	} else {
 		if (consumer->need_to_insert_drop_x == 1 && !(drop_flags & UF_ATOMIC)) {
@@ -1441,7 +1821,8 @@ static inline void record_drop_x(struct ppm_consumer_t *consumer,
 }
 
 // Return 1 if the event should be dropped, else 0
-static inline int drop_nostate_event(enum ppm_event_type event_type,
+static inline int drop_nostate_event_for(struct task_struct* task,
+                                     enum ppm_event_type event_type,
 				     struct pt_regs *regs)
 {
 	unsigned long args[6] = {};
@@ -1454,7 +1835,7 @@ static inline int drop_nostate_event(enum ppm_event_type event_type,
 	switch (event_type) {
 	case PPME_SYSCALL_CLOSE_X:
 	case PPME_SOCKET_BIND_X:
-		if (syscall_get_return_value(current, regs) < 0)
+		if (syscall_get_return_value(task, regs) < 0)
 			drop = true;
 		break;
 	case PPME_SYSCALL_CLOSE_E:
@@ -1466,7 +1847,7 @@ static inline int drop_nostate_event(enum ppm_event_type event_type,
 		 * The invalid fd events don't matter to userspace in dropping mode,
 		 * so we do this before the UF_NEVER_DROP check
 		 */
-		ppm_syscall_get_arguments(current, regs, args);
+		ppm_syscall_get_arguments(task, regs, args);
 		arg = args[0];
 		close_fd = (int)arg;
 
@@ -1487,7 +1868,7 @@ static inline int drop_nostate_event(enum ppm_event_type event_type,
 	case PPME_SYSCALL_FCNTL_E:
 	case PPME_SYSCALL_FCNTL_X:
 		// cmd arg
-		ppm_syscall_get_arguments(current, regs, args);
+		ppm_syscall_get_arguments(task, regs, args);
 		arg = args[1];
 		if (arg != F_DUPFD && arg != F_DUPFD_CLOEXEC)
 			drop = true;
@@ -1503,7 +1884,8 @@ static inline int drop_nostate_event(enum ppm_event_type event_type,
 }
 
 // Return 1 if the event should be dropped, else 0
-static inline int drop_event(struct ppm_consumer_t *consumer,
+static inline int drop_event_for(struct task_struct* task,
+			     struct ppm_consumer_t *consumer,
 			     enum ppm_event_type event_type,
 			     enum syscall_flags drop_flags,
 			     nanoseconds ns,
@@ -1512,7 +1894,7 @@ static inline int drop_event(struct ppm_consumer_t *consumer,
 	int maybe_ret = 0;
 
 	if (consumer->dropping_mode) {
-		maybe_ret = drop_nostate_event(event_type, regs);
+		maybe_ret = drop_nostate_event_for(task,event_type, regs);
 		if (maybe_ret > 0)
 			return maybe_ret;
 	}
@@ -1532,7 +1914,7 @@ static inline int drop_event(struct ppm_consumer_t *consumer,
 		    (ns % SECOND_IN_NS) >= consumer->sampling_interval) {
 			if (consumer->is_dropping == 0) {
 				consumer->is_dropping = 1;
-				record_drop_e(consumer, ns, drop_flags);
+				record_drop_e_for(task, consumer, ns, drop_flags);
 			}
 
 			return 1;
@@ -1540,31 +1922,44 @@ static inline int drop_event(struct ppm_consumer_t *consumer,
 
 		if (consumer->is_dropping == 1) {
 			consumer->is_dropping = 0;
-			record_drop_x(consumer, ns, drop_flags);
+			record_drop_x_for(task, consumer, ns, drop_flags);
 		}
 	}
 
 	return 0;
 }
 
-static void record_event_all_consumers(enum ppm_event_type event_type,
+static void record_event_all_consumers_for(struct task_struct* task, enum ppm_event_type event_type,
 	enum syscall_flags drop_flags,
 	struct event_data_t *event_datap)
 {
 	struct ppm_consumer_t *consumer;
 	nanoseconds ns = ppm_nsecs();
 
+	/* Begin StackRox section */
+	/* Moved this from record_event_consumers_for */
+	if (!test_bit(event_type, g_events_mask)) return;
+	/* End StackRox section */
+
 	rcu_read_lock();
 	list_for_each_entry_rcu(consumer, &g_consumer_list, node) {
-		record_event_consumer(consumer, event_type, drop_flags, ns, event_datap);
+		record_event_consumer_for(task, consumer, event_type, drop_flags, ns, event_datap);
 	}
 	rcu_read_unlock();
+}
+
+static void record_event_all_consumers(enum ppm_event_type event_type,
+	enum syscall_flags drop_flags,
+	struct event_data_t *event_datap)
+{
+	record_event_all_consumers_for(current, event_type, drop_flags, event_datap);
 }
 
 /*
  * Returns 0 if the event is dropped
  */
-static int record_event_consumer(struct ppm_consumer_t *consumer,
+static int record_event_consumer_for(struct task_struct* task,
+	struct ppm_consumer_t *consumer,
 	enum ppm_event_type event_type,
 	enum syscall_flags drop_flags,
 	nanoseconds ns,
@@ -1585,16 +1980,26 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 	int32_t cbres = PPM_SUCCESS;
 	int cpu;
 
+	/* Begin StackRox section */
+	/*
+	 * Moved this to record_event_all_consumers.
+
 	if (!test_bit(event_type, g_events_mask))
 		return res;
+	*/
+
+	if (task_active_pid_ns(task) == consumer->excluded_pid_ns) {
+	    return res;
+	}
+	/* End StackRox section */
 
 	if (event_type != PPME_DROP_E && event_type != PPME_DROP_X) {
 		if (consumer->need_to_insert_drop_e == 1)
-			record_drop_e(consumer, ns, drop_flags);
+			record_drop_e_for(task, consumer, ns, drop_flags);
 		else if (consumer->need_to_insert_drop_x == 1)
-			record_drop_x(consumer, ns, drop_flags);
+			record_drop_x_for(task, consumer, ns, drop_flags);
 
-		if (drop_event(consumer,
+		if (drop_event_for(task, consumer,
 		               event_type,
 		               drop_flags,
 		               ns,
@@ -1685,7 +2090,7 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 
 		args.is_socketcall = true;
 		args.compat = event_datap->compat;
-		tet = parse_socketcall(&args, event_datap->event_info.syscall_data.regs);
+		tet = parse_socketcall_for(task, &args, event_datap->event_info.syscall_data.regs);
 
 		if (event_type == PPME_GENERIC_E)
 			event_type = tet;
@@ -1722,7 +2127,7 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 		hdr->sentinel_begin = ring->nevents;
 #endif
 		hdr->ts = ns;
-		hdr->tid = current->pid;
+		hdr->tid = task->pid;
 		hdr->type = event_type;
 		hdr->nparams = args.nargs;
 
@@ -1781,7 +2186,7 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 			args.signo = 0;
 			args.spid = (__kernel_pid_t) 0;
 		}
-		args.dpid = current->pid;
+		args.dpid = task->pid;
 
 		if (event_datap->category == PPMC_PAGE_FAULT)
 			args.fault_data = event_datap->event_info.fault_data;
@@ -1865,6 +2270,7 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 			ring_info->n_drops_pf++;
 		} else if (cbres == PPM_FAILURE_BUFFER_FULL) {
 			ring_info->n_drops_buffer++;
+//			pr_err("Dropped event %d\n", event_type);
 		} else {
 			ASSERT(false);
 		}
@@ -1889,6 +2295,17 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 
 	return res;
 }
+
+static int record_event_consumer(struct ppm_consumer_t *consumer,
+	enum ppm_event_type event_type,
+	enum syscall_flags drop_flags,
+	nanoseconds ns,
+	struct event_data_t *event_datap)
+{
+	return record_event_consumer_for(current, consumer, event_type, drop_flags, ns, event_datap);
+}
+
+/* End StackRox Section */
 
 static inline void g_n_tracepoint_hit_inc(void)
 {
@@ -1917,6 +2334,15 @@ TRACEPOINT_PROBE(syscall_enter_probe, struct pt_regs *regs, long id)
 #else
 	int socketcall_syscall = -1;
 #endif
+
+	/* Begin StackRox section */
+	/*
+	 * Exclude event as early on as possible.
+	 */
+	if (exclude_task_globally(current)) {
+		return;
+	}
+	/* End StackRox section */
 
 #if defined(CONFIG_X86_64) && defined(CONFIG_IA32_EMULATION)
 	/*
@@ -1991,6 +2417,15 @@ TRACEPOINT_PROBE(syscall_exit_probe, struct pt_regs *regs, long ret)
 	int socketcall_syscall = -1;
 #endif
 
+	/* Begin StackRox section */
+	/*
+	 * Exclude event as early on as possible.
+	 */
+	if (exclude_task_globally(current)) {
+		return;
+	}
+	/* End StackRox section */
+
 	id = syscall_get_nr(current, regs);
 
 #if defined(CONFIG_X86_64) && defined(CONFIG_IA32_EMULATION)
@@ -2062,26 +2497,24 @@ int __access_remote_vm(struct task_struct *t, struct mm_struct *mm, unsigned lon
 
 TRACEPOINT_PROBE(syscall_procexit_probe, struct task_struct *p)
 {
-	struct event_data_t event_data;
+	/* Begin StackRox section */
+	struct pid_namespace* pid_ns;
 
-	g_n_tracepoint_hit_inc();
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
-	if (unlikely(current->flags & PF_KTHREAD)) {
-#else
-	if (unlikely(current->flags & PF_BORROWED_MM)) {
-#endif
-		/*
-		 * We are not interested in kernel threads
-		 */
+	pid_ns = task_active_pid_ns(p);
+	if (pid_ns == global_excluded_pid_ns) {
+		return;
+	}
+	if (is_excluded_pid_ns(pid_ns)) {
+		if (is_child_reaper(task_pid(p))) {
+			remove_excluded_pid_ns(pid_ns);
+		}
 		return;
 	}
 
-	event_data.category = PPMC_CONTEXT_SWITCH;
-	event_data.event_info.context_data.sched_prev = p;
-	event_data.event_info.context_data.sched_next = p;
+	g_n_tracepoint_hit_inc();
 
-	record_event_all_consumers(PPME_PROCEXIT_1_E, UF_NEVER_DROP, &event_data);
+	emit_procexit(p);
+	/* End StackRox Section */
 }
 
 #include <linux/ip.h>
@@ -2146,6 +2579,15 @@ TRACEPOINT_PROBE(signal_deliver_probe, int sig, struct siginfo *info, struct k_s
 TRACEPOINT_PROBE(page_fault_probe, unsigned long address, struct pt_regs *regs, unsigned long error_code)
 {
 	struct event_data_t event_data;
+
+	/* Begin StackRox section */
+	/*
+	 * Exclude event as early on as possible.
+	 */
+	if (task_active_pid_ns(current) == global_excluded_pid_ns) {
+		return;
+	}
+	/* End StackRox section */
 
 	/* We register both tracepoints under the same probe and
 	 * the event since there's little reason to expose this
@@ -2453,6 +2895,16 @@ int sysdig_init(void)
 #endif
 	pr_info("driver loading, " PROBE_NAME " " PROBE_VERSION "\n");
 
+	/* Begin StackRox Section */
+	if (exclude_initns) {
+		pr_info("excluding processes from the init pid namespace\n");
+		global_excluded_pid_ns = &init_pid_ns;
+	}
+	if (exclude_selfns) {
+		pr_info("excluding processes from the consumer's pid namespace\n");
+	}
+	/* End StackRox Section */
+
 	ret = get_tracepoint_handles();
 	if (ret < 0)
 		goto init_module_err;
@@ -2626,6 +3078,12 @@ void sysdig_exit(void)
 #else
 	unregister_cpu_notifier(&cpu_notifier);
 #endif
+
+	/* Begin StackRox Section */
+	if (g_excluded_pid_ns_table) {
+		kfree(g_excluded_pid_ns_table);
+	}
+	/* End StackRox Section */
 }
 
 module_init(sysdig_init);

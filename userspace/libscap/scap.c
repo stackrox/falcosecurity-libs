@@ -461,10 +461,11 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	//
 	error[0] = '\0';
 	snprintf(filename, sizeof(filename), "%s/proc", scap_get_host_root());
-	if((*rc = scap_proc_scan_proc_dir(handle, filename, error)) != SCAP_SUCCESS)
+	char proc_scan_err[SCAP_LASTERR_SIZE];
+	if((*rc = scap_proc_scan_proc_dir(handle, filename, proc_scan_err)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
-		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live_int() error creating the process list. Make sure you have root credentials.");
+		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live_int() error creating the process list: %s. Make sure you have root credentials.", proc_scan_err);
 		return NULL;
 	}
 
@@ -644,7 +645,7 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 #else
 		&(handle->m_devs[0].m_bufinfo_fd),
 #endif
-		&handle->m_devs[0].m_bufinfo, 
+		&handle->m_devs[0].m_bufinfo,
 		&handle->m_devs[0].m_bufstatus,
 		error) != SCAP_SUCCESS)
 	{
@@ -936,10 +937,11 @@ scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
 	//
 	error[0] = '\0';
 	snprintf(filename, sizeof(filename), "%s/proc", scap_get_host_root());
-	if((*rc = scap_proc_scan_proc_dir(handle, filename, error)) != SCAP_SUCCESS)
+	char proc_scan_err[SCAP_LASTERR_SIZE];
+	if((*rc = scap_proc_scan_proc_dir(handle, filename, proc_scan_err)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
-		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live() error creating the process list. Make sure you have root credentials.");
+		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live() error creating the process list: %s. Make sure you have root credentials.", proc_scan_err);
 		return NULL;
 	}
 
@@ -1742,7 +1744,7 @@ static int32_t scap_next_plugin(scap_t* handle, OUT scap_evt** pevent, OUT uint1
 									&(handle->m_input_plugin_batch_nevts),
 									&(handle->m_input_plugin_batch_evts));
 		handle->m_input_plugin_last_batch_res = plugin_rc_to_scap_rc(plugin_res);
-		
+
 		if(handle->m_input_plugin_batch_nevts == 0)
 		{
 			if(handle->m_input_plugin_last_batch_res == SCAP_SUCCESS)
@@ -2507,7 +2509,7 @@ int32_t scap_disable_dynamic_snaplen(scap_t* handle)
 
 const char* scap_get_host_root()
 {
-	char* p = getenv(SCAP_HOST_ROOT_ENV_VAR_NAME);
+	char* p = getenv("COLLECTOR_HOST_ROOT");
 	static char env_str[SCAP_MAX_PATH_SIZE + 1];
 	static bool inited = false;
 	if (! inited) {
@@ -2874,3 +2876,23 @@ int32_t scap_set_statsd_port(scap_t* const handle, const uint16_t port)
 	return SCAP_SUCCESS;
 #endif
 }
+
+/* Begin StackRox Section */
+int scap_ioctl(scap_t* handle, int devnum, unsigned long request, void* arg) {
+	int ioctl_ret = 0;
+
+	if (devnum >= handle->m_ndevs) {
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed, invalid device number %d", devnum);
+		ASSERT(false);
+		return SCAP_FAILURE;
+	}
+
+	ioctl_ret = ioctl(handle->m_devs[devnum].m_fd, request, arg);
+	if (ioctl_ret != 0) {
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed due to ioctl error (%s)", strerror(errno));
+		return SCAP_FAILURE;
+	}
+
+	return SCAP_SUCCESS;
+}
+/* End StackRox Section */

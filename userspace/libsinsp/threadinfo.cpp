@@ -483,21 +483,6 @@ void sinsp_threadinfo::init(scap_threadinfo* pi)
 	}
 }
 
-std::string sinsp_threadinfo::get_comm() const
-{
-	return m_comm;
-}
-
-std::string sinsp_threadinfo::get_exe() const
-{
-	return m_exe;
-}
-
-std::string sinsp_threadinfo::get_exepath() const
-{
-	return m_exepath;
-}
-
 void sinsp_threadinfo::set_args(const char* args, size_t len)
 {
 	m_args.clear();
@@ -658,8 +643,10 @@ void sinsp_threadinfo::set_cgroups(const char* cgroups, size_t len)
 			subsys = "blkio";
 		}
 
-		m_cgroups.push_back(std::make_pair(subsys, cgroup));
 		offset += subsys_length + 1 + cgroup.length() + 1;
+		if (subsys == "perf_event" || subsys == "cpu" || subsys == "cpuset" || subsys == "memory") {
+			m_cgroups.emplace_back(std::move(subsys), std::move(cgroup));
+		}
 	}
 }
 
@@ -968,6 +955,11 @@ bool sinsp_threadinfo::is_health_probe()
 	        m_category == sinsp_threadinfo::CAT_READINESS_PROBE);
 }
 
+void sinsp_threadinfo::reset_fd_cache()
+{
+	m_fdtable.reset_cache();
+}
+
 string sinsp_threadinfo::get_path_for_dir_fd(int64_t dir_fd)
 {
 	sinsp_fdinfo_t* dir_fdinfo = get_fd(dir_fd);
@@ -1233,7 +1225,13 @@ void sinsp_thread_manager::clear()
 #endif
 }
 
-void sinsp_thread_manager::increment_mainthread_childcount(sinsp_threadinfo* threadinfo)
+/*
+ * When a main thread goes away, we do not want to query OS for its pid since it could have been
+ * allocated to some other process. Caller is expected to pass false for 'create_if_needed' for
+ * such cases. This function will set pid same as tid in case main thread is not found in such case
+ * i.e. make the passed thread itself as main thread.
+ */
+void sinsp_thread_manager::increment_mainthread_childcount(sinsp_threadinfo* threadinfo, bool create_if_needed)
 {
 	if(threadinfo->m_flags & PPM_CL_CLONE_THREAD)
 	{
@@ -1243,23 +1241,32 @@ void sinsp_thread_manager::increment_mainthread_childcount(sinsp_threadinfo* thr
 		//
 		ASSERT(threadinfo->m_pid != threadinfo->m_tid);
 
-		sinsp_threadinfo* main_thread = m_inspector->get_thread_ref(threadinfo->m_pid, true, true).get();
+		sinsp_threadinfo* main_thread = m_inspector->get_thread_ref(threadinfo->m_pid, create_if_needed, true).get();
 		if(main_thread)
 		{
 			++main_thread->m_nchilds;
 		}
 		else
 		{
-			ASSERT(false);
+			if (create_if_needed)
+			{
+				ASSERT(false);
+			}
+			else
+			{
+				threadinfo->m_pid = threadinfo->m_tid;
+			}
 		}
 	}
 }
 
-bool sinsp_thread_manager::add_thread(sinsp_threadinfo *threadinfo, bool from_scap_proctable)
+bool sinsp_thread_manager::add_thread(std::shared_ptr<sinsp_threadinfo> threadinfo_ref, bool from_scap_proctable)
 {
 #ifdef GATHER_INTERNAL_STATS
 	m_added_threads->increment();
 #endif
+
+	auto* threadinfo = threadinfo_ref.get();
 
 	m_last_tinfo.reset();
 
@@ -1281,12 +1288,12 @@ bool sinsp_thread_manager::add_thread(sinsp_threadinfo *threadinfo, bool from_sc
 
 	if(!from_scap_proctable)
 	{
-		increment_mainthread_childcount(threadinfo);
+		increment_mainthread_childcount(threadinfo, true);
 	}
 
 	threadinfo->compute_program_hash();
 	threadinfo->allocate_private_state();
-	m_threadtable.put(threadinfo);
+	m_threadtable.put(std::move(threadinfo_ref));
 
 	return true;
 }
@@ -1401,11 +1408,20 @@ void sinsp_thread_manager::clear_thread_pointers(sinsp_threadinfo& tinfo)
 {
 	tinfo.m_main_thread.reset();
 
+	/*
 	sinsp_fdtable* fdt = tinfo.get_fd_table();
 	if(fdt != NULL)
 	{
 		fdt->reset_cache();
 	}
+	*/
+
+	/*
+	 * get_fd_table can end up creating main thread if not present where as goal
+	 * here is just to reset fd cache for called thread. Main thread's fd cache
+	 * will be reset when this function is called for main thread.
+	 */
+	tinfo.reset_fd_cache();
 }
 
 /*
@@ -1433,7 +1449,7 @@ void sinsp_thread_manager::reset_child_dependencies()
 void sinsp_thread_manager::create_child_dependencies()
 {
 	m_threadtable.loop([&] (sinsp_threadinfo& tinfo) {
-		increment_mainthread_childcount(&tinfo);
+		increment_mainthread_childcount(&tinfo, true);
 		return true;
 	});
 }
@@ -1685,7 +1701,8 @@ threadinfo_map_t::ptr_t sinsp_thread_manager::get_thread_ref(int64_t tid, bool q
         scap_threadinfo* scap_proc = NULL;
 
 		// unfortunately, sinsp owns the threade factory
-        sinsp_threadinfo* newti = m_inspector->build_threadinfo();
+        auto newti_ref = m_inspector->build_threadinfo();
+        auto* newti = newti_ref.get();
 
         m_n_proc_lookups++;
 
@@ -1765,7 +1782,7 @@ threadinfo_map_t::ptr_t sinsp_thread_manager::get_thread_ref(int64_t tid, bool q
         //
         // Done. Add the new thread to the list.
         //
-        add_thread(newti, false);
+        add_thread(std::move(newti_ref), false);
         sinsp_proc = find_thread(tid, lookup_only);
     }
 

@@ -25,7 +25,7 @@ or GPL2.txt for full copies of the license.
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <asm/mman.h>
+#include <linux/mman.h>
 #include <linux/in.h>
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 20)
 #include <linux/mount.h>

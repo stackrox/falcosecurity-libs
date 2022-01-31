@@ -552,10 +552,10 @@ public:
 
 	libsinsp::event_processor* m_external_event_processor;
 
-	sinsp_threadinfo* build_threadinfo()
+	std::shared_ptr<sinsp_threadinfo> build_threadinfo()
     {
         return m_external_event_processor ? m_external_event_processor->build_threadinfo(this)
-                                          : new sinsp_threadinfo(this);
+                                          : std::make_shared<sinsp_threadinfo>(this);
     }
 
 	/*!
@@ -839,7 +839,7 @@ public:
 	  \brief Initialize the Kubernetes client.
 	  \param api_server Kubernetes API server URI
 	  \param ssl_cert use the provided file name to authenticate with the Kubernetes API server
-	  \param node_name the node name is used as a filter when requesting metadata of pods 
+	  \param node_name the node name is used as a filter when requesting metadata of pods
 	  to the API server; if empty, no filter is set
 	*/
 	void init_k8s_client(std::string* api_server, std::string* ssl_cert, std::string *node_name, bool verbose = false);
@@ -959,11 +959,21 @@ public:
 	uint64_t get_lastevent_ts() const { return m_lastevent_ts; }
 
 VISIBILITY_PROTECTED
-	bool add_thread(const sinsp_threadinfo *ptinfo);
+	bool add_thread(std::shared_ptr<sinsp_threadinfo> ptinfo);
 	void set_mode(scap_mode_t value)
 	{
 		m_mode = value;
 	}
+
+	/* Begin StackRox Section */
+	bool ioctl(int devnum, unsigned long request, void* arg) {
+		bool success = scap_ioctl(m_h, devnum, request, arg) == SCAP_SUCCESS;
+		if (!success) {
+		  m_lasterr = scap_getlasterr(m_h);
+		}
+		return success;
+	}
+	/* End StackRox Section */
 
 VISIBILITY_PRIVATE
 
@@ -1164,8 +1174,8 @@ public:
 	//
 	uint32_t m_max_fdtable_size;
 	bool m_automatic_threadtable_purging = true;
-	uint64_t m_thread_timeout_ns = (uint64_t)1800 * ONE_SECOND_IN_NS;
-	uint64_t m_inactive_thread_scan_time_ns = (uint64_t)1200 * ONE_SECOND_IN_NS;
+	uint64_t m_thread_timeout_ns = (uint64_t)30 * ONE_SECOND_IN_NS;
+	uint64_t m_inactive_thread_scan_time_ns = (uint64_t)60 * ONE_SECOND_IN_NS;
 
 	//
 	// Container limits

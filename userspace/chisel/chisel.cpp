@@ -245,7 +245,9 @@ void chiselinfo::set_callback_precise_interval(uint64_t interval)
 ///////////////////////////////////////////////////////////////////////////////
 // chisel implementation
 ///////////////////////////////////////////////////////////////////////////////
-sinsp_chisel::sinsp_chisel(sinsp* inspector, string filename)
+/* Begin StackRox Section */
+sinsp_chisel::sinsp_chisel(sinsp* inspector, string cmdstr, bool is_file)
+/* End StackRox Section */
 {
 	m_inspector = inspector;
 	m_ls = NULL;
@@ -256,7 +258,9 @@ sinsp_chisel::sinsp_chisel(sinsp* inspector, string filename)
 	m_lua_last_interval_ts = 0;
 	m_udp_socket = 0;
 
-	load(filename);
+	/* Begin StackRox Section */
+	load(cmdstr, is_file);
+	/* End StackRox Section */
 }
 
 sinsp_chisel::~sinsp_chisel()
@@ -1170,33 +1174,44 @@ bool sinsp_chisel::openfile(string filename, OUT ifstream* is)
 	return false;
 }
 
-void sinsp_chisel::load(string cmdstr)
+void sinsp_chisel::load(string cmdstr, bool is_file)
 {
-	m_filename = cmdstr;
-	trim(cmdstr);
-
-	ifstream is;
-
-	//
-	// Try to open the file with lua extension
-	//
-	if(!openfile(m_filename + ".lua", &is))
-	{
-		//
-		// Try to open the file as is
-		//
-		if(!openfile(m_filename, &is))
-		{
-			throw sinsp_exception("can't open file " + m_filename);
-		}
+	/* Begin StackRox Section */
+	if (is_file) {
+		m_filename = cmdstr;
+		trim(cmdstr);
+	} else {
+		m_filename = "<in-memory-string>";
 	}
 
+	ifstream is;
+	std::string scriptstr;
+
+	if (is_file) {
+		//
+		// Try to open the file with lua extension
+		//
+		if(!openfile(m_filename + ".lua", &is))
+		{
+			//
+			// Try to open the file as is
+			//
+			if(!openfile(m_filename, &is))
+			{
+				throw sinsp_exception("can't open file " + m_filename);
+			}
+		}
+
 #ifdef HAS_LUA_CHISELS
-	//
-	// Load the file
-	//
-	std::istreambuf_iterator<char> eos;
-	std::string scriptstr(std::istreambuf_iterator<char>(is), eos);
+		//
+		// Load the file
+		//
+		std::istreambuf_iterator<char> eos;
+		scriptstr = std::string(std::istreambuf_iterator<char>(is), eos);
+	} else {
+		scriptstr = cmdstr;
+	}
+	/* End StackRox Section */
 
 	//
 	// Open the script
@@ -1552,7 +1567,6 @@ void sinsp_chisel::first_event_inits(sinsp_evt* evt)
 
 bool sinsp_chisel::run(sinsp_evt* evt)
 {
-#ifdef HAS_LUA_CHISELS
 	string line;
 
 	ASSERT(m_ls);
@@ -1566,18 +1580,18 @@ bool sinsp_chisel::run(sinsp_evt* evt)
 	//
 	// If there is a timeout callback, see if it's time to call it
 	//
-	do_timeout(evt);
+//	do_timeout(evt);
 
 	//
 	// If there is a filter, run it
 	//
-	if(m_lua_cinfo->m_filter != NULL)
-	{
+//if(m_lua_cinfo->m_filter != NULL)
+//{
 		if(!m_lua_cinfo->m_filter->run(evt))
 		{
 			return false;
 		}
-	}
+//}
 
 	//
 	// If the script has the on_event callback, call it
@@ -1593,11 +1607,17 @@ bool sinsp_chisel::run(sinsp_evt* evt)
 
 		int oeres = lua_toboolean(m_ls, -1);
 		lua_pop(m_ls, 1);
+		
+        // Begin StackRox section
 
+		/*	
 		if(m_lua_cinfo->m_end_capture == true)
 		{
 			throw sinsp_capture_interrupt_exception();
 		}
+		*/
+
+        // End StackRox section 
 
 		if(oeres == false)
 		{
@@ -1617,7 +1637,37 @@ bool sinsp_chisel::run(sinsp_evt* evt)
 	}
 
 	return true;
-#endif
+}
+
+bool sinsp_chisel::process(sinsp_evt* evt)
+{
+	ASSERT(m_ls);
+
+	//
+	// Make the event available to the API
+	//
+	lua_pushlightuserdata(m_ls, evt);
+	lua_setglobal(m_ls, "sievt");
+
+	//
+	// If this is the first event, put the event pointer on the stack.
+	// We assume that the event pointer will never change.
+	//
+	if(m_lua_is_first_evt)
+	{
+		first_event_inits(evt);
+	}
+
+
+	//
+	// If there is a filter, run it
+	//
+	if(!m_lua_cinfo->m_filter->run(evt))
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void sinsp_chisel::do_timeout(sinsp_evt* evt)

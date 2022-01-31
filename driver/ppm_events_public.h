@@ -1503,6 +1503,9 @@ struct ppm_evt_hdr {
 #define PPM_IOCTL_GET_PROBE_VERSION _IO(PPM_IOCTL_MAGIC, 21)
 #define PPM_IOCTL_SET_FULLCAPTURE_PORT_RANGE _IO(PPM_IOCTL_MAGIC, 22)
 #define PPM_IOCTL_SET_STATSD_PORT _IO(PPM_IOCTL_MAGIC, 23)
+/* Begin StackRox Section */
+#define PPM_IOCTL_EXCLUDE_NS_OF_PID _IO(PPM_IOCTL_MAGIC, 40)
+/* End StackRox Section */
 #endif // CYGWING_AGENT
 
 extern const struct ppm_name_value socket_families[];
@@ -1615,10 +1618,10 @@ enum autofill_paramtype {
 	APT_SOCK,
 };
 
-typedef int (*filler_callback) (struct event_filler_arguments *args);
+typedef int (*filler_callback_t) (struct event_filler_arguments *args);
 
 struct ppm_event_entry {
-	filler_callback filler_callback;
+	filler_callback_t filler_callback;
 	enum ppm_filler_id filler_id;
 	uint16_t n_autofill_args;
 	enum autofill_paramtype paramtype;

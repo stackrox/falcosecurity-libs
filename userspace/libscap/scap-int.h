@@ -396,6 +396,8 @@ extern const struct ppm_syscall_desc g_syscall_info_table[];
 extern const struct ppm_event_entry g_ppm_events[];
 extern bool validate_info_table_size();
 
+extern unsigned char g_bpf_drop_syscalls[];
+
 //
 // udig stuff
 //
