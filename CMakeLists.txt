@@ -1,3 +1,4 @@
+
 #
 # Copyright (C) 2021 The Falco Authors.
 #
@@ -65,6 +66,12 @@ include(CompilerFlags)
 option(WITH_CHISEL "Include chisel implementation" OFF)
 
 option(CREATE_TEST_TARGETS "Enable make-targets for unit testing" ON)
+
+if(NOT WIN32 AND NOT APPLE)
+	option(NO_LINK_GRPC_LIBS "Do not link gRPC libraries" OFF)
+endif()
+
+option(BUILD_USERSPACE "Build userspace libraries" ON)
 
 include(libscap)
 include(libsinsp)

@@ -101,12 +101,16 @@ endif()
 # http://public.kitware.com/Bug/view.php?id=8438
 if(BUILD_DRIVER)
 	add_custom_target(driver ALL
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/src/Makefile ${CMAKE_CURRENT_SOURCE_DIR}/Makefile
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/src/driver_config.h ${CMAKE_CURRENT_SOURCE_DIR}/driver_config.h
 		COMMAND ${MAKE_COMMAND}
 		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${DRIVER_NAME}.ko "${CMAKE_CURRENT_BINARY_DIR}"
 		WORKING_DIRECTORY src
 		VERBATIM)
 else()
 	add_custom_target(driver
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/src/Makefile ${CMAKE_CURRENT_SOURCE_DIR}/Makefile
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/src/driver_config.h ${CMAKE_CURRENT_SOURCE_DIR}/driver_config.h
 		COMMAND ${MAKE_COMMAND}
 		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${DRIVER_NAME}.ko "${CMAKE_CURRENT_BINARY_DIR}"
 		WORKING_DIRECTORY src

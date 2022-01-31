@@ -826,6 +826,8 @@ bool docker_async_source::parse_docker(const docker_lookup_request& request, sin
 		}
 	}
 
+	/* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
+#if 0
 	vector<string> labels = config_obj["Labels"].getMemberNames();
 	for(vector<string>::const_iterator it = labels.begin(); it != labels.end(); ++it)
 	{
@@ -856,6 +858,8 @@ bool docker_async_source::parse_docker(const docker_lookup_request& request, sin
 			container.m_env.emplace_back(env_var.asString());
 		}
 	}
+#endif
+	/* End StackRox */
 
 	const auto& host_config_obj = root["HostConfig"];
 	container.m_memory_limit = host_config_obj["Memory"].asInt64();

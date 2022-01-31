@@ -53,7 +53,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
 endif()
 
 if(NOT DEFINED SCAP_BPF_PROBE_ENV_VAR_NAME)
-	set(SCAP_BPF_PROBE_ENV_VAR_NAME "BPF_PROBE") 
+	set(SCAP_BPF_PROBE_ENV_VAR_NAME "BPF_PROBE")
 endif()
 add_definitions(-DSCAP_BPF_PROBE_ENV_VAR_NAME="${SCAP_BPF_PROBE_ENV_VAR_NAME}")
 
@@ -65,6 +65,8 @@ add_definitions(-DSCAP_HOST_ROOT_ENV_VAR_NAME="${SCAP_HOST_ROOT_ENV_VAR_NAME}")
 if(CYGWIN)
 include_directories("${WIN_HAL_INCLUDE}")
 endif()
+
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 
 list(APPEND targetfiles
 	scap.c
@@ -101,6 +103,8 @@ endif()
 
 add_library(scap STATIC
 	${targetfiles})
+
+set_target_properties(scap PROPERTIES COMPILE_FLAGS "-fPIC")
 
 if(USE_BUNDLED_ZLIB AND NOT MINIMAL_BUILD)
 	add_dependencies(scap zlib)

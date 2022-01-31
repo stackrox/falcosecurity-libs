@@ -89,12 +89,12 @@ const char* scap_getlasterr(scap_t* handle)
 	return handle ? handle->m_lasterr : "null scap handle";
 }
 
-static int32_t copy_comms(scap_t *handle, const char **suppressed_comms)
+static int32_t copy_comms(scap_t* handle, const char** suppressed_comms)
 {
 	if(suppressed_comms)
 	{
 		uint32_t i;
-		const char *comm;
+		const char* comm;
 		for(i = 0, comm = suppressed_comms[i]; comm && i < SCAP_MAX_SUPPRESSED_COMMS; i++, comm = suppressed_comms[i])
 		{
 			int32_t res;
@@ -109,13 +109,13 @@ static int32_t copy_comms(scap_t *handle, const char **suppressed_comms)
 }
 
 #if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-scap_t* scap_open_live_int(char *error, int32_t *rc,
+scap_t* scap_open_live_int(char* error, int32_t* rc,
 			   proc_entry_callback proc_callback,
 			   void* proc_callback_context,
 			   bool import_users,
-			   const char *bpf_probe,
-			   const char **suppressed_comms,
-			   interesting_ppm_sc_set *ppm_sc_of_interest)
+			   const char* bpf_probe,
+			   const char** suppressed_comms,
+			   interesting_ppm_sc_set* ppm_sc_of_interest)
 {
 	snprintf(error, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
 	*rc = SCAP_NOT_SUPPORTED;
@@ -124,11 +124,11 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 #endif
 
 #if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
-scap_t* scap_open_udig_int(char *error, int32_t *rc,
+scap_t* scap_open_udig_int(char* error, int32_t* rc,
 			   proc_entry_callback proc_callback,
 			   void* proc_callback_context,
 			   bool import_users,
-			   const char **suppressed_comms)
+			   const char** suppressed_comms)
 {
 	snprintf(error, SCAP_LASTERR_SIZE, "udig capture not supported on %s", PLATFORM_NAME);
 	*rc = SCAP_NOT_SUPPORTED;
@@ -140,10 +140,10 @@ static uint32_t get_max_consumers()
 {
 #ifndef _WIN32
 	uint32_t max;
-	FILE *pfile = fopen("/sys/module/" SCAP_KERNEL_MODULE_NAME "/parameters/max_consumers", "r");
+	FILE* pfile = fopen("/sys/module/" SCAP_KERNEL_MODULE_NAME "/parameters/max_consumers", "r");
 	if(pfile != NULL)
 	{
-		int w = fscanf(pfile, "%"PRIu32, &max);
+		int w = fscanf(pfile, "%" PRIu32, &max);
 		if(w == 0)
 		{
 			return 0;
@@ -158,13 +158,13 @@ static uint32_t get_max_consumers()
 }
 
 #ifndef _WIN32
-scap_t* scap_open_live_int(char *error, int32_t *rc,
+scap_t* scap_open_live_int(char* error, int32_t* rc,
 			   proc_entry_callback proc_callback,
 			   void* proc_callback_context,
 			   bool import_users,
-			   const char *bpf_probe,
-			   const char **suppressed_comms,
-			   interesting_ppm_sc_set *ppm_sc_of_interest)
+			   const char* bpf_probe,
+			   const char** suppressed_comms,
+			   interesting_ppm_sc_set* ppm_sc_of_interest)
 {
 	uint32_t j;
 	char filename[SCAP_MAX_PATH_SIZE];
@@ -174,7 +174,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	//
 	// Allocate the handle
 	//
-	handle = (scap_t*) calloc(sizeof(scap_t), 1);
+	handle = (scap_t*)calloc(sizeof(scap_t), 1);
 	if(!handle)
 	{
 		snprintf(error, SCAP_LASTERR_SIZE, "error allocating the scap_t structure");
@@ -206,7 +206,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 
 		if(strlen(bpf_probe) == 0)
 		{
-			const char *home = getenv("HOME");
+			const char* home = getenv("HOME");
 			if(!home)
 			{
 				scap_close(handle);
@@ -245,7 +245,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 		return NULL;
 	}
 
-	handle->m_devs = (scap_device*) calloc(sizeof(scap_device), ndevs);
+	handle->m_devs = (scap_device*)calloc(sizeof(scap_device), ndevs);
 	if(!handle->m_devs)
 	{
 		scap_close(handle);
@@ -328,16 +328,16 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	handle->m_num_suppressed_evts = 0;
 	handle->m_buffer_empty_wait_time_us = BUFFER_EMPTY_WAIT_TIME_US_START;
 
-	if ((*rc = copy_comms(handle, suppressed_comms)) != SCAP_SUCCESS)
+	if((*rc = copy_comms(handle, suppressed_comms)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
 		return NULL;
 	}
 
-	if (ppm_sc_of_interest)
+	if(ppm_sc_of_interest)
 	{
-		for (int i = 0; i < PPM_SC_MAX; i++)
+		for(int i = 0; i < PPM_SC_MAX; i++)
 		{
 			// We need to convert from PPM_SC to SYSCALL_NR, using the routing table
 			for(int syscall_nr = 0; syscall_nr < SYSCALL_TABLE_SIZE; syscall_nr++)
@@ -346,7 +346,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 				if(g_syscall_code_routing_table[syscall_nr] == i)
 				{
 					// UF_NEVER_DROP syscalls must be always traced
-					if (ppm_sc_of_interest->ppm_sc[i] || g_syscall_table[syscall_nr].flags & UF_NEVER_DROP)
+					if(ppm_sc_of_interest->ppm_sc[i] || g_syscall_table[syscall_nr].flags & UF_NEVER_DROP)
 					{
 						handle->syscalls_of_interest[syscall_nr] = true;
 					}
@@ -358,13 +358,11 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	else
 	{
 		// fallback to trace all syscalls
-		for (int i = 0; i < SYSCALL_TABLE_SIZE; i++)
+		for(int i = 0; i < SYSCALL_TABLE_SIZE; i++)
 		{
 			handle->syscalls_of_interest[i] = true;
 		}
 	}
-
-
 
 	//
 	// Open and initialize all the devices
@@ -409,7 +407,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 				else if(errno == EBUSY)
 				{
 					uint32_t curr_max_consumers = get_max_consumers();
-					snprintf(error, SCAP_LASTERR_SIZE, "Too many consumers attached to device %s. Current value for /sys/module/" SCAP_KERNEL_MODULE_NAME "/parameters/max_consumers is '%"PRIu32"'.", filename, curr_max_consumers);
+					snprintf(error, SCAP_LASTERR_SIZE, "Too many consumers attached to device %s. Current value for /sys/module/" SCAP_KERNEL_MODULE_NAME "/parameters/max_consumers is '%" PRIu32 "'.", filename, curr_max_consumers);
 				}
 				else
 				{
@@ -422,7 +420,8 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 			}
 
 			// Set close-on-exec for the fd
-			if (fcntl(handle->m_devs[j].m_fd, F_SETFD, FD_CLOEXEC) == -1) {
+			if(fcntl(handle->m_devs[j].m_fd, F_SETFD, FD_CLOEXEC) == -1)
+			{
 				snprintf(error, SCAP_LASTERR_SIZE, "Can not set close-on-exec flag for fd for device %s (%s)", filename, scap_strerror(handle, errno));
 				close(handle->m_devs[j].m_fd);
 				scap_close(handle);
@@ -431,7 +430,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 			}
 
 			// Check the API version reported
-			if (ioctl(handle->m_devs[j].m_fd, PPM_IOCTL_GET_API_VERSION, &api_version) < 0)
+			if(ioctl(handle->m_devs[j].m_fd, PPM_IOCTL_GET_API_VERSION, &api_version) < 0)
 			{
 				snprintf(error, SCAP_LASTERR_SIZE, "Kernel module does not support PPM_IOCTL_GET_API_VERSION");
 				close(handle->m_devs[j].m_fd);
@@ -440,17 +439,16 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 				return NULL;
 			}
 			// Make sure all devices report the same API version
-			if (handle->m_api_version != 0 && handle->m_api_version != api_version)
+			if(handle->m_api_version != 0 && handle->m_api_version != api_version)
 			{
 				snprintf(error, SCAP_LASTERR_SIZE, "API version mismatch: device %s reports API version %llu.%llu.%llu, expected %llu.%llu.%llu",
-					filename,
-					PPM_API_VERSION_MAJOR(api_version),
-					PPM_API_VERSION_MINOR(api_version),
-					PPM_API_VERSION_PATCH(api_version),
-					PPM_API_VERSION_MAJOR(handle->m_api_version),
-					PPM_API_VERSION_MINOR(handle->m_api_version),
-					PPM_API_VERSION_PATCH(handle->m_api_version)
-				);
+					 filename,
+					 PPM_API_VERSION_MAJOR(api_version),
+					 PPM_API_VERSION_MINOR(api_version),
+					 PPM_API_VERSION_PATCH(api_version),
+					 PPM_API_VERSION_MAJOR(handle->m_api_version),
+					 PPM_API_VERSION_MINOR(handle->m_api_version),
+					 PPM_API_VERSION_PATCH(handle->m_api_version));
 				close(handle->m_devs[j].m_fd);
 				scap_close(handle);
 				*rc = SCAP_FAILURE;
@@ -461,7 +459,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 			handle->m_api_version = api_version;
 
 			// Check the schema version reported
-			if (ioctl(handle->m_devs[j].m_fd, PPM_IOCTL_GET_SCHEMA_VERSION, &schema_version) < 0)
+			if(ioctl(handle->m_devs[j].m_fd, PPM_IOCTL_GET_SCHEMA_VERSION, &schema_version) < 0)
 			{
 				snprintf(error, SCAP_LASTERR_SIZE, "Kernel module does not support PPM_IOCTL_GET_SCHEMA_VERSION");
 				close(handle->m_devs[j].m_fd);
@@ -470,17 +468,16 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 				return NULL;
 			}
 			// Make sure all devices report the same schema version
-			if (handle->m_schema_version != 0 && handle->m_schema_version != schema_version)
+			if(handle->m_schema_version != 0 && handle->m_schema_version != schema_version)
 			{
 				snprintf(error, SCAP_LASTERR_SIZE, "Schema version mismatch: device %s reports schema version %llu.%llu.%llu, expected %llu.%llu.%llu",
-					filename,
-					PPM_API_VERSION_MAJOR(schema_version),
-					PPM_API_VERSION_MINOR(schema_version),
-					PPM_API_VERSION_PATCH(schema_version),
-					PPM_API_VERSION_MAJOR(handle->m_schema_version),
-					PPM_API_VERSION_MINOR(handle->m_schema_version),
-					PPM_API_VERSION_PATCH(handle->m_schema_version)
-				);
+					 filename,
+					 PPM_API_VERSION_MAJOR(schema_version),
+					 PPM_API_VERSION_MINOR(schema_version),
+					 PPM_API_VERSION_PATCH(schema_version),
+					 PPM_API_VERSION_MAJOR(handle->m_schema_version),
+					 PPM_API_VERSION_MINOR(handle->m_schema_version),
+					 PPM_API_VERSION_PATCH(handle->m_schema_version));
 				scap_close(handle);
 				*rc = SCAP_FAILURE;
 				return NULL;
@@ -493,11 +490,11 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 			// Map the ring buffer
 			//
 			handle->m_devs[j].m_buffer = (char*)mmap(0,
-						len,
-						PROT_READ,
-						MAP_SHARED,
-						handle->m_devs[j].m_fd,
-						0);
+								 len,
+								 PROT_READ,
+								 MAP_SHARED,
+								 handle->m_devs[j].m_fd,
+								 0);
 
 			if(handle->m_devs[j].m_buffer == MAP_FAILED)
 			{
@@ -514,11 +511,11 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 			// Map the ppm_ring_buffer_info that contains the buffer pointers
 			//
 			handle->m_devs[j].m_bufinfo = (struct ppm_ring_buffer_info*)mmap(0,
-						sizeof(struct ppm_ring_buffer_info),
-						PROT_READ | PROT_WRITE,
-						MAP_SHARED,
-						handle->m_devs[j].m_fd,
-						0);
+											 sizeof(struct ppm_ring_buffer_info),
+											 PROT_READ | PROT_WRITE,
+											 MAP_SHARED,
+											 handle->m_devs[j].m_fd,
+											 0);
 
 			if(handle->m_devs[j].m_bufinfo == MAP_FAILED)
 			{
@@ -536,15 +533,15 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 			++j;
 		}
 
-		for (int i = 0; i < SYSCALL_TABLE_SIZE; i++)
+		for(int i = 0; i < SYSCALL_TABLE_SIZE; i++)
 		{
-			if (!handle->syscalls_of_interest[i])
+			if(!handle->syscalls_of_interest[i])
 			{
 				// Kmod driver event_mask check uses event_types instead of syscall nr
 				enum ppm_event_type enter_ev = g_syscall_table[i].enter_event_type;
 				enum ppm_event_type exit_ev = g_syscall_table[i].exit_event_type;
 				// Filter unmapped syscalls (that have a g_syscall_table entry with both enter_ev and exit_ev 0ed)
-				if (enter_ev != 0 && exit_ev != 0)
+				if(enter_ev != 0 && exit_ev != 0)
 				{
 					scap_unset_eventmask(handle, enter_ev);
 					scap_unset_eventmask(handle, exit_ev);
@@ -556,12 +553,12 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	if(!scap_is_api_compatible(handle->m_api_version, SCAP_MINIMUM_DRIVER_API_VERSION))
 	{
 		snprintf(error, SCAP_LASTERR_SIZE, "Driver supports API version %llu.%llu.%llu, but running version needs %d.%d.%d",
-			PPM_API_VERSION_MAJOR(handle->m_api_version),
-			PPM_API_VERSION_MINOR(handle->m_api_version),
-			PPM_API_VERSION_PATCH(handle->m_api_version),
-			PPM_API_CURRENT_VERSION_MAJOR,
-			PPM_API_CURRENT_VERSION_MINOR,
-			PPM_API_CURRENT_VERSION_PATCH);
+			 PPM_API_VERSION_MAJOR(handle->m_api_version),
+			 PPM_API_VERSION_MINOR(handle->m_api_version),
+			 PPM_API_VERSION_PATCH(handle->m_api_version),
+			 PPM_API_CURRENT_VERSION_MAJOR,
+			 PPM_API_CURRENT_VERSION_MINOR,
+			 PPM_API_CURRENT_VERSION_PATCH);
 		*rc = SCAP_FAILURE;
 		scap_close(handle);
 		return NULL;
@@ -570,12 +567,12 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	if(!scap_is_api_compatible(handle->m_schema_version, SCAP_MINIMUM_DRIVER_SCHEMA_VERSION))
 	{
 		snprintf(error, SCAP_LASTERR_SIZE, "Driver supports schema version %llu.%llu.%llu, but running version needs %d.%d.%d",
-			PPM_API_VERSION_MAJOR(handle->m_schema_version),
-			PPM_API_VERSION_MINOR(handle->m_schema_version),
-			PPM_API_VERSION_PATCH(handle->m_schema_version),
-			PPM_SCHEMA_CURRENT_VERSION_MAJOR,
-			PPM_SCHEMA_CURRENT_VERSION_MINOR,
-			PPM_SCHEMA_CURRENT_VERSION_PATCH);
+			 PPM_API_VERSION_MAJOR(handle->m_schema_version),
+			 PPM_API_VERSION_MINOR(handle->m_schema_version),
+			 PPM_API_VERSION_PATCH(handle->m_schema_version),
+			 PPM_SCHEMA_CURRENT_VERSION_MAJOR,
+			 PPM_SCHEMA_CURRENT_VERSION_MINOR,
+			 PPM_SCHEMA_CURRENT_VERSION_PATCH);
 		*rc = SCAP_FAILURE;
 		scap_close(handle);
 		return NULL;
@@ -596,10 +593,11 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	//
 	error[0] = '\0';
 	snprintf(filename, sizeof(filename), "%s/proc", scap_get_host_root());
-	if((*rc = scap_proc_scan_proc_dir(handle, filename, error)) != SCAP_SUCCESS)
+	char proc_scan_err[SCAP_LASTERR_SIZE];
+	if((*rc = scap_proc_scan_proc_dir(handle, filename, proc_scan_err)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
-		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live_int() error creating the process list. Make sure you have root credentials.");
+		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live_int() error creating the process list: %s. Make sure you have root credentials.", proc_scan_err);
 		return NULL;
 	}
 
@@ -617,11 +615,11 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 
 #endif // _WIN32
 
-scap_t* scap_open_udig_int(char *error, int32_t *rc,
+scap_t* scap_open_udig_int(char* error, int32_t* rc,
 			   proc_entry_callback proc_callback,
 			   void* proc_callback_context,
 			   bool import_users,
-			   const char **suppressed_comms)
+			   const char** suppressed_comms)
 {
 	char filename[SCAP_MAX_PATH_SIZE];
 	scap_t* handle = NULL;
@@ -629,7 +627,7 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 	//
 	// Allocate the handle
 	//
-	handle = (scap_t*) calloc(sizeof(scap_t), 1);
+	handle = (scap_t*)calloc(sizeof(scap_t), 1);
 	if(!handle)
 	{
 		snprintf(error, SCAP_LASTERR_SIZE, "error allocating the scap_t structure");
@@ -648,7 +646,7 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 
 	handle->m_ndevs = 1;
 
-	handle->m_devs = (scap_device*) calloc(sizeof(scap_device), handle->m_ndevs);
+	handle->m_devs = (scap_device*)calloc(sizeof(scap_device), handle->m_ndevs);
 	if(!handle->m_devs)
 	{
 		scap_close(handle);
@@ -735,7 +733,7 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 	handle->m_win_descs_handle = NULL;
 #endif
 
-	if ((*rc = copy_comms(handle, suppressed_comms)) != SCAP_SUCCESS)
+	if((*rc = copy_comms(handle, suppressed_comms)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
@@ -747,13 +745,13 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 	//
 	if(udig_alloc_ring(
 #if CYGWING_AGENT || _WIN32
-		&(handle->m_win_buf_handle),
+		   &(handle->m_win_buf_handle),
 #else
-		&(handle->m_devs[0].m_fd),
+		   &(handle->m_devs[0].m_fd),
 #endif
-		(uint8_t**)&handle->m_devs[0].m_buffer,
-		&handle->m_devs[0].m_buffer_size,
-		error) != SCAP_SUCCESS)
+		   (uint8_t**)&handle->m_devs[0].m_buffer,
+		   &handle->m_devs[0].m_buffer_size,
+		   error) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		*rc = SCAP_FAILURE;
@@ -762,7 +760,8 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 
 	// Set close-on-exec for the fd
 #ifndef _WIN32
-	if(fcntl(handle->m_devs[0].m_fd, F_SETFD, FD_CLOEXEC) == -1) {
+	if(fcntl(handle->m_devs[0].m_fd, F_SETFD, FD_CLOEXEC) == -1)
+	{
 		snprintf(error, SCAP_LASTERR_SIZE, "Can not set close-on-exec flag for fd for device %s (%s)", filename, scap_strerror(handle, errno));
 		scap_close(handle);
 		*rc = SCAP_FAILURE;
@@ -775,13 +774,13 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 	//
 	if(udig_alloc_ring_descriptors(
 #if CYGWING_AGENT || _WIN32
-		&(handle->m_win_descs_handle),
+		   &(handle->m_win_descs_handle),
 #else
-		&(handle->m_devs[0].m_bufinfo_fd),
+		   &(handle->m_devs[0].m_bufinfo_fd),
 #endif
-		&handle->m_devs[0].m_bufinfo, 
-		&handle->m_devs[0].m_bufstatus,
-		error) != SCAP_SUCCESS)
+		   &handle->m_devs[0].m_bufinfo,
+		   &handle->m_devs[0].m_bufstatus,
+		   error) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		*rc = SCAP_FAILURE;
@@ -822,13 +821,13 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 #endif // !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
 
 scap_t* scap_open_offline_int(scap_reader_t* reader,
-			      char *error,
-			      int32_t *rc,
+			      char* error,
+			      int32_t* rc,
 			      proc_entry_callback proc_callback,
 			      void* proc_callback_context,
 			      bool import_users,
 			      uint64_t start_offset,
-			      const char **suppressed_comms)
+			      const char** suppressed_comms)
 {
 	scap_t* handle = NULL;
 
@@ -924,7 +923,7 @@ scap_t* scap_open_offline_int(scap_reader_t* reader,
 	handle->m_num_suppressed_comms = 0;
 	handle->m_num_suppressed_evts = 0;
 
-	if ((*rc = copy_comms(handle, suppressed_comms)) != SCAP_SUCCESS)
+	if((*rc = copy_comms(handle, suppressed_comms)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
@@ -934,7 +933,7 @@ scap_t* scap_open_offline_int(scap_reader_t* reader,
 	return handle;
 }
 
-scap_t* scap_open_offline(const char* fname, char *error, int32_t* rc)
+scap_t* scap_open_offline(const char* fname, char* error, int32_t* rc)
 {
 	gzFile gzfile = gzopen(fname, "rb");
 	if(gzfile == NULL)
@@ -948,7 +947,7 @@ scap_t* scap_open_offline(const char* fname, char *error, int32_t* rc)
 	return scap_open_offline_int(reader, error, rc, NULL, NULL, true, 0, NULL);
 }
 
-scap_t* scap_open_offline_fd(int fd, char *error, int32_t *rc)
+scap_t* scap_open_offline_fd(int fd, char* error, int32_t* rc)
 {
 	gzFile gzfile = gzdopen(fd, "rb");
 	if(gzfile == NULL)
@@ -962,12 +961,12 @@ scap_t* scap_open_offline_fd(int fd, char *error, int32_t *rc)
 	return scap_open_offline_int(reader, error, rc, NULL, NULL, true, 0, NULL);
 }
 
-scap_t* scap_open_live(char *error, int32_t *rc)
+scap_t* scap_open_live(char* error, int32_t* rc)
 {
 	return scap_open_live_int(error, rc, NULL, NULL, true, NULL, NULL, NULL);
 }
 
-scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
+scap_t* scap_open_nodriver_int(char* error, int32_t* rc,
 			       proc_entry_callback proc_callback,
 			       void* proc_callback_context,
 			       bool import_users)
@@ -1073,10 +1072,11 @@ scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
 	//
 	error[0] = '\0';
 	snprintf(filename, sizeof(filename), "%s/proc", scap_get_host_root());
-	if((*rc = scap_proc_scan_proc_dir(handle, filename, error)) != SCAP_SUCCESS)
+	char proc_scan_err[SCAP_LASTERR_SIZE];
+	if((*rc = scap_proc_scan_proc_dir(handle, filename, proc_scan_err)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
-		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live() error creating the process list. Make sure you have root credentials.");
+		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live() error creating the process list: %s. Make sure you have root credentials.", proc_scan_err);
 		return NULL;
 	}
 
@@ -1084,7 +1084,7 @@ scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
 #endif // HAS_CAPTURE
 }
 
-scap_t* scap_open_plugin_int(char *error, int32_t *rc, source_plugin_info* input_plugin, char* input_plugin_params)
+scap_t* scap_open_plugin_int(char* error, int32_t* rc, source_plugin_info* input_plugin, char* input_plugin_params)
 {
 	scap_t* handle = NULL;
 
@@ -1142,8 +1142,8 @@ scap_t* scap_open_plugin_int(char *error, int32_t *rc, source_plugin_info* input
 	ss_plugin_rc plugin_rc = SCAP_FAILURE;
 
 	handle->m_input_plugin->handle = handle->m_input_plugin->open(handle->m_input_plugin->state,
-		input_plugin_params,
-		&plugin_rc);
+								      input_plugin_params,
+								      &plugin_rc);
 
 	*rc = plugin_rc_to_scap_rc(plugin_rc);
 	handle->m_input_plugin_batch_nevts = 0;
@@ -1153,7 +1153,7 @@ scap_t* scap_open_plugin_int(char *error, int32_t *rc, source_plugin_info* input
 
 	if(*rc != SCAP_SUCCESS)
 	{
-		const char *errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
+		const char* errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
 		snprintf(error, SCAP_LASTERR_SIZE, "%s", errstr);
 		scap_close(handle);
 		return NULL;
@@ -1162,7 +1162,7 @@ scap_t* scap_open_plugin_int(char *error, int32_t *rc, source_plugin_info* input
 	return handle;
 }
 
-scap_t* scap_open(scap_open_args args, char *error, int32_t *rc)
+scap_t* scap_open(scap_open_args args, char* error, int32_t* rc)
 {
 	switch(args.mode)
 	{
@@ -1204,21 +1204,21 @@ scap_t* scap_open(scap_open_args args, char *error, int32_t *rc)
 		if(args.udig)
 		{
 			return scap_open_udig_int(error, rc, args.proc_callback,
-						args.proc_callback_context,
-						args.import_users,
-						args.suppressed_comms);
+						  args.proc_callback_context,
+						  args.import_users,
+						  args.suppressed_comms);
 		}
 		else
 		{
 			return scap_open_live_int(error, rc, args.proc_callback,
-						args.proc_callback_context,
-						args.import_users,
-						args.bpf_probe,
-						args.suppressed_comms,
-						&args.ppm_sc_of_interest);
+						  args.proc_callback_context,
+						  args.import_users,
+						  args.bpf_probe,
+						  args.suppressed_comms,
+						  &args.ppm_sc_of_interest);
 		}
 #else
-		snprintf(error,	SCAP_LASTERR_SIZE, "scap_open: live mode currently not supported on Windows.");
+		snprintf(error, SCAP_LASTERR_SIZE, "scap_open: live mode currently not supported on Windows.");
 		*rc = SCAP_NOT_SUPPORTED;
 		return NULL;
 #endif
@@ -1232,7 +1232,6 @@ scap_t* scap_open(scap_open_args args, char *error, int32_t *rc)
 		// error
 		break;
 	}
-
 
 	snprintf(error, SCAP_LASTERR_SIZE, "incorrect mode %d", args.mode);
 	*rc = SCAP_FAILURE;
@@ -1312,7 +1311,7 @@ static inline void scap_deinit_state(scap_t* handle)
 uint32_t scap_restart_capture(scap_t* handle)
 {
 	uint32_t res;
-	if (handle->m_mode != SCAP_MODE_CAPTURE)
+	if(handle->m_mode != SCAP_MODE_CAPTURE)
 	{
 		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "capture restart supported only in capture mode");
 		res = SCAP_FAILURE;
@@ -1320,7 +1319,7 @@ uint32_t scap_restart_capture(scap_t* handle)
 	else
 	{
 		scap_deinit_state(handle);
-		if (handle->m_unexpected_block_readsize > 0)
+		if(handle->m_unexpected_block_readsize > 0)
 		{
 			scap_reader_seek(handle->m_reader, (int64_t)0 - (int64_t)handle->m_unexpected_block_readsize, SEEK_CUR);
 			handle->m_unexpected_block_readsize = 0;
@@ -1339,7 +1338,7 @@ void scap_close(scap_t* handle)
 {
 	if(handle->m_mode == SCAP_MODE_CAPTURE)
 	{
-		if (handle->m_reader)
+		if(handle->m_reader)
 		{
 			scap_reader_close(handle->m_reader);
 			handle->m_reader = NULL;
@@ -1418,7 +1417,7 @@ void scap_close(scap_t* handle)
 	if(handle->m_suppressed_comms)
 	{
 		uint32_t i;
-		for(i=0; i < handle->m_num_suppressed_comms; i++)
+		for(i = 0; i < handle->m_num_suppressed_comms; i++)
 		{
 			free(handle->m_suppressed_comms[i]);
 		}
@@ -1428,8 +1427,8 @@ void scap_close(scap_t* handle)
 
 	if(handle->m_suppressed_tids)
 	{
-		struct scap_tid *tid;
-		struct scap_tid *ttid;
+		struct scap_tid* tid;
+		struct scap_tid* ttid;
 		HASH_ITER(hh, handle->m_suppressed_tids, tid, ttid)
 		{
 			HASH_DEL(handle->m_suppressed_tids, tid);
@@ -1551,9 +1550,9 @@ int32_t scap_readbuf(scap_t* handle, uint32_t cpuid, OUT char** buf, OUT uint32_
 	// Read the pointers.
 	//
 	get_buf_pointers(handle->m_devs[cpuid].m_bufinfo,
-	                 &thead,
-	                 &ttail,
-	                 &read_size);
+			 &thead,
+			 &ttail,
+			 &read_size);
 
 	//
 	// Remember read_size so we can update the tail at the next call
@@ -1573,7 +1572,7 @@ static uint64_t buf_size_used(scap_t* handle, uint32_t cpu)
 {
 	uint64_t read_size;
 
-	if (handle->m_bpf)
+	if(handle->m_bpf)
 	{
 #ifndef _WIN32
 		uint64_t thead;
@@ -1634,12 +1633,12 @@ int32_t refill_read_buffers(scap_t* handle)
 
 	for(j = 0; j < ndevs; j++)
 	{
-		struct scap_device *dev = &(handle->m_devs[j]);
+		struct scap_device* dev = &(handle->m_devs[j]);
 
 		int32_t res = scap_readbuf(handle,
-		                           j,
-		                           &dev->m_sn_next_event,
-		                           &dev->m_sn_len);
+					   j,
+					   &dev->m_sn_next_event,
+					   &dev->m_sn_len);
 
 		if(res != SCAP_SUCCESS)
 		{
@@ -1704,7 +1703,7 @@ static int32_t scap_next_live(scap_t* handle, OUT scap_evt** pevent, OUT uint16_
 		}
 		else
 		{
-			pe = (scap_evt *) dev->m_sn_next_event;
+			pe = (scap_evt*)dev->m_sn_next_event;
 		}
 
 		//
@@ -1734,7 +1733,7 @@ static int32_t scap_next_live(scap_t* handle, OUT scap_evt** pevent, OUT uint16_
 	//
 	if(*pcpuid != 65535)
 	{
-		struct scap_device *dev = &handle->m_devs[*pcpuid];
+		struct scap_device* dev = &handle->m_devs[*pcpuid];
 
 		//
 		// Update the pointers.
@@ -1807,7 +1806,7 @@ static int32_t scap_next_udig(scap_t* handle, OUT scap_evt** pevent, OUT uint16_
 			continue;
 		}
 
-		pe = (scap_evt *) dev->m_sn_next_event;
+		pe = (scap_evt*)dev->m_sn_next_event;
 
 		//
 		// We want to consume the event with the lowest timestamp
@@ -1836,7 +1835,7 @@ static int32_t scap_next_udig(scap_t* handle, OUT scap_evt** pevent, OUT uint16_
 	//
 	if(*pcpuid != 65535)
 	{
-		struct scap_device *dev = &handle->m_devs[*pcpuid];
+		struct scap_device* dev = &handle->m_devs[*pcpuid];
 		ASSERT(dev->m_sn_len >= (*pevent)->len);
 		dev->m_sn_len -= (*pevent)->len;
 		dev->m_sn_next_event += (*pevent)->len;
@@ -1868,7 +1867,7 @@ static int32_t scap_next_nodriver(scap_t* handle, OUT scap_evt** pevent, OUT uin
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 
-	evt.ts = tv.tv_sec * (uint64_t) 1000000000 + tv.tv_usec * 1000;
+	evt.ts = tv.tv_sec * (uint64_t)1000000000 + tv.tv_usec * 1000;
 	*pevent = &evt;
 	return SCAP_SUCCESS;
 }
@@ -1880,7 +1879,7 @@ static inline uint64_t get_timestamp_ns()
 
 #ifdef _WIN32
 	FILETIME ft;
-	static const uint64_t EPOCH = ((uint64_t) 116444736000000000ULL);
+	static const uint64_t EPOCH = ((uint64_t)116444736000000000ULL);
 
 	GetSystemTimePreciseAsFileTime(&ft);
 
@@ -1891,7 +1890,7 @@ static inline uint64_t get_timestamp_ns()
 #else
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	ts = tv.tv_sec * (uint64_t) 1000000000 + tv.tv_usec * 1000;
+	ts = tv.tv_sec * (uint64_t)1000000000 + tv.tv_usec * 1000;
 #endif
 
 	return ts;
@@ -1899,7 +1898,7 @@ static inline uint64_t get_timestamp_ns()
 
 static int32_t scap_next_plugin(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
 {
-	ss_plugin_event *plugin_evt;
+	ss_plugin_event* plugin_evt;
 	int32_t res = SCAP_FAILURE;
 
 	if(handle->m_input_plugin_batch_idx >= handle->m_input_plugin_batch_nevts)
@@ -1908,7 +1907,7 @@ static int32_t scap_next_plugin(scap_t* handle, OUT scap_evt** pevent, OUT uint1
 		{
 			if(handle->m_input_plugin_last_batch_res != SCAP_TIMEOUT && handle->m_input_plugin_last_batch_res != SCAP_EOF)
 			{
-				const char *errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
+				const char* errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
 				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s", errstr);
 			}
 			int32_t tres = handle->m_input_plugin_last_batch_res;
@@ -1921,7 +1920,7 @@ static int32_t scap_next_plugin(scap_t* handle, OUT scap_evt** pevent, OUT uint1
 									&(handle->m_input_plugin_batch_nevts),
 									&(handle->m_input_plugin_batch_evts));
 		handle->m_input_plugin_last_batch_res = plugin_rc_to_scap_rc(plugin_res);
-		
+
 		if(handle->m_input_plugin_batch_nevts == 0)
 		{
 			if(handle->m_input_plugin_last_batch_res == SCAP_SUCCESS)
@@ -1934,7 +1933,7 @@ static int32_t scap_next_plugin(scap_t* handle, OUT scap_evt** pevent, OUT uint1
 			{
 				if(handle->m_input_plugin_last_batch_res != SCAP_TIMEOUT && handle->m_input_plugin_last_batch_res != SCAP_EOF)
 				{
-					const char *errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
+					const char* errstr = handle->m_input_plugin->get_last_error(handle->m_input_plugin->state);
 					snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s", errstr);
 				}
 				return handle->m_input_plugin_last_batch_res;
@@ -1960,8 +1959,8 @@ static int32_t scap_next_plugin(scap_t* handle, OUT scap_evt** pevent, OUT uint1
 	uint32_t reqsize = sizeof(scap_evt) + 4 + 4 + 4 + plugin_evt->datalen;
 	if(handle->m_input_plugin_evt_storage_len < reqsize)
 	{
-		uint8_t *tmp = (uint8_t*)realloc(handle->m_input_plugin_evt_storage, reqsize);
-		if (tmp)
+		uint8_t* tmp = (uint8_t*)realloc(handle->m_input_plugin_evt_storage, reqsize);
+		if(tmp)
 		{
 			handle->m_input_plugin_evt_storage = tmp;
 			handle->m_input_plugin_evt_storage_len = reqsize;
@@ -2122,7 +2121,7 @@ int32_t scap_get_stats(scap_t* handle, OUT scap_stats* stats)
 			stats->n_drops_buffer += handle->m_devs[j].m_bufinfo->n_drops_buffer;
 			stats->n_drops_pf += handle->m_devs[j].m_bufinfo->n_drops_pf;
 			stats->n_drops += handle->m_devs[j].m_bufinfo->n_drops_buffer +
-						handle->m_devs[j].m_bufinfo->n_drops_pf;
+					  handle->m_devs[j].m_bufinfo->n_drops_pf;
 			stats->n_preemptions += handle->m_devs[j].m_bufinfo->n_preemptions;
 		}
 	}
@@ -2167,7 +2166,7 @@ int32_t scap_stop_capture(scap_t* handle)
 #ifndef _WIN32
 				if(ioctl(handle->m_devs[j].m_fd, PPM_IOCTL_DISABLE_CAPTURE))
 				{
-					snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "scap_stop_capture failed for device %" PRIu32, j);
+					snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_stop_capture failed for device %" PRIu32, j);
 					ASSERT(false);
 					return SCAP_FAILURE;
 				}
@@ -2177,7 +2176,7 @@ int32_t scap_stop_capture(scap_t* handle)
 	}
 	else
 	{
-		snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "cannot stop offline live captures");
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "cannot stop offline live captures");
 		ASSERT(false);
 		return SCAP_FAILURE;
 	}
@@ -2232,7 +2231,7 @@ int32_t scap_start_capture(scap_t* handle)
 	}
 	else
 	{
-		snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "cannot start offline live captures");
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "cannot start offline live captures");
 		ASSERT(false);
 		return SCAP_FAILURE;
 	}
@@ -2258,19 +2257,20 @@ static int32_t scap_set_dropping_mode(scap_t* handle, int request, uint32_t samp
 	if(handle->m_ndevs)
 	{
 		ASSERT((request == PPM_IOCTL_ENABLE_DROPPING_MODE &&
-			((sampling_ratio == 1)  ||
-				(sampling_ratio == 2)  ||
-				(sampling_ratio == 4)  ||
-				(sampling_ratio == 8)  ||
-				(sampling_ratio == 16) ||
-				(sampling_ratio == 32) ||
-				(sampling_ratio == 64) ||
-				(sampling_ratio == 128))) || (request == PPM_IOCTL_DISABLE_DROPPING_MODE));
+			((sampling_ratio == 1) ||
+			 (sampling_ratio == 2) ||
+			 (sampling_ratio == 4) ||
+			 (sampling_ratio == 8) ||
+			 (sampling_ratio == 16) ||
+			 (sampling_ratio == 32) ||
+			 (sampling_ratio == 64) ||
+			 (sampling_ratio == 128))) ||
+		       (request == PPM_IOCTL_DISABLE_DROPPING_MODE));
 
 		if(ioctl(handle->m_devs[0].m_fd, request, sampling_ratio))
 		{
-			snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "%s, request %d for sampling ratio %u: %s",
-					__FUNCTION__, request, sampling_ratio, scap_strerror(handle, errno));
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s, request %d for sampling ratio %u: %s",
+				 __FUNCTION__, request, sampling_ratio, scap_strerror(handle, errno));
 			ASSERT(false);
 			return SCAP_FAILURE;
 		}
@@ -2280,7 +2280,7 @@ static int32_t scap_set_dropping_mode(scap_t* handle, int request, uint32_t samp
 }
 #endif
 
-#if defined(HAS_CAPTURE) && ! defined(CYGWING_AGENT) && ! defined(_WIN32)
+#if defined(HAS_CAPTURE) && !defined(CYGWING_AGENT) && !defined(_WIN32)
 int32_t scap_enable_tracers_capture(scap_t* handle)
 {
 	//
@@ -2314,8 +2314,8 @@ int32_t scap_enable_tracers_capture(scap_t* handle)
 }
 #endif
 
-#if defined(HAS_CAPTURE) && ! defined(CYGWING_AGENT) && ! defined(_WIN32)
-int32_t scap_enable_page_faults(scap_t *handle)
+#if defined(HAS_CAPTURE) && !defined(CYGWING_AGENT) && !defined(_WIN32)
+int32_t scap_enable_page_faults(scap_t* handle)
 {
 	if(handle->m_mode != SCAP_MODE_LIVE)
 	{
@@ -2428,7 +2428,7 @@ int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen)
 	//
 	if(handle->m_mode != SCAP_MODE_LIVE)
 	{
-		snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "setting snaplen not supported on this scap mode");
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "setting snaplen not supported on this scap mode");
 		return SCAP_FAILURE;
 	}
 
@@ -2467,9 +2467,9 @@ int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen)
 			for(j = 0; j < handle->m_ndevs; j++)
 			{
 				scap_readbuf(handle,
-							j,
-							&handle->m_devs[j].m_sn_next_event,
-							&handle->m_devs[j].m_sn_len);
+					     j,
+					     &handle->m_devs[j].m_sn_next_event,
+					     &handle->m_devs[j].m_sn_len);
 
 				handle->m_devs[j].m_sn_len = 0;
 			}
@@ -2485,7 +2485,7 @@ int64_t scap_get_readfile_offset(scap_t* handle)
 {
 	if(handle->m_mode != SCAP_MODE_CAPTURE)
 	{
-		snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "scap_get_readfile_offset only works on captures");
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_get_readfile_offset only works on captures");
 		return -1;
 	}
 
@@ -2495,7 +2495,7 @@ int64_t scap_get_readfile_offset(scap_t* handle)
 #ifndef CYGWING_AGENT
 static int32_t scap_handle_eventmask(scap_t* handle, uint32_t op, uint32_t event_id)
 {
-	if (handle == NULL)
+	if(handle == NULL)
 	{
 		return SCAP_FAILURE;
 	}
@@ -2517,7 +2517,8 @@ static int32_t scap_handle_eventmask(scap_t* handle, uint32_t op, uint32_t event
 	// Tell the driver to change the snaplen
 	//
 
-	switch(op) {
+	switch(op)
+	{
 	case PPM_IOCTL_MASK_ZERO_EVENTS:
 	case PPM_IOCTL_MASK_SET_EVENT:
 	case PPM_IOCTL_MASK_UNSET_EVENT:
@@ -2554,9 +2555,9 @@ static int32_t scap_handle_eventmask(scap_t* handle, uint32_t op, uint32_t event
 			for(j = 0; j < handle->m_ndevs; j++)
 			{
 				scap_readbuf(handle,
-					j,
-					&handle->m_devs[j].m_sn_next_event,
-					&handle->m_devs[j].m_sn_len);
+					     j,
+					     &handle->m_devs[j].m_sn_next_event,
+					     &handle->m_devs[j].m_sn_len);
 
 				handle->m_devs[j].m_sn_len = 0;
 			}
@@ -2568,30 +2569,33 @@ static int32_t scap_handle_eventmask(scap_t* handle, uint32_t op, uint32_t event
 }
 #endif // CYGWING_AGENT
 
-int32_t scap_clear_eventmask(scap_t* handle) {
+int32_t scap_clear_eventmask(scap_t* handle)
+{
 #if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
 	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "eventmask not supported on %s", PLATFORM_NAME);
 	return SCAP_FAILURE;
 #else
-	return(scap_handle_eventmask(handle, PPM_IOCTL_MASK_ZERO_EVENTS, 0));
+	return (scap_handle_eventmask(handle, PPM_IOCTL_MASK_ZERO_EVENTS, 0));
 #endif
 }
 
-int32_t scap_set_eventmask(scap_t* handle, uint32_t event_id) {
+int32_t scap_set_eventmask(scap_t* handle, uint32_t event_id)
+{
 #if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
 	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "eventmask not supported on %s", PLATFORM_NAME);
 	return SCAP_FAILURE;
 #else
-	return(scap_handle_eventmask(handle, PPM_IOCTL_MASK_SET_EVENT, event_id));
+	return (scap_handle_eventmask(handle, PPM_IOCTL_MASK_SET_EVENT, event_id));
 #endif
 }
 
-int32_t scap_unset_eventmask(scap_t* handle, uint32_t event_id) {
+int32_t scap_unset_eventmask(scap_t* handle, uint32_t event_id)
+{
 #if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
 	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "eventmask not supported on %s", PLATFORM_NAME);
 	return SCAP_FAILURE;
 #else
-	return(scap_handle_eventmask(handle, PPM_IOCTL_MASK_UNSET_EVENT, event_id));
+	return (scap_handle_eventmask(handle, PPM_IOCTL_MASK_UNSET_EVENT, event_id));
 #endif
 }
 
@@ -2685,10 +2689,11 @@ int32_t scap_disable_dynamic_snaplen(scap_t* handle)
 
 const char* scap_get_host_root()
 {
-	char* p = getenv(SCAP_HOST_ROOT_ENV_VAR_NAME);
+	char* p = getenv("COLLECTOR_HOST_ROOT");
 	static char env_str[SCAP_MAX_PATH_SIZE + 1];
 	static bool inited = false;
-	if (! inited) {
+	if(!inited)
+	{
 		strlcpy(env_str, p ? p : "", sizeof(env_str));
 		inited = true;
 	}
@@ -2707,9 +2712,9 @@ bool scap_alloc_proclist_info(scap_t* handle, uint32_t n_entries)
 	}
 
 	memsize = sizeof(struct ppm_proclist_info) +
-		sizeof(struct ppm_proc_info) * n_entries;
+		  sizeof(struct ppm_proc_info) * n_entries;
 
-	struct ppm_proclist_info *procinfo = (struct ppm_proclist_info*) realloc(handle->m_driver_procinfo, memsize);
+	struct ppm_proclist_info* procinfo = (struct ppm_proclist_info*)realloc(handle->m_driver_procinfo, memsize);
 	if(procinfo == NULL)
 	{
 		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "driver process list allocation error");
@@ -2779,7 +2784,7 @@ struct ppm_proclist_info* scap_get_threadlist(scap_t* handle)
 	}
 
 	return handle->m_driver_procinfo;
-#endif	// HAS_CAPTURE
+#endif // HAS_CAPTURE
 }
 
 void scap_set_refresh_proc_table_when_saving(scap_t* handle, bool refresh)
@@ -2810,7 +2815,7 @@ int32_t scap_enable_simpledriver_mode(scap_t* handle)
 
 	if(handle->m_bpf)
 	{
-		if (scap_bpf_set_simple_mode(handle))
+		if(scap_bpf_set_simple_mode(handle))
 		{
 			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_enable_simpledriver_mode failed");
 			ASSERT(false);
@@ -2887,12 +2892,12 @@ wh_t* scap_get_wmi_handle(scap_t* handle)
 }
 #endif
 
-const char *scap_get_bpf_probe_from_env()
+const char* scap_get_bpf_probe_from_env()
 {
 	return getenv(SCAP_BPF_PROBE_ENV_VAR_NAME);
 }
 
-bool scap_get_bpf_enabled(scap_t *handle)
+bool scap_get_bpf_enabled(scap_t* handle)
 {
 	if(handle)
 	{
@@ -2902,11 +2907,11 @@ bool scap_get_bpf_enabled(scap_t *handle)
 	return false;
 }
 
-int32_t scap_suppress_events_comm(scap_t *handle, const char *comm)
+int32_t scap_suppress_events_comm(scap_t* handle, const char* comm)
 {
 	// If the comm is already present in the list, do nothing
 	uint32_t i;
-	for(i=0; i<handle->m_num_suppressed_comms; i++)
+	for(i = 0; i < handle->m_num_suppressed_comms; i++)
 	{
 		if(strcmp(handle->m_suppressed_comms[i], comm) == 0)
 		{
@@ -2920,17 +2925,17 @@ int32_t scap_suppress_events_comm(scap_t *handle, const char *comm)
 	}
 
 	handle->m_num_suppressed_comms++;
-	handle->m_suppressed_comms = (char **) realloc(handle->m_suppressed_comms,
-						       handle->m_num_suppressed_comms * sizeof(char *));
+	handle->m_suppressed_comms = (char**)realloc(handle->m_suppressed_comms,
+						     handle->m_num_suppressed_comms * sizeof(char*));
 
-	handle->m_suppressed_comms[handle->m_num_suppressed_comms-1] = strdup(comm);
+	handle->m_suppressed_comms[handle->m_num_suppressed_comms - 1] = strdup(comm);
 
 	return SCAP_SUCCESS;
 }
 
-bool scap_check_suppressed_tid(scap_t *handle, int64_t tid)
+bool scap_check_suppressed_tid(scap_t* handle, int64_t tid)
 {
-	scap_tid *stid;
+	scap_tid* stid;
 	HASH_FIND_INT64(handle->m_suppressed_tids, &tid, stid);
 
 	return (stid != NULL);
@@ -2982,9 +2987,9 @@ int32_t scap_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, ui
 			for(j = 0; j < handle->m_ndevs; j++)
 			{
 				scap_readbuf(handle,
-							j,
-							&handle->m_devs[j].m_sn_next_event,
-							&handle->m_devs[j].m_sn_len);
+					     j,
+					     &handle->m_devs[j].m_sn_next_event,
+					     &handle->m_devs[j].m_sn_len);
 
 				handle->m_devs[j].m_sn_len = 0;
 			}
@@ -3003,15 +3008,15 @@ int32_t scap_set_statsd_port(scap_t* const handle, const uint16_t port)
 	if(handle->m_mode != SCAP_MODE_LIVE)
 	{
 		snprintf(handle->m_lasterr,
-		         SCAP_LASTERR_SIZE,
-		         "scap_set_statsd_port not supported on this scap mode");
+			 SCAP_LASTERR_SIZE,
+			 "scap_set_statsd_port not supported on this scap mode");
 		return SCAP_FAILURE;
 	}
 
 #if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
 	snprintf(handle->m_lasterr,
-	         SCAP_LASTERR_SIZE,
-	         "scap_set_statsd_port not supported on %s", PLATFORM_NAME);
+		 SCAP_LASTERR_SIZE,
+		 "scap_set_statsd_port not supported on %s", PLATFORM_NAME);
 	return SCAP_FAILURE;
 #else
 
@@ -3027,8 +3032,8 @@ int32_t scap_set_statsd_port(scap_t* const handle, const uint16_t port)
 		if(ioctl(handle->m_devs[0].m_fd, PPM_IOCTL_SET_STATSD_PORT, port))
 		{
 			snprintf(handle->m_lasterr,
-			         SCAP_LASTERR_SIZE,
-			         "scap_set_statsd_port: ioctl failed");
+				 SCAP_LASTERR_SIZE,
+				 "scap_set_statsd_port: ioctl failed");
 			ASSERT(false);
 			return SCAP_FAILURE;
 		}
@@ -3043,9 +3048,9 @@ int32_t scap_set_statsd_port(scap_t* const handle, const uint16_t port)
 			for(j = 0; j < handle->m_ndevs; j++)
 			{
 				scap_readbuf(handle,
-				             j,
-				             &handle->m_devs[j].m_sn_next_event,
-				             &handle->m_devs[j].m_sn_len);
+					     j,
+					     &handle->m_devs[j].m_sn_next_event,
+					     &handle->m_devs[j].m_sn_len);
 
 				handle->m_devs[j].m_sn_len = 0;
 			}
@@ -3094,3 +3099,26 @@ uint64_t scap_get_driver_schema_version(scap_t* handle)
 {
 	return handle->m_schema_version;
 }
+
+/* Begin StackRox Section */
+int scap_ioctl(scap_t* handle, int devnum, unsigned long request, void* arg)
+{
+	int ioctl_ret = 0;
+
+	if(devnum >= handle->m_ndevs)
+	{
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed, invalid device number %d", devnum);
+		ASSERT(false);
+		return SCAP_FAILURE;
+	}
+
+	ioctl_ret = ioctl(handle->m_devs[devnum].m_fd, request, arg);
+	if(ioctl_ret != 0)
+	{
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed due to ioctl error (%s)", strerror(errno));
+		return SCAP_FAILURE;
+	}
+
+	return SCAP_SUCCESS;
+}
+/* End StackRox Section */

@@ -1523,16 +1523,11 @@ static __always_inline int bpf_ppm_get_tty(struct task_struct *task)
 	return tty_nr;
 }
 
-static __always_inline struct pid *bpf_task_pid(struct task_struct *task)
-{
-#if (PPM_RHEL_RELEASE_CODE > 0 && PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 1))
-	return _READ(task->thread_pid);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)
-	return _READ(task->pids[PIDTYPE_PID].pid);
-#else
-	return _READ(task->thread_pid);
-#endif
-}
+static __always_inline struct pid *bpf_task_pid(struct task_struct *task);
+
+static __always_inline pid_t bpf_task_pid_nr_ns(struct task_struct *task,
+						enum pid_type type,
+						struct pid_namespace *ns);
 
 static __always_inline struct pid_namespace *bpf_ns_of_pid(struct pid *pid)
 {
@@ -1564,15 +1559,22 @@ static __always_inline pid_t bpf_pid_nr_ns(struct pid *pid,
 	return nr;
 }
 
-#if ((PPM_RHEL_RELEASE_CODE > 0 && PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 1))) || LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
-static __always_inline struct pid **bpf_task_pid_ptr(struct task_struct *task,
-						     enum pid_type type)
+static __always_inline pid_t bpf_pid_vnr(struct pid *pid)
 {
-	return (type == PIDTYPE_PID) ?
-		&task->thread_pid :
-		&_READ(task->signal)->pids[type];
+	return bpf_pid_nr_ns(pid, bpf_ns_of_pid(pid));
 }
-#endif
+
+static __always_inline pid_t bpf_task_pid_vnr(struct task_struct *task)
+{
+	return bpf_task_pid_nr_ns(task, PIDTYPE_PID, NULL);
+}
+
+static __always_inline pid_t bpf_task_pgrp_vnr(struct task_struct *task)
+{
+	return bpf_task_pid_nr_ns(task, PIDTYPE_PGID, NULL);
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 
 static __always_inline pid_t bpf_task_pid_nr_ns(struct task_struct *task,
 						enum pid_type type,
@@ -1583,9 +1585,44 @@ static __always_inline pid_t bpf_task_pid_nr_ns(struct task_struct *task,
 	if (!ns)
 		ns = bpf_task_active_pid_ns(task);
 
-#if (PPM_RHEL_RELEASE_CODE > 0 && PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 1))
-	nr = bpf_pid_nr_ns(_READ(*bpf_task_pid_ptr(task, type)), ns);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)
+	if (type != PIDTYPE_PID)
+		task = _READ(task->group_leader);
+
+	nr = bpf_pid_nr_ns(_READ(task->pids[type].pid), ns);
+
+	return nr;
+}
+
+static __always_inline struct pid *bpf_task_tgid(struct task_struct *task)
+{
+	struct task_struct *leader;
+
+	leader = _READ(task->group_leader);
+	return _READ(leader->pids[PIDTYPE_PID].pid);
+}
+
+static __always_inline struct pid *bpf_task_pid(struct task_struct *task)
+{
+	return _READ(task->pids[PIDTYPE_PID].pid);
+}
+
+static __always_inline pid_t bpf_task_tgid_vnr(struct task_struct *task)
+{
+	return bpf_pid_vnr(bpf_task_tgid(task));
+}
+
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) && \
+    ( !defined(RHEL_RELEASE_CODE) || RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(8,1) )
+
+static __always_inline pid_t bpf_task_pid_nr_ns(struct task_struct *task,
+						enum pid_type type,
+						struct pid_namespace *ns)
+{
+	pid_t nr = 0;
+
+	if (!ns)
+		ns = bpf_task_active_pid_ns(task);
+
 	if (type != PIDTYPE_PID) {
 		if (type == __PIDTYPE_TGID)
 			type = PIDTYPE_PID;
@@ -1594,80 +1631,107 @@ static __always_inline pid_t bpf_task_pid_nr_ns(struct task_struct *task,
 	}
 
 	nr = bpf_pid_nr_ns(_READ(task->pids[type].pid), ns);
-#else
-	nr = bpf_pid_nr_ns(_READ(*bpf_task_pid_ptr(task, type)), ns);
-#endif
 
 	return nr;
 }
 
-static __always_inline pid_t bpf_task_pid_vnr(struct task_struct *task)
+static __always_inline struct pid *bpf_task_pid(struct task_struct *task)
 {
-	return bpf_task_pid_nr_ns(task, PIDTYPE_PID, NULL);
+	return _READ(task->pids[PIDTYPE_PID].pid);
 }
 
 static __always_inline pid_t bpf_task_tgid_vnr(struct task_struct *task)
 {
-#if (PPM_RHEL_RELEASE_CODE > 0 && PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 1))
-	return bpf_task_pid_nr_ns(task, PIDTYPE_TGID, NULL);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)
 	return bpf_task_pid_nr_ns(task, __PIDTYPE_TGID, NULL);
-#else
-	return bpf_task_pid_nr_ns(task, PIDTYPE_TGID, NULL);
-#endif
 }
 
-static __always_inline pid_t bpf_task_pgrp_vnr(struct task_struct *task)
+#else /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) */
+
+static __always_inline struct pid *bpf_task_pid(struct task_struct *task)
 {
-	return bpf_task_pid_nr_ns(task, PIDTYPE_PGID, NULL);
+	return _READ(task->thread_pid);
 }
+
+static __always_inline struct pid **bpf_task_pid_ptr(struct task_struct *task,
+						     enum pid_type type)
+{
+	return (type == PIDTYPE_PID) ?
+		&task->thread_pid :
+		&_READ(task->signal)->pids[type];
+}
+
+static __always_inline pid_t bpf_task_pid_nr_ns(struct task_struct *task,
+						enum pid_type type,
+						struct pid_namespace *ns)
+{
+	pid_t nr = 0;
+
+	if (!ns)
+		ns = bpf_task_active_pid_ns(task);
+
+	nr = bpf_pid_nr_ns(_READ(*bpf_task_pid_ptr(task, type)), ns);
+
+	return nr;
+}
+
+static __always_inline pid_t bpf_task_tgid_vnr(struct task_struct *task)
+{
+	return bpf_task_pid_nr_ns(task, PIDTYPE_TGID, NULL);
+}
+
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) */
 
 #define MAX_CGROUP_PATHS 6
 
 static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 					       int subsys_id,
+					       const char *subsys_name,
 					       char *buf,
 					       int *len)
 {
 	struct cgroup_subsys_state *css = _READ(cgroups->subsys[subsys_id]);
-	struct cgroup_subsys *ss = _READ(css->ss);
-	char *subsys_name = (char *)_READ(ss->name);
 	struct cgroup *cgroup = _READ(css->cgroup);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
 	struct kernfs_node *kn = _READ(cgroup->kn);
+#else
+	struct cgroup_name *cn = _READ(cgroup->name);
+#endif
 	char *cgroup_path[MAX_CGROUP_PATHS];
-	bool prev_empty = false;
-	int off = *len;
-	unsigned int off_bounded;
+	volatile unsigned int off = (unsigned int)*len;
 
-	off_bounded = off & SCRATCH_SIZE_HALF;
 	if (off > SCRATCH_SIZE_HALF)
 	{
 		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 	}
 
-	int res = bpf_probe_read_str(&buf[off_bounded],
+	int res = bpf_probe_read_str(&buf[off & SCRATCH_SIZE_HALF],
 				     SCRATCH_SIZE_HALF,
 				     subsys_name);
-	if (res == -EFAULT)
+	if (res == -EFAULT || res == 0)
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	off += res - 1;
 
-	off_bounded = off & SCRATCH_SIZE_HALF;
 	if (off > SCRATCH_SIZE_HALF)
 	{
 		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 	}
 
-	buf[off_bounded] = '=';
+	buf[off & SCRATCH_SIZE_HALF] = '=';
 	++off;
-	off_bounded = off & SCRATCH_SIZE_HALF;
 
 	#pragma unroll MAX_CGROUP_PATHS
 	for (int k = 0; k < MAX_CGROUP_PATHS; ++k) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
 		if (kn) {
 			cgroup_path[k] = (char *)_READ(kn->name);
 			kn = _READ(kn->parent);
+#else
+		if (cn) {
+			cgroup_path[k] = cn->name;
+			cgroup = _READ(cgroup->parent);
+			cn = _READ(cgroup->name);
+#endif
 		} else {
 			cgroup_path[k] = NULL;
 		}
@@ -1675,37 +1739,34 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 
 	#pragma unroll MAX_CGROUP_PATHS
 	for (int k = MAX_CGROUP_PATHS - 1; k >= 0 ; --k) {
-		if (cgroup_path[k]) {
-			if (!prev_empty) {
-				if (off > SCRATCH_SIZE_HALF)
-				{
-					return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
-				}
+		if (!cgroup_path[k])
+			continue;
 
-				buf[off_bounded] = '/';
-				++off;
-				off_bounded = off & SCRATCH_SIZE_HALF;
-			}
-
-			prev_empty = false;
-
+		if (buf[(off - 1) & SCRATCH_SIZE_HALF] != '/') {
 			if (off > SCRATCH_SIZE_HALF)
 			{
 				return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 			}
 
-			res = bpf_probe_read_str(&buf[off_bounded],
-						 SCRATCH_SIZE_HALF,
-						 cgroup_path[k]);
-			if (res > 1)
-			{
-				off += res - 1;
-				off_bounded = off & SCRATCH_SIZE_HALF;
-			}
-			else if (res == 1)
-				prev_empty = true;
-			else
-				return PPM_FAILURE_INVALID_USER_MEMORY;
+			buf[off & SCRATCH_SIZE_HALF] = '/';
+			++off;
+		}
+
+		if (off > SCRATCH_SIZE_HALF)
+			return PPM_FAILURE_BUFFER_FULL;
+
+		res = bpf_probe_read_str(&buf[off & SCRATCH_SIZE_HALF],
+						SCRATCH_SIZE_HALF,
+						cgroup_path[k]);
+		if (res <= 0)
+			return PPM_FAILURE_INVALID_USER_MEMORY;
+
+		if (res > 1) {
+			if (res == sizeof("/") &&
+			    buf[off & SCRATCH_SIZE_HALF] == '/')
+				--res;
+
+			off += res - 1;
 		}
 	}
 
@@ -1714,12 +1775,26 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 	}
 
-	buf[off_bounded] = 0;
+	buf[off & SCRATCH_SIZE_HALF] = 0;
 	++off;
-	*len = off;
+	*len = (int)off;
 
 	return PPM_SUCCESS;
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+#define SUBSYS_ID(id) id ## _cgrp_id
+#else
+#define SUBSYS_ID(id) id ## _subsys_id
+#endif
+
+#define APPEND_CGROUP(id)								\
+do {											\
+	char subsys_name[] = #id;							\
+	res = __bpf_append_cgroup(cgroups, SUBSYS_ID(id), subsys_name, buf, len);	\
+	if (res != PPM_SUCCESS)								\
+		return res;								\
+} while (0)
 
 static __always_inline int bpf_append_cgroup(struct task_struct *task,
 					     char *buf,
@@ -1728,34 +1803,45 @@ static __always_inline int bpf_append_cgroup(struct task_struct *task,
 	struct css_set *cgroups = _READ(task->cgroups);
 	int res;
 
+/* StackRox: Remove cpuset to reduce the number of cgroup paths */
+#if 0
 #if IS_ENABLED(CONFIG_CPUSETS)
-	res = __bpf_append_cgroup(cgroups, cpuset_cgrp_id, buf, len);
-	if (res != PPM_SUCCESS)
-		return res;
+	APPEND_CGROUP(cpuset);
+#endif
 #endif
 
 #if IS_ENABLED(CONFIG_CGROUP_SCHED)
-	res = __bpf_append_cgroup(cgroups, cpu_cgrp_id, buf, len);
-	if (res != PPM_SUCCESS)
-		return res;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	APPEND_CGROUP(cpu);
+#else
+	APPEND_CGROUP(cpu_cgroup);
+#endif
 #endif
 
+/* StackRox: Only add cpuacct if cpu or cpu_group cgroup path not included */
+#if !IS_ENABLED(CONFIG_CGROUP_SCHED)
 #if IS_ENABLED(CONFIG_CGROUP_CPUACCT)
-	res = __bpf_append_cgroup(cgroups, cpuacct_cgrp_id, buf, len);
-	if (res != PPM_SUCCESS)
-		return res;
+	APPEND_CGROUP(cpuacct);
+#endif
 #endif
 
+/* StackRox: Remove io/blkio to reduce the number of cgroup paths */
+#if 0
 #if IS_ENABLED(CONFIG_BLK_CGROUP)
-	res = __bpf_append_cgroup(cgroups, io_cgrp_id, buf, len);
-	if (res != PPM_SUCCESS)
-		return res;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	APPEND_CGROUP(io);
+#else
+	APPEND_CGROUP(blkio);
+#endif
+#endif
 #endif
 
 #if IS_ENABLED(CONFIG_MEMCG)
-	res = __bpf_append_cgroup(cgroups, memory_cgrp_id, buf, len);
-	if (res != PPM_SUCCESS)
-		return res;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	APPEND_CGROUP(memory);
+#else
+	APPEND_CGROUP(mem_cgroup);
+#endif
 #endif
 
 	return PPM_SUCCESS;
@@ -1788,7 +1874,7 @@ static __always_inline int bpf_accumulate_argv_or_env(struct filler_data *data,
 		}
 
 		len = bpf_probe_read_str(&data->buf[off & SCRATCH_SIZE_HALF], SCRATCH_SIZE_HALF, arg);
-		if (len == -EFAULT)
+		if (len == -EFAULT || len == 0)
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		*args_len += len;
@@ -2110,7 +2196,7 @@ FILLER(proc_startupdate, true)
 						SCRATCH_SIZE_HALF,
 						&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
 
-		if (exe_len == -EFAULT)
+		if (exe_len == -EFAULT || exe_len == 0)
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		/*
@@ -2345,7 +2431,11 @@ FILLER(proc_startupdate_3, true)
 		} else {
 			struct nsproxy *nsproxy = _READ(task->nsproxy);
 			if(nsproxy) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 15, 0)
+				struct pid_namespace *pid_ns_for_children = _READ(nsproxy->pid_ns);
+#else
 				struct pid_namespace *pid_ns_for_children = _READ(nsproxy->pid_ns_for_children);
+#endif
 				if(pid_ns_for_children != pidns) {
 					flags |= PPM_CL_CHILD_IN_PIDNS;
 				}
@@ -3256,7 +3346,11 @@ FILLER(sys_shutdown_e, true)
 FILLER(sys_recvmsg_x, true)
 {
 	const struct iovec *iov;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	struct user_msghdr mh;
+#else
+	struct msghdr mh;
+#endif
 	unsigned long iovcnt;
 	unsigned long val;
 	long retval;
@@ -3295,7 +3389,11 @@ FILLER(sys_recvmsg_x, true)
 FILLER(sys_recvmsg_x_2, true)
 {
 	struct sockaddr *usrsockaddr;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	struct user_msghdr mh;
+#else
+	struct msghdr mh;
+#endif
 	unsigned long val;
 	u16 size = 0;
 	long retval;
@@ -3357,7 +3455,11 @@ FILLER(sys_sendmsg_e, true)
 {
 	struct sockaddr *usrsockaddr;
 	const struct iovec *iov;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	struct user_msghdr mh;
+#else
+	struct msghdr mh;
+#endif
 	unsigned long iovcnt;
 	unsigned long val;
 	u16 size = 0;
@@ -3429,7 +3531,11 @@ FILLER(sys_sendmsg_e, true)
 FILLER(sys_sendmsg_x, true)
 {
 	const struct iovec *iov;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	struct user_msghdr mh;
+#else
+	struct msghdr mh;
+#endif
 	unsigned long iovcnt;
 	unsigned long val;
 	long retval;

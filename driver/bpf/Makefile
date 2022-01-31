@@ -16,6 +16,14 @@ KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 
 # DEBUG = -DBPF_DEBUG
 
+# Begin StackRox
+ifeq ($(shell grep -sq "^\s*struct\s\+audit_task_info\s\+\*audit;\s*$$" $(KERNELDIR)/include/linux/sched.h ; echo $$? ), 0)
+	KBUILD_CPPFLAGS+= -DCOS_73_WORKAROUND
+endif
+# clang-7 does not support -fmacro-prefix-map
+KBUILD_CPPFLAGS:=$(filter-out -fmacro-prefix-map=%,$(KBUILD_CPPFLAGS))
+# End StackRox
+
 all:
 	$(MAKE) -C $(KERNELDIR) M=$$PWD
 
@@ -37,6 +45,7 @@ $(obj)/probe.o: $(src)/probe.c \
 		$(KBUILD_EXTRA_CPPFLAGS) \
 		$(DEBUG) \
 		-D__KERNEL__ \
+		-DKBUILD_MODNAME=\"collector\" \
 		-D__BPF_TRACING__ \
 		-Wno-gnu-variable-sized-type-not-at-end \
 		-Wno-address-of-packed-member \

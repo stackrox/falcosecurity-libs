@@ -1139,6 +1139,9 @@ int32_t scap_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, ui
  * get the expanded snaplen for the correct port.
  */
 int32_t scap_set_statsd_port(scap_t* handle, uint16_t port);
+/* Begin StackRox Section */
+int32_t scap_ioctl(scap_t* handle, int devnum, unsigned long request, void* arg);
+/* End StackRox Section */
 
 /**
  * Is `driver_api_version` compatible with `required_api_version`?

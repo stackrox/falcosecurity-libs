@@ -1561,7 +1561,6 @@ void sinsp_chisel::first_event_inits(sinsp_evt* evt)
 
 bool sinsp_chisel::run(sinsp_evt* evt)
 {
-#ifdef HAS_LUA_CHISELS
 	string line;
 
 	ASSERT(m_ls);
@@ -1575,18 +1574,18 @@ bool sinsp_chisel::run(sinsp_evt* evt)
 	//
 	// If there is a timeout callback, see if it's time to call it
 	//
-	do_timeout(evt);
+//	do_timeout(evt);
 
 	//
 	// If there is a filter, run it
 	//
-	if(m_lua_cinfo->m_filter != NULL)
-	{
+//if(m_lua_cinfo->m_filter != NULL)
+//{
 		if(!m_lua_cinfo->m_filter->run(evt))
 		{
 			return false;
 		}
-	}
+//}
 
 	//
 	// If the script has the on_event callback, call it
@@ -1602,11 +1601,17 @@ bool sinsp_chisel::run(sinsp_evt* evt)
 
 		int oeres = lua_toboolean(m_ls, -1);
 		lua_pop(m_ls, 1);
+		
+        // Begin StackRox section
 
+		/*	
 		if(m_lua_cinfo->m_end_capture == true)
 		{
 			throw sinsp_capture_interrupt_exception();
 		}
+		*/
+
+        // End StackRox section 
 
 		if(oeres == false)
 		{
@@ -1626,7 +1631,37 @@ bool sinsp_chisel::run(sinsp_evt* evt)
 	}
 
 	return true;
-#endif
+}
+
+bool sinsp_chisel::process(sinsp_evt* evt)
+{
+	ASSERT(m_ls);
+
+	//
+	// Make the event available to the API
+	//
+	lua_pushlightuserdata(m_ls, evt);
+	lua_setglobal(m_ls, "sievt");
+
+	//
+	// If this is the first event, put the event pointer on the stack.
+	// We assume that the event pointer will never change.
+	//
+	if(m_lua_is_first_evt)
+	{
+		first_event_inits(evt);
+	}
+
+
+	//
+	// If there is a filter, run it
+	//
+	if(!m_lua_cinfo->m_filter->run(evt))
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void sinsp_chisel::do_timeout(sinsp_evt* evt)

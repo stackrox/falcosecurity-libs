@@ -896,23 +896,20 @@ void sinsp::on_new_entry_from_proc(void* context,
 	//
 	if(fdinfo == NULL)
 	{
-		bool thread_added = false;
-		sinsp_threadinfo* newti = build_threadinfo();
+		auto newti_ref = build_threadinfo();
+		auto* newti = newti_ref.get();
 		newti->init(tinfo);
 		if(is_nodriver())
 		{
 			auto sinsp_tinfo = find_thread(tid, true);
 			if(sinsp_tinfo == nullptr || newti->m_clone_ts > sinsp_tinfo->m_clone_ts)
 			{
-				thread_added = m_thread_manager->add_thread(newti, true);
+				m_thread_manager->add_thread(std::move(newti_ref), true);
 			}
 		}
 		else
 		{
-			thread_added = m_thread_manager->add_thread(newti, true);
-		}
-		if (!thread_added) {
-			delete newti;
+			m_thread_manager->add_thread(std::move(newti_ref), true);
 		}
 	}
 	else
@@ -921,12 +918,12 @@ void sinsp::on_new_entry_from_proc(void* context,
 
 		if(!sinsp_tinfo)
 		{
-			sinsp_threadinfo* newti = build_threadinfo();
+			auto newti_ref = build_threadinfo();
+			auto* newti = newti_ref.get();
 			newti->init(tinfo);
 
-			if (!m_thread_manager->add_thread(newti, true)) {
+			if (!m_thread_manager->add_thread(std::move(newti_ref), true)) {
 				ASSERT(false);
-				delete newti;
 				return;
 			}
 
@@ -964,9 +961,9 @@ void sinsp::import_thread_table()
 	//
 	HASH_ITER(hh, table, pi, tpi)
 	{
-		sinsp_threadinfo* newti = build_threadinfo();
+		auto newti = build_threadinfo();
 		newti->init(pi);
-		m_thread_manager->add_thread(newti, true);
+		m_thread_manager->add_thread(std::move(newti), true);
 	}
 }
 
@@ -1508,9 +1505,9 @@ threadinfo_map_t::ptr_t sinsp::get_thread_ref(int64_t tid, bool query_os_if_not_
 	return m_thread_manager->get_thread_ref(tid, query_os_if_not_found, lookup_only, main_thread);
 }
 
-bool sinsp::add_thread(const sinsp_threadinfo *ptinfo)
+bool sinsp::add_thread(std::shared_ptr<sinsp_threadinfo> ptinfo)
 {
-	return m_thread_manager->add_thread((sinsp_threadinfo*)ptinfo, false);
+	return m_thread_manager->add_thread(std::move(ptinfo), false);
 }
 
 void sinsp::remove_thread(int64_t tid, bool force)
@@ -2658,7 +2655,7 @@ bool sinsp_thread_manager::remove_inactive_threads()
 	if(m_inspector->m_lastevent_ts >
 		m_last_flush_time_ns + m_inspector->m_inactive_thread_scan_time_ns)
 	{
-		std::unordered_map<uint64_t, bool> to_delete;
+		std::vector<std::pair<uint64_t, bool>> to_delete;
 
 		res = true;
 
@@ -2686,21 +2683,22 @@ bool sinsp_thread_manager::remove_inactive_threads()
 #ifdef GATHER_INTERNAL_STATS
 				m_removed_threads->increment();
 #endif
-				to_delete[tinfo.m_tid] = closed;
+				to_delete.emplace_back(tinfo.m_tid, closed);
 			}
 			return true;
 		});
 
-		for (auto& it : to_delete)
-		{
-			remove_thread(it.first, it.second);
-		}
+		if (!to_delete.empty()) {
+            for (auto &it : to_delete) {
+                remove_thread(it.first, it.second);
+            }
 
-		//
-		// Rebalance the thread table dependency tree, so we free up threads that
-		// exited but that are stuck because of reference counting.
-		//
-		recreate_child_dependencies();
+            //
+            // Rebalance the thread table dependency tree, so we free up threads that
+            // exited but that are stuck because of reference counting.
+            //
+            recreate_child_dependencies();
+        }
 	}
 
 	return res;
@@ -2759,8 +2757,8 @@ std::shared_ptr<std::string> sinsp::lookup_cgroup_dir(const string& subsys)
 }
 #endif
 
-sinsp_threadinfo*
+std::shared_ptr<sinsp_threadinfo>
 libsinsp::event_processor::build_threadinfo(sinsp* inspector)
 {
-	return new sinsp_threadinfo(inspector);
+	return std::make_shared<sinsp_threadinfo>(inspector);
 }

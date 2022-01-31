@@ -37,6 +37,8 @@ if(NOT MINIMAL_BUILD)
 	include(cares)
 endif()
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+
 if(NOT WIN32 AND NOT APPLE)
 	if(NOT MINIMAL_BUILD)
 		include(grpc)
@@ -173,6 +175,8 @@ endif()
 
 add_library(sinsp STATIC ${SINSP_SOURCES})
 
+set_target_properties(sinsp PROPERTIES COMPILE_FLAGS "-fPIC")
+
 set(SINSP_LIBRARIES
 	scap
 	"${CURL_LIBRARIES}"
@@ -219,12 +223,12 @@ if(NOT WIN32)
 				list(APPEND SINSP_LIBRARIES "${GRPC_LIBRARIES}")
 			endif() # USE_BUNDLED_GRPC
 
+			if(NOT NO_LINK_GRPC_LIBS)
+				list(APPEND SINSP_LIBRARIES "${GRPCPP_LIB}" "${GRPC_LIB}" "${PROTOBUF_LIB}" "${CARES_LIB}")
+			endif()
+
 			list(APPEND SINSP_LIBRARIES
-				"${GRPCPP_LIB}"
-				"${GRPC_LIB}"
 				"${GPR_LIB}"
-				"${PROTOBUF_LIB}"
-				"${CARES_LIB}"
 				"${JQ_LIB}"
 				"${B64_LIB}")
 
@@ -289,3 +293,5 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     endif()
 endif()
 
+add_library(sinsp-wrapper SHARED wrapper.cpp)
+target_link_libraries(sinsp-wrapper sinsp)

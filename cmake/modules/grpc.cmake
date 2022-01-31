@@ -41,8 +41,8 @@ elseif(NOT USE_BUNDLED_GRPC)
 			set(GRPC_INCLUDE ${GRPCPP_INCLUDE})
 			add_definitions(-DGRPC_INCLUDE_IS_GRPCPP=1)
 		endif()
-		find_library(GRPC_LIB NAMES grpc)
-		find_library(GRPCPP_LIB NAMES grpc++)
+		find_library(GRPC_LIB NAMES libgrpc.a grpc)
+		find_library(GRPCPP_LIB NAMES libgrpc++.a grpc++)
 		if(GRPC_INCLUDE AND GRPC_LIB AND GRPCPP_LIB)
 			message(STATUS "Found grpc: include: ${GRPC_INCLUDE}, C lib: ${GRPC_LIB}, C++ lib: ${GRPCPP_LIB}")
 		else()
@@ -60,7 +60,7 @@ else()
 	include(openssl)
 	set(GRPC_SRC "${PROJECT_BINARY_DIR}/grpc-prefix/src/grpc")
 	set(GRPC_INSTALL_DIR "${GRPC_SRC}/target")
-	set(GRPC_INCLUDE 
+	set(GRPC_INCLUDE
 		"${GRPC_INSTALL_DIR}/include"
 		"${GRPC_SRC}/third_party/abseil-cpp")
 	set(GPR_LIB "${GRPC_SRC}/libgpr.a")
@@ -124,7 +124,7 @@ else()
 			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_internal_seed_material.a"
 			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_seed_gen_exception.a"
 		)
-		
+
 		ExternalProject_Add(grpc
 			PREFIX "${PROJECT_BINARY_DIR}/grpc-prefix"
 			DEPENDS openssl protobuf c-ares zlib
@@ -166,7 +166,7 @@ else()
 				-DZLIB_ROOT:STRING=${ZLIB_SRC}
 			BUILD_IN_SOURCE 1
 			BUILD_BYPRODUCTS ${GRPC_LIB} ${GRPCPP_LIB} ${GPR_LIB} ${GRPC_LIBRARIES}
-			# Keep installation files into the local ${GRPC_INSTALL_DIR} 
+			# Keep installation files into the local ${GRPC_INSTALL_DIR}
 			# since here is the case when we are embedding gRPC
 			UPDATE_COMMAND ""
 			INSTALL_COMMAND DESTDIR= ${CMD_MAKE} install

@@ -64,6 +64,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT MINIMAL_BUILD)
 	list(APPEND LIBSINSP_INCLUDE_DIRS ${CURL_ABSOLUTE_INCLUDE_DIR})
 endif()
 
-add_subdirectory(${LIBSINSP_DIR}/userspace/libsinsp ${CMAKE_BINARY_DIR}/libsinsp)
+if(BUILD_USERSPACE)
+add_subdirectory(${LIBSINSP_DIR}/userspace/libsinsp ${PROJECT_BINARY_DIR}/libsinsp)
+endif() # BUILD_USERSPACE
 
 endif()
