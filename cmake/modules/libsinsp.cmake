@@ -75,12 +75,18 @@ function(set_sinsp_target_properties target)
 	)
 endfunction()
 
-add_subdirectory(${LIBSINSP_DIR}/userspace/libsinsp ${CMAKE_BINARY_DIR}/libsinsp)
+if(BUILD_USERSPACE)
+    add_subdirectory(${LIBSINSP_DIR}/userspace/libsinsp ${PROJECT_BINARY_DIR}/libsinsp)
+endif() # BUILD_USERSPACE
+
+if (BUILD_USERSPACE)
 install(TARGETS sinsp
 			ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}/${LIBS_PACKAGE_NAME}"
 			LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/${LIBS_PACKAGE_NAME}"
 			RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 			COMPONENT "sinsp")
+endif()
+
 install(DIRECTORY "${LIBSINSP_DIR}/userspace/libsinsp" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${LIBS_PACKAGE_NAME}/userspace"
 			COMPONENT "sinsp"
 			FILES_MATCHING PATTERN "*.h"

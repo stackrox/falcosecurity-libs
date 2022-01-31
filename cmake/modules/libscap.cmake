@@ -44,7 +44,9 @@ function(set_scap_target_properties target)
 	)
 endfunction()
 
-add_subdirectory(${LIBSCAP_DIR}/userspace/libscap ${PROJECT_BINARY_DIR}/libscap)
+if(BUILD_USERSPACE)
+	add_subdirectory(${LIBSCAP_DIR}/userspace/libscap ${PROJECT_BINARY_DIR}/libscap)
+endif() # BUILD_USERSPACE
 
 # We can switch to using the MANUALLY_ADDED_DEPENDENCIES when our minimum
 # CMake version is 3.8 or later.
@@ -75,11 +77,13 @@ foreach(libscap_conditional_lib ${libscap_conditional_libs})
 	endif()
 endforeach()
 
+if (BUILD_USERSPACE)
 install(TARGETS ${LIBSCAP_LIBS}
 			ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}/${LIBS_PACKAGE_NAME}"
 			LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/${LIBS_PACKAGE_NAME}"
 			RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 			COMPONENT "scap" OPTIONAL)
+endif()
 install(DIRECTORY "${LIBSCAP_INCLUDE_DIR}" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${LIBS_PACKAGE_NAME}/userspace"
 			COMPONENT "scap"
 			FILES_MATCHING PATTERN "*.h"

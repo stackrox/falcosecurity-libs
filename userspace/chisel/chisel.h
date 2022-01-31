@@ -126,6 +126,7 @@ public:
 	void set_args(std::string args);
 	void set_args(std::vector<std::pair<std::string, std::string>> args);
 	bool run(sinsp_evt* evt);
+	bool process(sinsp_evt* evt);
 	void do_timeout(sinsp_evt* evt);
 	void do_end_of_sample();
 	void on_init();
