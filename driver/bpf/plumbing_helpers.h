@@ -528,6 +528,7 @@ static __always_inline void reset_tail_ctx(struct scap_bpf_per_cpu_state *state,
 static __always_inline void call_filler(void *ctx,
 					void *stack_ctx,
 					enum ppm_event_type evt_type,
+					struct scap_bpf_settings *settings,
 					enum syscall_flags drop_flags)
 {
 	struct scap_bpf_settings *settings;
