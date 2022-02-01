@@ -2833,15 +2833,15 @@ static int do_cpu_callback(unsigned long cpu, long sd_action)
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0))
-static int sysdig_cpu_online(unsigned int cpu)
+static int scap_cpu_online(unsigned int cpu)
 {
-	vpr_info("sysdig_cpu_online on cpu %d\n", cpu);
+	vpr_info("scap_cpu_online on cpu %d\n", cpu);
 	return do_cpu_callback(cpu, 1);
 }
 
-static int sysdig_cpu_offline(unsigned int cpu)
+static int scap_cpu_offline(unsigned int cpu)
 {
-	vpr_info("sysdig_cpu_offline on cpu %d\n", cpu);
+	vpr_info("scap_cpu_offline on cpu %d\n", cpu);
 	return do_cpu_callback(cpu, 2);
 }
 #else /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)) */
@@ -2883,7 +2883,7 @@ static struct notifier_block cpu_notifier = {
 };
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0) */
 
-int sysdig_init(void)
+int scap_init(void)
 {
 	dev_t dev;
 	unsigned int cpu;
@@ -3008,9 +3008,9 @@ int sysdig_init(void)
 	 */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0))
 	hp_ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
-					   "sysdig/probe:online",
-					   sysdig_cpu_online,
-					   sysdig_cpu_offline);
+					   "scap/probe:online",
+					   scap_cpu_online,
+					   scap_cpu_offline);
 	if (hp_ret <= 0) {
 		pr_err("error registering cpu hotplug callback\n");
 		ret = hp_ret;
@@ -3051,7 +3051,7 @@ init_module_err:
 	return ret;
 }
 
-void sysdig_exit(void)
+void scap_exit(void)
 {
 	int j;
 
@@ -3093,8 +3093,8 @@ void sysdig_exit(void)
 	/* End StackRox Section */
 }
 
-module_init(sysdig_init);
-module_exit(sysdig_exit);
+module_init(scap_init);
+module_exit(scap_exit);
 MODULE_VERSION(PROBE_VERSION);
 MODULE_INFO(build_commit, PROBE_COMMIT);
 MODULE_INFO(api_version, PPM_API_CURRENT_VERSION_STRING);
