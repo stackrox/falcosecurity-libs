@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2021 The Falco Authors.
+# Copyright (C) 2022 The Falco Authors.
 #
 # This file is dual licensed under either the MIT or GPL 2. See
 # MIT.txt or GPL.txt for full copies of the license.
@@ -104,7 +104,7 @@ if(BUILD_DRIVER)
 		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/src/Makefile ${CMAKE_CURRENT_SOURCE_DIR}/Makefile
 		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/src/driver_config.h ${CMAKE_CURRENT_SOURCE_DIR}/driver_config.h
 		COMMAND ${MAKE_COMMAND}
-		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${PROBE_NAME}.ko "${CMAKE_CURRENT_BINARY_DIR}"
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${DRIVER_NAME}.ko "${CMAKE_CURRENT_BINARY_DIR}"
 		WORKING_DIRECTORY src
 		VERBATIM)
 else()
@@ -112,7 +112,7 @@ else()
 		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/src/Makefile ${CMAKE_CURRENT_SOURCE_DIR}/Makefile
 		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_BINARY_DIR}/src/driver_config.h ${CMAKE_CURRENT_SOURCE_DIR}/driver_config.h
 		COMMAND ${MAKE_COMMAND}
-		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${PROBE_NAME}.ko "${CMAKE_CURRENT_BINARY_DIR}"
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${DRIVER_NAME}.ko "${CMAKE_CURRENT_BINARY_DIR}"
 		WORKING_DIRECTORY src
 		VERBATIM)
 endif()
