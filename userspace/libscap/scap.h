@@ -1110,6 +1110,16 @@ uint64_t scap_get_driver_schema_version(scap_t* handle);
  */
 int32_t scap_get_boot_time(char* last_err, uint64_t *boot_time);
 
+/**
+ * Get API version supported by the driver
+ */
+uint64_t scap_get_driver_api_version(scap_t* handle);
+
+/**
+ * Get schema version supported by the driver
+ */
+uint64_t scap_get_driver_schema_version(scap_t* handle);
+
 #ifdef __cplusplus
 }
 #endif

@@ -615,6 +615,14 @@ public:
 	*/
 	inline uint64_t get_driver_schema_version() const
 	{
+		return SCAP_MINIMUM_DRIVER_API_VERSION;
+	}
+
+	/*!
+	  \brief Returns the schema version supported by the driver
+	*/
+	inline uint64_t get_driver_schema_version() const
+	{
 		return scap_get_driver_schema_version(m_h);
 	}
 
