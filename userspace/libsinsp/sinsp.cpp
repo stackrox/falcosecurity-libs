@@ -386,7 +386,7 @@ void sinsp::init()
 
 	import_ifaddr_list();
 
-	import_user_list();
+	m_usergroup_manager.import_users_groups_list();
 
 	//
 	// Scan the list to create the proper parent/child dependencies
