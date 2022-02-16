@@ -1957,4 +1957,3 @@ sinsp_filter_check_iface* sinsp_filter_check_iface::get(const std::string& field
   return check;
 }
 // End StackRox
-
