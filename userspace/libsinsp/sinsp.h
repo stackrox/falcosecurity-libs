@@ -1193,11 +1193,6 @@ public:
 	sinsp_evt::param_fmt m_buffer_format;
 
 	//
-	// User and group tables
-	//
-	bool m_import_users;
-
-	//
 	// The cycle-writer for files
 	//
 	cycle_writer* m_cycle_writer;
