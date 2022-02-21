@@ -63,7 +63,29 @@ struct scap
 	scap_userlist* m_userlist;
 	struct ppm_proclist_info* m_driver_procinfo;
 	uint32_t m_fd_lookup_limit;
+	uint64_t m_unexpected_block_readsize;
+	uint32_t m_ncpus;
 	uint8_t m_cgroup_version;
+
+	// Abstraction layer for windows
+#if CYGWING_AGENT || _WIN32
+	wh_t* m_whh;
+	void* m_win_buf_handle;
+	void* m_win_descs_handle;
+#endif
+	bool m_bpf;
+	bool m_udig;
+	bool m_udig_capturing;
+	// Anonymous struct with bpf stuff
+	struct
+	{
+		int m_bpf_prog_fds[BPF_PROGS_MAX];
+		int m_bpf_prog_cnt;
+		bool m_bpf_fillers[BPF_PROGS_MAX];
+		int m_bpf_event_fd[BPF_PROGS_MAX];
+		int m_bpf_map_fds[BPF_MAPS_MAX];
+		int m_bpf_prog_array_map_idx;
+	};
 
 	// API version supported by the driver
 	// If the API version is unavailable for whatever reason,
