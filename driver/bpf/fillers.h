@@ -26,8 +26,8 @@ or GPL2.txt for full copies of the license.
 #include <linux/audit.h>
 
 
-/* Linux kernel 4.15 introduced the new const `UID_GID_MAP_MAX_BASE_EXTENTS` in place of 
- * the old `UID_GID_MAP_MAX_EXTENTS`, which instead has changed its meaning. 
+/* Linux kernel 4.15 introduced the new const `UID_GID_MAP_MAX_BASE_EXTENTS` in place of
+ * the old `UID_GID_MAP_MAX_EXTENTS`, which instead has changed its meaning.
  * For more info see https://github.com/torvalds/linux/commit/6397fac4915ab3002dc15aae751455da1a852f25
  */
 #ifndef UID_GID_MAP_MAX_BASE_EXTENTS
@@ -129,6 +129,11 @@ FILLER_RAW(terminate_filler)
 		}
 		break;
 	case PPM_SKIP_EVENT:
+		break;
+	case PPM_FAILURE_FRAME_SCRATCH_MAP_FULL:
+		bpf_printk("PPM_FAILURE_FRAME_SCRATCH_MAP_FULL event=%d curarg=%d\n",
+			   state->tail_ctx.evt_type,
+			   state->tail_ctx.curarg);
 		break;
 	default:
 		bpf_printk("Unknown filler res=%d event=%d curarg=%d\n",
@@ -301,7 +306,9 @@ static __always_inline int bpf_poll_parse_fds(struct filler_data *data,
 	fds = (struct pollfd *)data->tmp_scratch;
 	read_size = nfds * sizeof(struct pollfd);
 	if (read_size > SCRATCH_SIZE_MAX)
-		return PPM_FAILURE_BUFFER_FULL;
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
 
 	val = bpf_syscall_get_argument(data, 0);
 #ifdef BPF_FORBIDS_ZERO_ACCESS
@@ -315,7 +322,9 @@ static __always_inline int bpf_poll_parse_fds(struct filler_data *data,
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	if (data->state->tail_ctx.curoff > SCRATCH_SIZE_HALF)
-		return PPM_FAILURE_BUFFER_FULL;
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
 
 	off = data->state->tail_ctx.curoff + sizeof(u16);
 	fds_count = 0;
@@ -323,7 +332,9 @@ static __always_inline int bpf_poll_parse_fds(struct filler_data *data,
 	#pragma unroll
 	for (j = 0; j < POLL_MAXFDS; ++j) {
 		if (off > SCRATCH_SIZE_HALF)
-			return PPM_FAILURE_BUFFER_FULL;
+		{
+			return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+		}
 
 		if (j == nfds)
 			break;
@@ -338,7 +349,9 @@ static __always_inline int bpf_poll_parse_fds(struct filler_data *data,
 		*(s64 *)&data->buf[off & SCRATCH_SIZE_HALF] = fds[j].fd;
 		off += sizeof(s64);
 		if (off > SCRATCH_SIZE_HALF)
-			return PPM_FAILURE_BUFFER_FULL;
+		{
+			return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+		}
 
 		*(s16 *)&data->buf[off & SCRATCH_SIZE_HALF] = flags;
 		off += sizeof(s16);
@@ -410,7 +423,9 @@ static __always_inline int bpf_parse_readv_writev_bufs(struct filler_data *data,
 	iov = (const struct iovec *)data->tmp_scratch;
 
 	if (copylen > SCRATCH_SIZE_MAX)
-		return PPM_FAILURE_BUFFER_FULL;
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
 	if (copylen)
@@ -802,7 +817,7 @@ FILLER(sys_mprotect_x, true)
 	 */
 	retval = bpf_syscall_get_retval(data->ctx);
 	res = bpf_val_to_ring(data, retval);
-	
+
 	return res;
 }
 
@@ -1430,7 +1445,7 @@ FILLER(sys_execveat_e, true)
 	 * dirfd
 	 */
 	val = bpf_syscall_get_argument(data, 0);
-	
+
 	if ((int)val == AT_FDCWD)
 	{
 		val = PPM_AT_FDCWD;
@@ -1682,7 +1697,9 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 	volatile unsigned int off = (unsigned int)*len;
 
 	if (off > SCRATCH_SIZE_HALF)
-		return PPM_FAILURE_BUFFER_FULL;
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
 
 	int res = bpf_probe_read_str(&buf[off & SCRATCH_SIZE_HALF],
 				     SCRATCH_SIZE_HALF,
@@ -1693,7 +1710,9 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 	off += res - 1;
 
 	if (off > SCRATCH_SIZE_HALF)
-		return PPM_FAILURE_BUFFER_FULL;
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
 
 	buf[off & SCRATCH_SIZE_HALF] = '=';
 	++off;
@@ -1722,14 +1741,18 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 
 		if (buf[(off - 1) & SCRATCH_SIZE_HALF] != '/') {
 			if (off > SCRATCH_SIZE_HALF)
-				return PPM_FAILURE_BUFFER_FULL;
+			{
+				return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+			}
 
 			buf[off & SCRATCH_SIZE_HALF] = '/';
 			++off;
 		}
 
 		if (off > SCRATCH_SIZE_HALF)
-			return PPM_FAILURE_BUFFER_FULL;
+		{
+			return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+		}
 
 		res = bpf_probe_read_str(&buf[off & SCRATCH_SIZE_HALF],
 						SCRATCH_SIZE_HALF,
@@ -1747,7 +1770,9 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 	}
 
 	if (off > SCRATCH_SIZE_HALF)
-		return PPM_FAILURE_BUFFER_FULL;
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
 
 	buf[off & SCRATCH_SIZE_HALF] = 0;
 	++off;
@@ -1843,7 +1868,9 @@ static __always_inline int bpf_accumulate_argv_or_env(struct filler_data *data,
 			break;
 
 		if (off > SCRATCH_SIZE_HALF)
-			return PPM_FAILURE_BUFFER_FULL;
+		{
+			return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+		}
 
 		len = bpf_probe_read_str(&data->buf[off & SCRATCH_SIZE_HALF], SCRATCH_SIZE_HALF, arg);
 		if (len == -EFAULT || len == 0)
@@ -1879,7 +1906,7 @@ static __always_inline bool bpf_groups_search(struct group_info *group_info, kgi
 		if (left >= right) {
 			break;
 		}
-		
+
 		unsigned int mid = (left+right)/2;
 		if (gid_gt(grp, _READ(group_info->gid[mid]))) {
 			left = mid + 1;
@@ -1896,19 +1923,19 @@ static __always_inline bool bpf_groups_search(struct group_info *group_info, kgi
 // log(UID_GID_MAP_MAX_EXTENTS) = log(340)
 #define MAX_EXTENT_SEARCH_DEPTH 9
 
-static __always_inline struct uid_gid_extent * 
+static __always_inline struct uid_gid_extent *
 bpf_map_id_up_max(unsigned extents, struct uid_gid_map *map, u32 id)
 {
 	u32 left, right;
 	left = 0;
 	right = _READ(map->nr_extents);
-	
+
 	#pragma unroll MAX_EXTENT_SEARCH_DEPTH
 	for (int j = 0; j < MAX_EXTENT_SEARCH_DEPTH; j++) {
 		if (left >= right) {
 			break;
 		}
-		
+
 		unsigned int mid = (left+right)/2;
 		u32 mid_id = _READ(map->extent[mid].lower_first);
 		if (id > mid_id) {
@@ -1919,11 +1946,11 @@ bpf_map_id_up_max(unsigned extents, struct uid_gid_map *map, u32 id)
 			return &map->extent[mid];
 		}
 	}
-	
+
 	return NULL;
 }
 
-static __always_inline struct uid_gid_extent * 
+static __always_inline struct uid_gid_extent *
 bpf_map_id_up_base(unsigned extents, struct uid_gid_map *map, u32 id)
 {
 	unsigned idx;
@@ -1950,14 +1977,14 @@ static __always_inline u32 bpf_map_id_up(struct uid_gid_map *map, u32 id)
 	if (extents <= UID_GID_MAP_MAX_BASE_EXTENTS) {
 		extent = bpf_map_id_up_base(extents, map, id);
 	}
-	/* Kernel 4.15 increased the number of extents to `340` while all the previous kernels have 
+	/* Kernel 4.15 increased the number of extents to `340` while all the previous kernels have
 	 * the limit set to `5`. So the `if` case should be enough.
 	 */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))			
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
 	else {
 		extent = bpf_map_id_up_max(extents, map, id);
 	}
-#endif 
+#endif
 
 	/* Map the id or note failure */
 	if (extent) {
@@ -2143,7 +2170,7 @@ FILLER(proc_startupdate, true)
 		case PPME_SYSCALL_EXECVE_19_X:
 			val = bpf_syscall_get_argument(data, 1);
 			break;
-		
+
 		case PPME_SYSCALL_EXECVEAT_X:
 			val = bpf_syscall_get_argument(data, 2);
 			break;
@@ -2355,7 +2382,7 @@ FILLER(proc_startupdate_3, true)
 	if (data->state->tail_ctx.evt_type == PPME_SYSCALL_CLONE_20_X ||
 		data->state->tail_ctx.evt_type == PPME_SYSCALL_FORK_20_X ||
 		data->state->tail_ctx.evt_type == PPME_SYSCALL_VFORK_20_X ||
-		data->state->tail_ctx.evt_type == PPME_SYSCALL_CLONE3_X) 
+		data->state->tail_ctx.evt_type == PPME_SYSCALL_CLONE3_X)
 		{
 		/*
 		 * clone-only parameters
@@ -2377,11 +2404,11 @@ FILLER(proc_startupdate_3, true)
 		case PPME_SYSCALL_CLONE_20_X:
 			flags = bpf_syscall_get_argument(data, 0);
 			break;
-		
+
 		case PPME_SYSCALL_CLONE3_X:
 #ifdef __NR_clone3
 			flags = bpf_syscall_get_argument(data, 0);
-			if (bpf_probe_read(&cl_args, sizeof(struct clone_args), (void *)flags)) 
+			if (bpf_probe_read(&cl_args, sizeof(struct clone_args), (void *)flags))
 			{
 				return PPM_FAILURE_INVALID_USER_MEMORY;
 			}
@@ -2509,8 +2536,8 @@ FILLER(proc_startupdate_3, true)
 
 			case PPME_SYSCALL_EXECVEAT_X:
 				val = bpf_syscall_get_argument(data, 3);
-				break;	
-			
+				break;
+
 			default:
 				val = 0;
 				break;
@@ -2567,7 +2594,7 @@ FILLER(proc_startupdate_3, true)
 
 		bpf_tail_call(data->ctx, &tail_map, PPM_FILLER_execve_family_flags);
 		bpf_printk("Can't tail call execve_family_flags filler\n");
-		return PPM_FAILURE_BUG;	
+		return PPM_FAILURE_BUG;
 	}
 
 	return res;
@@ -2587,7 +2614,7 @@ FILLER(execve_family_flags, true)
 	 * exe_writable
 	 */
 	exe_writable = get_exe_writable(task);
-	if (exe_writable) 
+	if (exe_writable)
 	{
 		flags |= PPM_EXE_WRITABLE;
 	}
@@ -5035,7 +5062,7 @@ FILLER(sys_copy_file_range_e, true)
 	res = bpf_val_to_ring(data, len);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
-	
+
 	return res;
 }
 
@@ -5048,7 +5075,7 @@ FILLER(sys_copy_file_range_x, true)
 
 	retval = bpf_syscall_get_retval(data->ctx);
 	res = bpf_val_to_ring(data, retval);
-	
+
 	/*
 	* fdout
 	*/
@@ -5064,7 +5091,7 @@ FILLER(sys_copy_file_range_x, true)
 	res = bpf_val_to_ring(data, offout);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
-	
+
 	return res;
 }
 
