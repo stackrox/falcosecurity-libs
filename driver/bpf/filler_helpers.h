@@ -825,6 +825,7 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 	{
 		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 	}
+	curoff_bounded = data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF;
 
 	if (dyn_idx != (u8)-1) {
 		*((u8 *)&data->buf[curoff_bounded]) = dyn_idx;
@@ -837,6 +838,7 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 	{
 		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 	}
+	curoff_bounded = data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF;
 
 	switch (type) {
 	case PT_CHARBUF:
