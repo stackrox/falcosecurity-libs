@@ -88,7 +88,7 @@ class chiselinfo
 {
 public:
 	chiselinfo(sinsp* inspector);
-	void init(string filterstr, string formatterstr); 
+	void init(string filterstr, string formatterstr);
 	void set_filter(string filterstr);
 	void set_formatter(string formatterstr);
 	void set_callback_interval(uint64_t interval);
@@ -110,15 +110,11 @@ private:
 class SINSP_PUBLIC sinsp_chisel
 {
 public:
-	/* Begin StackRox Section */
 	sinsp_chisel(sinsp* inspector, string filename, bool is_file = true);
-	/* End StackRox Section */
 	~sinsp_chisel();
 	static void add_lua_package_path(lua_State* ls, const char* path);
 	static void get_chisel_list(vector<chisel_desc>* chisel_descs);
-	/* Begin StackRox Section */
 	void load(string cmdstr, bool is_file = true);
-	/* End StackRox Section */
 	string get_name()
 	{
 		return m_filename;
@@ -174,4 +170,3 @@ private:
 };
 
 /*@}*/
-
