@@ -1199,7 +1199,7 @@ void sinsp_chisel::load(string cmdstr, bool is_file)
 		// Load the file
 		//
 		std::istreambuf_iterator<char> eos;
-		scriptstr.assign(std::istreambuf_iterator<char>(is), eos);
+		std::string scriptstr(std::istreambuf_iterator<char>(is), eos);
 	} else {
 		scriptstr = cmdstr;
 	}
@@ -1599,17 +1599,17 @@ bool sinsp_chisel::run(sinsp_evt* evt)
 
 		int oeres = lua_toboolean(m_ls, -1);
 		lua_pop(m_ls, 1);
-		
+
         // Begin StackRox section
 
-		/*	
+		/*
 		if(m_lua_cinfo->m_end_capture == true)
 		{
 			throw chisel_capture_interrupt_exception();
 		}
 		*/
 
-        // End StackRox section 
+        // End StackRox section
 
 		if(oeres == false)
 		{
