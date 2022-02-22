@@ -245,9 +245,7 @@ void chiselinfo::set_callback_precise_interval(uint64_t interval)
 ///////////////////////////////////////////////////////////////////////////////
 // chisel implementation
 ///////////////////////////////////////////////////////////////////////////////
-/* Begin StackRox Section */
-sinsp_chisel::sinsp_chisel(sinsp* inspector, string cmdstr, bool is_file)
-/* End StackRox Section */
+sinsp_chisel::sinsp_chisel(sinsp* inspector, string filename, bool is_file)
 {
 	m_inspector = inspector;
 	m_ls = NULL;
@@ -258,9 +256,7 @@ sinsp_chisel::sinsp_chisel(sinsp* inspector, string cmdstr, bool is_file)
 	m_lua_last_interval_ts = 0;
 	m_udp_socket = 0;
 
-	/* Begin StackRox Section */
-	load(cmdstr, is_file);
-	/* End StackRox Section */
+	load(filename, is_file);
 }
 
 sinsp_chisel::~sinsp_chisel()
@@ -1176,7 +1172,6 @@ bool sinsp_chisel::openfile(string filename, OUT ifstream* is)
 
 void sinsp_chisel::load(string cmdstr, bool is_file)
 {
-	/* Begin StackRox Section */
 	if (is_file) {
 		m_filename = cmdstr;
 		trim(cmdstr);
@@ -1202,16 +1197,15 @@ void sinsp_chisel::load(string cmdstr, bool is_file)
 			}
 		}
 
-#ifdef HAS_LUA_CHISELS
 		//
 		// Load the file
 		//
 		std::istreambuf_iterator<char> eos;
-		scriptstr = std::string(std::istreambuf_iterator<char>(is), eos);
+		std::string scriptstr(std::istreambuf_iterator<char>(is), eos);
 	} else {
 		scriptstr = cmdstr;
 	}
-	/* End StackRox Section */
+#ifdef HAS_LUA_CHISELS
 
 	//
 	// Open the script
@@ -1607,17 +1601,17 @@ bool sinsp_chisel::run(sinsp_evt* evt)
 
 		int oeres = lua_toboolean(m_ls, -1);
 		lua_pop(m_ls, 1);
-		
+
         // Begin StackRox section
 
-		/*	
+		/*
 		if(m_lua_cinfo->m_end_capture == true)
 		{
 			throw sinsp_capture_interrupt_exception();
 		}
 		*/
 
-        // End StackRox section 
+        // End StackRox section
 
 		if(oeres == false)
 		{
