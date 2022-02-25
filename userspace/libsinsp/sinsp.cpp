@@ -79,7 +79,8 @@ sinsp::sinsp(bool static_container, const std::string &static_id, const std::str
 	m_suppressed_comms(),
 	m_inited(false)
 	m_ppm_sc_of_interest(),
-	m_suppressed_comms()
+	m_suppressed_comms(),
+	m_inited(false)
 {
 	++instance_count;
 #if !defined(MINIMAL_BUILD) && !defined(CYGWING_AGENT) && defined(HAS_CAPTURE)
