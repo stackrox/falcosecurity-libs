@@ -2689,11 +2689,15 @@ FILLER(proc_startupdate_3, true)
 FILLER(execve_family_flags, true)
 {
 	struct task_struct *task = NULL;
+	struct cred *cred;
+	kernel_cap_t cap;
 	uint32_t flags = 0;
 	int res = 0;
+	unsigned long val;
 	bool exe_writable = false;
 
 	task = (struct task_struct *)bpf_get_current_task();
+	cred = (struct cred *)_READ(task->cred);
 
 	/*
 	 * exe_writable
@@ -2714,6 +2718,27 @@ FILLER(execve_family_flags, true)
 	{
 		return res;
 	}
+
+	/*
+	 * capabilities
+	 */
+	cap = _READ(cred->cap_inheritable);
+	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
+	res = bpf_val_to_ring(data, capabilities_to_scap(val));
+	if(unlikely(res != PPM_SUCCESS))
+		return res;
+
+	cap = _READ(cred->cap_permitted);
+	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
+	res = bpf_val_to_ring(data, capabilities_to_scap(val));
+	if(unlikely(res != PPM_SUCCESS))
+		return res;
+
+	cap = _READ(cred->cap_effective);
+	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
+	res = bpf_val_to_ring(data, capabilities_to_scap(val));
+	if(unlikely(res != PPM_SUCCESS))
+		return res;
 
 	return res;
 }
@@ -5649,6 +5674,42 @@ FILLER(sys_copy_file_range_x, true)
 	offout = bpf_syscall_get_argument(data, 3);
 	res = bpf_val_to_ring(data, offout);
 	if (unlikely(res != PPM_SUCCESS))
+		return res;
+
+	return res;
+}
+
+FILLER(sys_capset_x, true)
+{
+	unsigned long val;
+	int res;
+	long retval;
+	kernel_cap_t cap;
+	
+	retval = bpf_syscall_get_retval(data->ctx);
+	res = bpf_val_to_ring(data, retval);
+	if (res != PPM_SUCCESS)
+		return res;
+
+	struct task_struct *task = (struct task_struct *) bpf_get_current_task();
+	struct cred *cred = (struct cred*) _READ(task->cred);
+
+	cap = _READ(cred->cap_inheritable);
+	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
+	res = bpf_val_to_ring(data, capabilities_to_scap(val));
+	if(unlikely(res != PPM_SUCCESS))
+		return res;
+
+	cap = _READ(cred->cap_permitted);
+	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
+	res = bpf_val_to_ring(data, capabilities_to_scap(val));
+	if(unlikely(res != PPM_SUCCESS))
+		return res;
+
+	cap = _READ(cred->cap_effective);
+	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
+	res = bpf_val_to_ring(data, capabilities_to_scap(val));
+	if(unlikely(res != PPM_SUCCESS))
 		return res;
 
 	return res;
