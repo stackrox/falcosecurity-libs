@@ -38,4 +38,14 @@ elseif(((BUILD_DRIVER) OR (BUILD_BPF)) AND (CMAKE_SYSTEM_NAME MATCHES "Linux"))
 	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/driver ${PROJECT_BINARY_DIR}/driver)
 endif() # BUILD_USERSPACE
 
+set(LIBSCAP_LIB "${PROJECT_BINARY_DIR}/libscap/libscap.a")
+install(FILES "${LIBSCAP_LIB}" DESTINATION "./lib/${LIBS_PACKAGE_NAME}/")
+install(DIRECTORY "${LIBSCAP_INCLUDE_DIR}" DESTINATION "./include/${LIBS_PACKAGE_NAME}/userspace/"
+			FILES_MATCHING PATTERN "*.h"
+			PATTERN "*examples*" EXCLUDE
+			PATTERN "*doxygen*" EXCLUDE)
+install(DIRECTORY "${DRIVER_CONFIG_DIR}/" DESTINATION "./include/${LIBS_PACKAGE_NAME}/driver/"
+			FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY "${LIBSCAP_DIR}/userspace/common" DESTINATION "./include/${LIBS_PACKAGE_NAME}/userspace/"
+			FILES_MATCHING PATTERN "*.h")
 endif()
