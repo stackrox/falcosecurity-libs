@@ -1382,7 +1382,6 @@ public:
 	uint64_t m_firstevent_ts;
 	sinsp_filter* m_filter;
 	std::string m_filterstring;
-#endif
 	unordered_set<uint32_t> m_ppm_sc_of_interest;
 
 	//
