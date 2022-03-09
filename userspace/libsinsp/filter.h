@@ -20,7 +20,6 @@ limitations under the License.
 #include <set>
 #include <vector>
 
-#ifdef HAS_FILTERING
 
 #include "filter_check_list.h"
 #include "gen_filter.h"
@@ -147,5 +146,3 @@ class SINSP_PUBLIC sinsp_filter_check_iface {
 };
 
 // End StackRox
-
-#endif // HAS_FILTERING
