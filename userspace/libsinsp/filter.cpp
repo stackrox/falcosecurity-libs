@@ -36,7 +36,6 @@ limitations under the License.
 #include "sinsp_int.h"
 #include "utils.h"
 
-#ifdef HAS_FILTERING
 #include "filter.h"
 #include "filterchecks.h"
 #include "value_parser.h"
@@ -2192,4 +2191,3 @@ sinsp_filter_check_iface* sinsp_filter_check_iface::get(const std::string& field
 }
 // End StackRox
 
-#endif // HAS_FILTERING
