@@ -2110,6 +2110,8 @@ static __always_inline int bpf_accumulate_argv_or_env(struct filler_data *data,
 	return PPM_SUCCESS;
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+
 // log(NGROUPS_MAX) = log(65536)
 #define MAX_GROUP_SEARCH_DEPTH 16
 
@@ -2323,6 +2325,7 @@ static __always_inline bool get_exe_writable(struct inode *inode, struct cred *c
 
 	return false;
 }
+#endif // LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
 
 static __always_inline bool get_exe_upper_layer(struct inode *inode)
 {
@@ -2881,6 +2884,7 @@ FILLER(execve_family_flags, true)
 
 	task = (struct task_struct *)bpf_get_current_task();
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
 	/*
 	 * exe_writable
 	 */
@@ -2907,6 +2911,7 @@ FILLER(execve_family_flags, true)
 
 		// write all additional flags for execve family here...
 	}
+#endif // LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
 
 	/* Parameter 20: flags (type: PT_FLAGS32) */
 	int res = bpf_val_to_ring_type(data, flags, PT_UINT32);
