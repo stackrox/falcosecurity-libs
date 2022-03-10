@@ -804,22 +804,22 @@ static int ppm_open(struct inode *inode, struct file *filp)
 
 	/* Begin StackRox section */
 	if (s_syscallIdsCount > 0) {
-		bitmap_zero(g_events_mask, PPM_EVENT_MAX); /* Zero out so that no syscall squeaks past us */
+		bitmap_zero(consumer->events_mask, PPM_EVENT_MAX); /* Zero out so that no syscall squeaks past us */
 		vpr_info("Number of syscall Ids = %d\n", s_syscallIdsCount);
 		for (syscallIndex = 0; syscallIndex < s_syscallIdsCount; syscallIndex++) {
 			int id = s_syscallIds[syscallIndex];
 			if (id >= 0 && id < PPM_EVENT_MAX) {
 				u32 idToSet = (u32)id;
 				vpr_info("%d: Syscall Id to include = %d\n", syscallIndex, idToSet);
-				set_bit(idToSet, g_events_mask);
+				set_bit(idToSet, consumer->events_mask);
 			}
 		}
-		set_bit(PPME_DROP_X, g_events_mask);
-		set_bit(PPME_SYSDIGEVENT_E, g_events_mask);
-		set_bit(PPME_CONTAINER_E, g_events_mask);
-		set_bit(PPME_CONTAINER_X, g_events_mask);
+		set_bit(PPME_DROP_X, consumer->events_mask);
+		set_bit(PPME_SYSDIGEVENT_E, consumer->events_mask);
+		set_bit(PPME_CONTAINER_E, consumer->events_mask);
+		set_bit(PPME_CONTAINER_X, consumer->events_mask);
 	} else {
-		bitmap_fill(g_events_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
+		bitmap_fill(consumer->events_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
 	}
 	/* End StackRox section */
 
@@ -1949,13 +1949,12 @@ static void record_event_all_consumers_for(struct task_struct* task, enum ppm_ev
 	struct ppm_consumer_t *consumer;
 	nanoseconds ns = ppm_nsecs();
 
-	/* Begin StackRox section */
-	/* Moved this from record_event_consumers_for */
-	if (!test_bit(event_type, g_events_mask)) return;
-	/* End StackRox section */
-
 	rcu_read_lock();
 	list_for_each_entry_rcu(consumer, &g_consumer_list, node) {
+		/* Begin StackRox section */
+		/* Moved this from record_event_consumers_for */
+		if (!test_bit(event_type, consumer->events_mask)) continue;
+		/* End StackRox section */
 		record_event_consumer_for(task, consumer, event_type, drop_flags, ns, event_datap);
 	}
 	rcu_read_unlock();
