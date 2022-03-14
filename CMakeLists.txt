@@ -43,6 +43,7 @@ option(ENABLE_DRIVERS_TESTS "Enable driver tests (bpf, kernel module, modern bpf
 
 include(GNUInstallDirs)
 
+include(GNUInstallDirs)
 # Add path for custom CMake modules.
 list(APPEND CMAKE_MODULE_PATH
 	"${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
