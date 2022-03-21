@@ -1040,6 +1040,7 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 			// If res != SCAP_SUCCESS, free thread data for consistency with other locations
 			// in this function where the return value != SCAP_SUCCESS.
 			scap_proc_free(handle, tinfo);
+			free_tinfo = false; // Already free'd by scap_proc_free
 		}
 		/* End StackRox Section */
 	}
