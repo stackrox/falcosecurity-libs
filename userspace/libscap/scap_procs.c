@@ -35,7 +35,7 @@ limitations under the License.
 #endif // HAS_CAPTURE
 
 #include "scap.h"
-#include "../../driver/ppm_ringbuffer.h"
+#include "ppm_ringbuffer.h"
 #include "scap-int.h"
 
 #if defined(CYGWING_AGENT) || defined(_WIN32)

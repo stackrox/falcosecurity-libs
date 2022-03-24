@@ -56,9 +56,14 @@ message(STATUS "Driver schema version ${PPM_SCHEMA_CURRENT_VERSION_MAJOR}.${PPM_
 execute_process(COMMAND git rev-parse HEAD OUTPUT_VARIABLE GIT_COMMIT ERROR_QUIET WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 string(STRIP "${GIT_COMMIT}" GIT_COMMIT)
 
+if(NOT DEFINED RING_BUF_MULTIPLIER)
+	set(RING_BUF_MULTIPLIER 8)
+endif()
+
 configure_file(dkms.conf.in src/dkms.conf)
 configure_file(Makefile.in src/Makefile)
 configure_file(driver_config.h.in src/driver_config.h)
+configure_file(ppm_ringbuffer.h.in src/ppm_ringbuffer.h)
 
 set(DRIVER_SOURCES
 	dynamic_params_table.c
@@ -75,7 +80,6 @@ set(DRIVER_SOURCES
 	ppm_fillers.c
 	ppm_fillers.h
 	ppm_flag_helpers.h
-	ppm_ringbuffer.h
 	ppm_syscall.h
 	syscall_table.c
 	ppm_cputime.c

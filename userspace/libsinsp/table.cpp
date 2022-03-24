@@ -19,7 +19,6 @@ limitations under the License.
 
 #include "sinsp.h"
 #include "sinsp_int.h"
-#include "../../driver/ppm_ringbuffer.h"
 #include "filter.h"
 #include "filter_check_list.h"
 #include "filterchecks.h"

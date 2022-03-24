@@ -28,7 +28,7 @@
 
 #include "scap.h"
 #include "scap-int.h"
-#include "../../driver/ppm_ringbuffer.h"
+#include "ppm_ringbuffer.h"
 
 #define PPM_PORT_STATSD 8125
 
