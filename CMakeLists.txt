@@ -71,8 +71,6 @@ if(NOT WIN32 AND NOT APPLE)
 	option(NO_LINK_GRPC_LIBS "Do not link gRPC libraries" OFF)
 endif()
 
-option(BUILD_USERSPACE "Build userspace libraries" ON)
-
 include(libscap)
 include(libsinsp)
 
