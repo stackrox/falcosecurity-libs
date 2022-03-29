@@ -32,10 +32,6 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     endif()
 endif()
 
-if(BUILD_USERSPACE)
-	add_subdirectory(${LIBSCAP_DIR}/userspace/libscap ${PROJECT_BINARY_DIR}/libscap)
-elseif(((BUILD_DRIVER) OR (BUILD_BPF)) AND (CMAKE_SYSTEM_NAME MATCHES "Linux"))
-	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/driver ${PROJECT_BINARY_DIR}/driver)
-endif() # BUILD_USERSPACE
+add_subdirectory(${LIBSCAP_DIR}/userspace/libscap ${PROJECT_BINARY_DIR}/libscap)
 
 endif()
