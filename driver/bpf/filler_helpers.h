@@ -834,7 +834,8 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 	case PT_CHARBUF:
 	case PT_FSPATH:
 	case PT_FSRELPATH: {
-		if (!data->curarg_already_on_frame) {
+		if (!data->curarg_already_on_frame) 
+		{
 			int res;
 
 			res = bpf_probe_read_str(&data->buf[curoff_bounded],
@@ -843,7 +844,9 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 			if (res == -EFAULT || res == 0)
 				return PPM_FAILURE_INVALID_USER_MEMORY;
 			len = res;
-		} else {
+		} 
+		else 
+		{
 			len = val_len;
 		}
 		break;
