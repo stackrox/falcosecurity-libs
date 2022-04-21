@@ -15,6 +15,12 @@ if(BUILD_BPF)
 		COMMAND "${CMAKE_COMMAND}" -E copy_if_different probe.o "${CMAKE_CURRENT_BINARY_DIR}"
 		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 		VERBATIM)
+	
+	add_custom_target(collector-bpf ALL
+		COMMAND make
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different collector-probe.o "${CMAKE_CURRENT_BINARY_DIR}"
+		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+		VERBATIM)
 endif()
 
 install(FILES
@@ -26,6 +32,7 @@ install(FILES
 	maps.h
 	plumbing_helpers.h
 	probe.c
+	collector_probe.c
 	quirks.h
 	ring_helpers.h
 	types.h
