@@ -307,13 +307,13 @@ static __always_inline int init_filler_data(void *ctx,
 	if (!data->filler_info)
 		return PPM_FAILURE_BUG;
 
-#ifndef BPF_SUPPORTS_RAW_TRACEPOINTS
-	if (is_syscall) {
-		data->args = unstash_args();
-		if (!data->args)
-			return PPM_SKIP_EVENT;
-	}
-#endif
+// #ifndef BPF_SUPPORTS_RAW_TRACEPOINTS
+// 	if (is_syscall) {
+// 		data->args = unstash_args();
+// 		if (!data->args)
+// 			return PPM_SKIP_EVENT;
+// 	}
+// #endif
 
 	data->curarg_already_on_frame = false;
 	data->fd = -1;
