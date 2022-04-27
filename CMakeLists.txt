@@ -90,6 +90,10 @@ endif()
 
 option(BUILD_USERSPACE "Build userspace libraries" ON)
 
+if(CREATE_TEST_TARGETS AND NOT WIN32)
+	include(gtest)
+endif()
+
 include(libscap)
 include(libsinsp)
 
