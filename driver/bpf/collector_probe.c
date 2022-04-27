@@ -9,14 +9,14 @@
 // including any other files, to ensure that the behaviour and structures are
 // as expected for the kinds of tracepoints we are using.
 #ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
-#undef BPF_SUPPORTS_RAW_TRACEPOINTS
+#  undef BPF_SUPPORTS_RAW_TRACEPOINTS
 #endif
 
 #include <generated/utsrelease.h>
 #include <linux/sched.h>
 #include <uapi/linux/bpf.h>
 
-// Unfortunately include order is important here, so turn clang-format 
+// Unfortunately include order is important here, so turn clang-format
 // off to avoid reordering as part of reformatting.
 // clang-format off
 #include "../driver_config.h"
@@ -31,8 +31,8 @@
 #include "builtins.h"
 // clang-format on
 
-static __always_inline int enter_probe(long id, void *ctx, struct sys_enter_args *stack_ctx);
-static __always_inline int exit_probe(long id, void *ctx);
+static __always_inline int enter_probe(long id, void* ctx, struct sys_enter_args* stack_ctx);
+static __always_inline int exit_probe(long id, void* ctx);
 
 #define NUM_SYS_ENTER_ARGS 6
 
@@ -46,37 +46,35 @@ static __always_inline int exit_probe(long id, void *ctx);
  *
  * @param prefix the kind of tracepoint to attach to. e.g. "syscall/" or "sched/"
  * @param event the event to attach to. e.g. sys_enter_accept
- * @param type the type name for the context argument 
+ * @param type the type name for the context argument
  */
 #define PROBE_SIGNATURE(prefix, event, type) \
-	__bpf_section("tracepoint/" prefix #event) int bpf_##event(struct type *ctx)
+  __bpf_section("tracepoint/" prefix #event) int bpf_##event(struct type* ctx)
 
 /**
  * @brief Defines the syscall-specific enter eBPF program.
- * 
+ *
  * @param name the syscall name. e.g. accept, chdir, execve
  * @param syscall_id the ID number for the syscall. e.g. __NR_accept
  */
-#define _COLLECTOR_ENTER_PROBE(name, syscall_id)                                        \
-	PROBE_SIGNATURE("syscalls/", sys_enter_##name, sys_enter_args)               \
-	{                                                                            \
-		struct sys_enter_args stack_ctx = {0};                               \
-		stack_ctx.id = syscall_id;                                              \
-		memcpy(stack_ctx.args, _READ(ctx->args), sizeof(unsigned long) * NUM_SYS_ENTER_ARGS); \
-		return enter_probe(syscall_id, ctx, &stack_ctx);                            \
-	}
+#define _COLLECTOR_ENTER_PROBE(name, syscall_id)                                          \
+  PROBE_SIGNATURE("syscalls/", sys_enter_##name, sys_enter_args) {                        \
+    struct sys_enter_args stack_ctx = {0};                                                \
+    stack_ctx.id = syscall_id;                                                            \
+    memcpy(stack_ctx.args, _READ(ctx->args), sizeof(unsigned long) * NUM_SYS_ENTER_ARGS); \
+    return enter_probe(syscall_id, ctx, &stack_ctx);                                      \
+  }
 
 /**
  * @brief Defines the syscall-specific exit eBPF program.
- * 
+ *
  * @param name the syscall name. e.g. accept, chdir, execve
  * @param syscall_id the ID number for the syscall. e.g. __NR_accept
  */
-#define _COLLECTOR_EXIT_PROBE(name, syscall_id)                         \
-	PROBE_SIGNATURE("syscalls/", sys_exit_##name, sys_exit_args) \
-	{                                                            \
-		return exit_probe(syscall_id, ctx);                     \
-	}
+#define _COLLECTOR_EXIT_PROBE(name, syscall_id)                  \
+  PROBE_SIGNATURE("syscalls/", sys_exit_##name, sys_exit_args) { \
+    return exit_probe(syscall_id, ctx);                          \
+  }
 
 /**
  * @brief Brings together the enter and exit definitions, to define all programs
@@ -85,9 +83,9 @@ static __always_inline int exit_probe(long id, void *ctx);
  * @param name the syscall name. e.g. accept, chdir, execve
  * @param syscall_id the ID number for the syscall. e.g. __NR_accept
  */
-#define COLLECTOR_PROBE(name, syscall_id)        \
-	_COLLECTOR_ENTER_PROBE(name, syscall_id) \
-	_COLLECTOR_EXIT_PROBE(name, syscall_id)
+#define COLLECTOR_PROBE(name, syscall_id)  \
+  _COLLECTOR_ENTER_PROBE(name, syscall_id) \
+  _COLLECTOR_EXIT_PROBE(name, syscall_id)
 
 COLLECTOR_PROBE(chdir, __NR_chdir);
 COLLECTOR_PROBE(accept, __NR_accept);
@@ -116,10 +114,10 @@ COLLECTOR_PROBE(vfork, __NR_vfork);
  *        these args are not available (fork).
  */
 PROBE_SIGNATURE("sched/", sched_process_fork, sched_process_fork_args) {
-  struct sysdig_bpf_settings *settings;
+  struct sysdig_bpf_settings* settings;
   enum ppm_event_type evt_type;
   struct sys_stash_args args;
-  unsigned long *argsp;
+  unsigned long* argsp;
 
   settings = get_bpf_settings();
   if (!settings) {
@@ -149,49 +147,49 @@ PROBE_SIGNATURE("sched/", sched_process_fork, sched_process_fork_args) {
  *        instead, we defer to the appropriate filler.
  */
 PROBE_SIGNATURE("sched/", sched_process_exit, sched_process_exit_args) {
-	struct sysdig_bpf_settings *settings;
-	enum ppm_event_type evt_type = PPME_PROCEXIT_1_E;
-	struct task_struct *task;
-	unsigned int flags;
+  struct sysdig_bpf_settings* settings;
+  enum ppm_event_type evt_type = PPME_PROCEXIT_1_E;
+  struct task_struct* task;
+  unsigned int flags;
 
-	task = (struct task_struct *)bpf_get_current_task();
+  task = (struct task_struct*)bpf_get_current_task();
 
-	flags = _READ(task->flags);
-	if (flags & PF_KTHREAD) {
+  flags = _READ(task->flags);
+  if (flags & PF_KTHREAD) {
     // we only want to process userspace threads.
-		return 0;
+    return 0;
   }
 
-	settings = get_bpf_settings();
-	if (!settings) {
-		return 0;
+  settings = get_bpf_settings();
+  if (!settings) {
+    return 0;
   }
 
-	if (!settings->capture_enabled) {
-		return 0;
+  if (!settings->capture_enabled) {
+    return 0;
   }
 
-	call_filler(ctx, ctx, evt_type, settings, UF_NEVER_DROP);
-	return 0;
+  call_filler(ctx, ctx, evt_type, settings, UF_NEVER_DROP);
+  return 0;
 }
 
 /**
  * @brief Generic sys_enter_* program for any system call. It expects that there exists two
- *        Copies of the context. One as provided by the kernel to the tracepoint entry, and 
+ *        Copies of the context. One as provided by the kernel to the tracepoint entry, and
  *        Another that is on the stack. This is for verifier conformance (the same technique
  *        is used by Falco)
- *        
+ *
  *        The function will exit 0 (zero) regardless of outcome to ensure repeated execution
- * 
+ *
  * @param id the syscall id
  * @param ctx the context pointer as provided by the kernel
  * @param stack_ctx a pointer to a copy of the context that lives on the stack
  *
  * @return 0 (regardless of outcomes)
  */
-static __always_inline int enter_probe(long id, void *ctx, struct sys_enter_args *stack_ctx) {
-  const struct syscall_evt_pair *sc_evt;
-  struct sysdig_bpf_settings *settings;
+static __always_inline int enter_probe(long id, void* ctx, struct sys_enter_args* stack_ctx) {
+  const struct syscall_evt_pair* sc_evt;
+  struct sysdig_bpf_settings* settings;
   enum ppm_event_type evt_type = PPME_GENERIC_E;
   int drop_flags = UF_ALWAYS_DROP;
 
@@ -218,7 +216,7 @@ static __always_inline int enter_probe(long id, void *ctx, struct sys_enter_args
     return 0;
   }
 
-  // stashing the args will copy it into a BPF map for later 
+  // stashing the args will copy it into a BPF map for later
   // processing. This is a required step for the enter probe,
   // and these args are subsequently pulled out of the map and
   // written to the ring buffer.
@@ -232,25 +230,25 @@ static __always_inline int enter_probe(long id, void *ctx, struct sys_enter_args
   //
   // It also handles the stack context problem, so we can pass both
   // pointers through without issue.
-	call_filler(ctx, stack_ctx, evt_type, settings, drop_flags);
+  call_filler(ctx, stack_ctx, evt_type, settings, drop_flags);
   return 0;
 }
 
 /**
- * @brief Generic sys_exit_* program for all syscalls. It is not constrained by the 
+ * @brief Generic sys_exit_* program for all syscalls. It is not constrained by the
  *        same problems as the enter program, and does not require a copy of the context
- *        on the stack. 
+ *        on the stack.
  *
  *        The function will exit 0 (zero) regardless of outcome to ensure repeated execution
- * 
+ *
  * @param id the syscall id
  * @param ctx the eBPF context as provided by the kernel
  *
  * @return 0 (regardless of outcomes)
  */
-static __always_inline int exit_probe(long id, void *ctx) {
-  const struct syscall_evt_pair *sc_evt;
-  struct sysdig_bpf_settings *settings;
+static __always_inline int exit_probe(long id, void* ctx) {
+  const struct syscall_evt_pair* sc_evt;
+  struct sysdig_bpf_settings* settings;
   enum ppm_event_type evt_type = PPME_GENERIC_X;
   int drop_flags = UF_ALWAYS_DROP;
 
@@ -283,7 +281,6 @@ static __always_inline int exit_probe(long id, void *ctx) {
   call_filler(ctx, ctx, evt_type, settings, drop_flags);
   return 0;
 }
-
 
 char kernel_ver[] __bpf_section("kernel_version") = UTS_RELEASE;
 
