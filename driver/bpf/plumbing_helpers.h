@@ -308,11 +308,13 @@ static __always_inline int init_filler_data(void *ctx,
 		return PPM_FAILURE_BUG;
 
 // #ifndef BPF_SUPPORTS_RAW_TRACEPOINTS
-// 	if (is_syscall) {
-// 		data->args = unstash_args();
-// 		if (!data->args)
-// 			return PPM_SKIP_EVENT;
-// 	}
+	if (is_syscall) {
+		data->args = unstash_args();
+		if (!data->args) {
+			bpf_printk("skip event for %d\n", data->state->tail_ctx.evt_type);
+			return PPM_SKIP_EVENT;
+		}
+	}
 // #endif
 
 	data->curarg_already_on_frame = false;
