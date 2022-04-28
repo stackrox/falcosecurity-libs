@@ -1140,6 +1140,7 @@ int32_t scap_bpf_close(scap_t *handle)
 	int ring_size = page_size * BUF_SIZE_PAGES;
 	int header_size = page_size;
 	int total_size = ring_size * 2 + header_size;
+	struct scap_device_set *devset = &handle->m_dev_set;
 
 	for(j = 0; j < handle->m_ndevs; j++)
 	{
@@ -1450,6 +1451,7 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 			.config = PERF_COUNT_SW_BPF_OUTPUT,
 		};
 		int pmu_fd;
+		struct scap_device *dev;
 
 		/* Begin StackRox */
 		if(hotplug_enabled == 1 && j > 0)
@@ -1489,6 +1491,8 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "processors online: %d, expected: %d", online_cpu, handle->m_ndevs);
 			return SCAP_FAILURE;
 		}
+
+		dev = &handle->m_dev_set.m_devs[online_cpu];
 
 		pmu_fd = sys_perf_event_open(&attr, -1, j, -1, 0);
 		if(pmu_fd < 0)

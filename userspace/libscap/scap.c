@@ -1298,11 +1298,12 @@ int32_t scap_readbuf(scap_t* handle, uint32_t cpuid, OUT char** buf, OUT uint32_
 	uint32_t thead;
 	uint32_t ttail;
 	uint64_t read_size;
+	struct scap_device* dev = &handle->m_dev_set.m_devs[cpuid];
 
 #ifndef _WIN32
 	if(handle->m_bpf)
 	{
-		return scap_bpf_readbuf(handle, cpuid, buf, len);
+		return scap_bpf_readbuf(dev, buf, len);
 	}
 #endif
 
@@ -1501,7 +1502,7 @@ static int32_t scap_next_live(scap_t* handle, OUT scap_evt** pevent, OUT uint16_
 		if(handle->m_bpf)
 		{
 #ifndef _WIN32
-			scap_bpf_advance_to_evt(handle, *pcpuid, true,
+			scap_bpf_advance_to_evt(dev, true,
 						dev->m_sn_next_event,
 						&dev->m_sn_next_event,
 						&dev->m_sn_len);
