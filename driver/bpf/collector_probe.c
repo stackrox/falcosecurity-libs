@@ -31,8 +31,8 @@
 #include "builtins.h"
 // clang-format on
 
-static __always_inline int enter_probe(long id, void* ctx, struct sys_enter_args* stack_ctx);
-static __always_inline int exit_probe(long id, void* ctx);
+static __always_inline int enter_probe(long id, struct sys_enter_args* ctx);
+static __always_inline int exit_probe(long id, struct sys_exit_args* ctx);
 
 #define NUM_SYS_ENTER_ARGS 6
 
@@ -57,12 +57,9 @@ static __always_inline int exit_probe(long id, void* ctx);
  * @param name the syscall name. e.g. accept, chdir, execve
  * @param syscall_id the ID number for the syscall. e.g. __NR_accept
  */
-#define _COLLECTOR_ENTER_PROBE(name, syscall_id)                                          \
-  PROBE_SIGNATURE("syscalls/", sys_enter_##name, sys_enter_args) {                        \
-    struct sys_enter_args stack_ctx = {0};                                                \
-    stack_ctx.id = syscall_id;                                                            \
-    memcpy(stack_ctx.args, _READ(ctx->args), sizeof(unsigned long) * NUM_SYS_ENTER_ARGS); \
-    return enter_probe(syscall_id, ctx, &stack_ctx);                                      \
+#define _COLLECTOR_ENTER_PROBE(name, syscall_id)                   \
+  PROBE_SIGNATURE("syscalls/", sys_enter_##name, sys_enter_args) { \
+    return enter_probe(syscall_id, ctx);                           \
   }
 
 /**
@@ -174,24 +171,22 @@ PROBE_SIGNATURE("sched/", sched_process_exit, sched_process_exit_args) {
 }
 
 /**
- * @brief Generic sys_enter_* program for any system call. It expects that there exists two
- *        Copies of the context. One as provided by the kernel to the tracepoint entry, and
- *        Another that is on the stack. This is for verifier conformance (the same technique
- *        is used by Falco)
+ * @brief Generic sys_enter_* program for any system call. It is responsible for
+ *        Verifying userspace settings and early processing of the syscall event.
  *
  *        The function will exit 0 (zero) regardless of outcome to ensure repeated execution
  *
  * @param id the syscall id
  * @param ctx the context pointer as provided by the kernel
- * @param stack_ctx a pointer to a copy of the context that lives on the stack
  *
  * @return 0 (regardless of outcomes)
  */
-static __always_inline int enter_probe(long id, void* ctx, struct sys_enter_args* stack_ctx) {
+static __always_inline int enter_probe(long id, struct sys_enter_args* ctx) {
   const struct syscall_evt_pair* sc_evt;
   struct sysdig_bpf_settings* settings;
   enum ppm_event_type evt_type = PPME_GENERIC_E;
   int drop_flags = UF_ALWAYS_DROP;
+  struct sys_enter_args stack_ctx = {.id = id, {0}};
 
   settings = get_bpf_settings();
   if (!settings) {
@@ -216,11 +211,13 @@ static __always_inline int enter_probe(long id, void* ctx, struct sys_enter_args
     return 0;
   }
 
+  memcpy(stack_ctx.args, _READ(ctx->args), sizeof(unsigned long) * NUM_SYS_ENTER_ARGS);
+
   // stashing the args will copy it into a BPF map for later
   // processing. This is a required step for the enter probe,
   // and these args are subsequently pulled out of the map and
   // written to the ring buffer.
-  if (stash_args(_READ(stack_ctx->args))) {
+  if (stash_args(_READ(stack_ctx.args))) {
     // early indicator that this event is not needed/wanted, so just exit.
     return 0;
   }
@@ -230,14 +227,13 @@ static __always_inline int enter_probe(long id, void* ctx, struct sys_enter_args
   //
   // It also handles the stack context problem, so we can pass both
   // pointers through without issue.
-  call_filler(ctx, stack_ctx, evt_type, settings, drop_flags);
+  call_filler(ctx, &stack_ctx, evt_type, settings, drop_flags);
   return 0;
 }
 
 /**
- * @brief Generic sys_exit_* program for all syscalls. It is not constrained by the
- *        same problems as the enter program, and does not require a copy of the context
- *        on the stack.
+ * @brief Generic sys_exit_* program for any system call. It is responsible for
+ *        Verifying userspace settings and early processing of the syscall event.
  *
  *        The function will exit 0 (zero) regardless of outcome to ensure repeated execution
  *
@@ -246,7 +242,7 @@ static __always_inline int enter_probe(long id, void* ctx, struct sys_enter_args
  *
  * @return 0 (regardless of outcomes)
  */
-static __always_inline int exit_probe(long id, void* ctx) {
+static __always_inline int exit_probe(long id, struct sys_exit_args* ctx) {
   const struct syscall_evt_pair* sc_evt;
   struct sysdig_bpf_settings* settings;
   enum ppm_event_type evt_type = PPME_GENERIC_X;
