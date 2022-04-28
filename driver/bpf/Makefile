@@ -14,7 +14,7 @@ CLANG ?= clang
 
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 
-DEBUG = -DBPF_DEBUG
+# DEBUG = -DBPF_DEBUG
 
 # Begin StackRox
 ifeq ($(shell grep -sq "^\s*struct\s\+audit_task_info\s\+\*audit;\s*$$" $(KERNELDIR)/include/linux/sched.h ; echo $$? ), 0)

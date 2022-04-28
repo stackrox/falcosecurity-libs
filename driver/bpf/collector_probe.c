@@ -108,7 +108,7 @@ COLLECTOR_PROBE(vfork, __NR_vfork);
  *        stashing args for the child (which are a copy of the parent's)
  *
  *        These stashed args are used in subsequent process events where
- *        these args are not available (fork).
+ *        these args are not available (e.g. fork).
  */
 PROBE_SIGNATURE("sched/", sched_process_fork, sched_process_fork_args) {
   struct sysdig_bpf_settings* settings;
@@ -208,17 +208,22 @@ static __always_inline int enter_probe(long id, struct sys_enter_args* ctx) {
     evt_type = sc_evt->enter_event_type;
     drop_flags = sc_evt->flags;
   } else {
+    // early indicator that this event is not needed/wanted, so just exit.
     return 0;
   }
 
+  // To satisfy some verifier requiremnts in later parts of the falco plumbing/fillers,
+  // it is necessary to copy the context onto the stack.
   memcpy(stack_ctx.args, _READ(ctx->args), sizeof(unsigned long) * NUM_SYS_ENTER_ARGS);
 
   // stashing the args will copy it into a BPF map for later
   // processing. This is a required step for the enter probe,
   // and these args are subsequently pulled out of the map and
   // written to the ring buffer.
-  if (stash_args(_READ(stack_ctx.args))) {
-    // early indicator that this event is not needed/wanted, so just exit.
+  //
+  // The args pointer must exist for the lifetime of this event, so we
+  // must not use _READ(stack_ctx.args) here.
+  if (stash_args(stack_ctx.args)) {
     return 0;
   }
 
