@@ -41,7 +41,7 @@ static __always_inline int exit_probe(long id, struct sys_exit_args* ctx);
  *        to create a new section for each eBPF program, which are then processed by
  *        falco to attach those programs to the specified tracepoints (based on the section name)
  *
- *        e.g. section .tracepoint/syscalls/sys_enter_accept will contain the sys_enter_accept
+ *        e.g. section tracepoint/syscalls/sys_enter_accept will contain the sys_enter_accept
  *             program, and will be attached to tracepoint/syscalls/sys_enter_accept
  *
  * @param prefix the kind of tracepoint to attach to. e.g. "syscall/" or "sched/"
@@ -174,7 +174,7 @@ PROBE_SIGNATURE("sched/", sched_process_exit, sched_process_exit_args) {
  * @brief Generic sys_enter_* program for any system call. It is responsible for
  *        Verifying userspace settings and early processing of the syscall event.
  *
- *        The function will exit 0 (zero) regardless of outcome to ensure repeated execution
+ *        The function will exit 0 (zero) regardless of outcome.
  *
  * @param id the syscall id
  * @param ctx the context pointer as provided by the kernel
@@ -240,7 +240,7 @@ static __always_inline int enter_probe(long id, struct sys_enter_args* ctx) {
  * @brief Generic sys_exit_* program for any system call. It is responsible for
  *        Verifying userspace settings and early processing of the syscall event.
  *
- *        The function will exit 0 (zero) regardless of outcome to ensure repeated execution
+ *        The function will exit 0 (zero) regardless of outcome.
  *
  * @param id the syscall id
  * @param ctx the eBPF context as provided by the kernel
