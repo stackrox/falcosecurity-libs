@@ -117,7 +117,7 @@ PROBE_SIGNATURE("sched/", sched_process_fork, sched_process_fork_args) {
   unsigned long* argsp;
 
   settings = get_bpf_settings();
-  if (!settings) {
+  if (settings == NULL) {
     return 0;
   }
 
@@ -128,7 +128,7 @@ PROBE_SIGNATURE("sched/", sched_process_fork, sched_process_fork_args) {
   // using the "private" version of this function so we can
   // provide a pid.
   argsp = __unstash_args(ctx->parent_pid);
-  if (!argsp) {
+  if (argsp == NULL) {
     return 0;
   }
 
@@ -144,21 +144,21 @@ PROBE_SIGNATURE("sched/", sched_process_fork, sched_process_fork_args) {
  *        instead, we defer to the appropriate filler.
  */
 PROBE_SIGNATURE("sched/", sched_process_exit, sched_process_exit_args) {
-  struct sysdig_bpf_settings* settings;
+  struct sysdig_bpf_settings* settings = NULL;
   enum ppm_event_type evt_type = PPME_PROCEXIT_1_E;
-  struct task_struct* task;
-  unsigned int flags;
+  struct task_struct* task = NULL;
+  unsigned int flags = 0;
 
   task = (struct task_struct*)bpf_get_current_task();
 
   flags = _READ(task->flags);
-  if (flags & PF_KTHREAD) {
+  if ((flags & PF_KTHREAD) != 0) {
     // we only want to process userspace threads.
     return 0;
   }
 
   settings = get_bpf_settings();
-  if (!settings) {
+  if (settings == NULL) {
     return 0;
   }
 
@@ -182,14 +182,14 @@ PROBE_SIGNATURE("sched/", sched_process_exit, sched_process_exit_args) {
  * @return 0 (regardless of outcomes)
  */
 static __always_inline int enter_probe(long id, struct sys_enter_args* ctx) {
-  const struct syscall_evt_pair* sc_evt;
-  struct sysdig_bpf_settings* settings;
+  const struct syscall_evt_pair* sc_evt = NULL;
+  struct sysdig_bpf_settings* settings = NULL;
   enum ppm_event_type evt_type = PPME_GENERIC_E;
   int drop_flags = UF_ALWAYS_DROP;
-  struct sys_enter_args stack_ctx = {.id = id, {0}};
+  struct sys_enter_args stack_ctx = {.id = id};
 
   settings = get_bpf_settings();
-  if (!settings) {
+  if (settings == NULL) {
     return 0;
   }
 
@@ -200,17 +200,12 @@ static __always_inline int enter_probe(long id, struct sys_enter_args* ctx) {
   }
 
   sc_evt = get_syscall_info(id);
-  if (!sc_evt) {
+  if (sc_evt == NULL) {
     return 0;
   }
 
-  if (sc_evt->flags & UF_USED) {
-    evt_type = sc_evt->enter_event_type;
-    drop_flags = sc_evt->flags;
-  } else {
-    // early indicator that this event is not needed/wanted, so just exit.
-    return 0;
-  }
+  evt_type = sc_evt->enter_event_type;
+  drop_flags = sc_evt->flags;
 
   // To satisfy some verifier requiremnts in later parts of the falco plumbing/fillers,
   // it is necessary to copy the context onto the stack.
@@ -248,13 +243,13 @@ static __always_inline int enter_probe(long id, struct sys_enter_args* ctx) {
  * @return 0 (regardless of outcomes)
  */
 static __always_inline int exit_probe(long id, struct sys_exit_args* ctx) {
-  const struct syscall_evt_pair* sc_evt;
-  struct sysdig_bpf_settings* settings;
+  const struct syscall_evt_pair* sc_evt = NULL;
+  struct sysdig_bpf_settings* settings = NULL;
   enum ppm_event_type evt_type = PPME_GENERIC_X;
   int drop_flags = UF_ALWAYS_DROP;
 
   settings = get_bpf_settings();
-  if (!settings) {
+  if (settings == NULL) {
     return 0;
   }
 
@@ -265,17 +260,12 @@ static __always_inline int exit_probe(long id, struct sys_exit_args* ctx) {
   }
 
   sc_evt = get_syscall_info(id);
-  if (!sc_evt) {
+  if (sc_evt == NULL) {
     return 0;
   }
 
-  if (sc_evt->flags & UF_USED) {
-    evt_type = sc_evt->exit_event_type;
-    drop_flags = sc_evt->flags;
-  } else {
-    // early indicator that this event is not needed/wanted, so just exit.
-    return 0;
-  }
+  evt_type = sc_evt->exit_event_type;
+  drop_flags = sc_evt->flags;
 
   // the fillers contain syscall specific processing logic, so we simply
   // call into those and let the rest of falco deal with the event.
