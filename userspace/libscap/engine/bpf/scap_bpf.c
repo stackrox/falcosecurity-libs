@@ -41,6 +41,10 @@ limitations under the License.
 #include "scap-int.h"
 #include "scap_bpf.h"
 #include "scap_engine_util.h"
+/* Begin StackRox */
+#include <unistd.h>
+/* End StackRox */
+
 #include "driver_config.h"
 #include "../../driver/bpf/types.h"
 #include "../../driver/bpf/maps.h"
@@ -83,6 +87,8 @@ static int32_t scap_bpf_handle_tp_mask(struct scap_engine_handle engine, uint32_
 // is possible, but at the moment is not very worth the effort considering the
 // subset of features needed.
 //
+
+unsigned char g_bpf_drop_syscalls[SYSCALL_TABLE_SIZE] = {};
 
 struct bpf_map_data {
 	int fd;
