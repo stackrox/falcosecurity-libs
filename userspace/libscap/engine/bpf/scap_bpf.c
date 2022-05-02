@@ -54,6 +54,10 @@ limitations under the License.
 #include "noop.h"
 #include "strerror.h"
 
+#ifdef MINIMAL_BUILD
+#include "noop.h"
+#endif
+
 #ifndef MINIMAL_BUILD
 static inline scap_evt* scap_bpf_next_event(scap_device* dev)
 {

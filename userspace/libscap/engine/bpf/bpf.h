@@ -56,3 +56,5 @@ struct bpf_engine
 
 	interesting_tp_set open_tp_set;
 };
+
+#define SCAP_HANDLE_T struct bpf_engine

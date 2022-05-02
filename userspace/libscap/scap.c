@@ -135,6 +135,14 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 		return NULL;
 	}
 
+	scap_open_args oargs;
+	oargs.proc_callback = proc_callback;
+	oargs.proc_callback_context = proc_callback_context;
+	oargs.import_users = import_users;
+	oargs.bpf_probe = bpf_probe;
+	memcpy(&oargs.suppressed_comms, suppressed_comms, sizeof(*suppressed_comms));
+	memcpy(&oargs.ppm_sc_of_interest, ppm_sc_of_interest, sizeof(*ppm_sc_of_interest));
+
 	//
 	// Allocate the handle
 	//
@@ -259,11 +267,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	//
 	if((*rc = handle->m_vtable->init(handle, oargs)) != SCAP_SUCCESS)
 	{
-		if((*rc = scap_bpf_load(
-			    (struct bpf_engine*)handle->m_bpf_handle.m_handle,
-			    bpf_probe,
-		            &handle->m_api_version,
-		            &handle->m_schema_version) != SCAP_SUCCESS))
+		if((*rc = handle->m_vtable->init(handle, &oargs)) != SCAP_SUCCESS)
 		{
 			snprintf(error, SCAP_LASTERR_SIZE, "%s", handle->m_lasterr);
 			scap_close(handle);
@@ -276,6 +280,8 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 		uint32_t all_scanned_devs;
 		uint64_t api_version;
 		uint64_t schema_version;
+
+		fill_syscalls_of_interest(ppm_sc_of_interest, &handle->syscalls_of_interest);
 
 		//
 		// Allocate the device descriptors.
@@ -1302,14 +1308,16 @@ int32_t scap_readbuf(scap_t* handle, uint32_t cpuid, OUT char** buf, OUT uint32_
 	uint32_t thead;
 	uint32_t ttail;
 	uint64_t read_size;
-	struct scap_device* dev = &handle->m_dev_set.m_devs[cpuid];
+	struct scap_device* dev;
 
-#ifndef _WIN32
-	if(handle->m_bpf)
+	if(handle->m_vtable)
 	{
-		return scap_bpf_readbuf(dev, buf, len);
+		// engines do not even necessarily have a concept of a buffer
+		// that you read events from
+		return SCAP_NOT_SUPPORTED;
 	}
-#endif
+
+	dev = &handle->m_dev_set.m_devs[cpuid];
 
 	//
 	// Read the pointers.
