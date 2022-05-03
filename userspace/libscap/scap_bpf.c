@@ -64,7 +64,7 @@ struct bpf_map_data {
 
 static const int BUF_SIZE_PAGES = 2048;
 
-static const int BPF_LOG_SIZE = 1 << 18;
+static const int BPF_LOG_SIZE = 1 << 20;
 
 static char* license;
 
