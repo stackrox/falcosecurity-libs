@@ -105,6 +105,8 @@ if(CYGWIN OR WIN32)
 		windows_hal.c)
 endif()
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
 add_library(scap STATIC
 	${targetfiles})
 
@@ -146,6 +148,13 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     endif()
 
 	include(FindMakedev)
+endif()
+
+if(NOT MINIMAL_BUILD AND NOT WIN32 AND NOT APPLE) # gVisor is currently only supported on Linux
+	set(ENGINE_GVISOR TRUE)
+	add_definitions(-DHAS_ENGINE_GVISOR)
+	add_subdirectory(engine/gvisor)
+	target_link_libraries(scap scap_engine_gvisor)
 endif()
 
 option(CREATE_TEST_TARGETS "Enable make-targets for unit testing" ON)
