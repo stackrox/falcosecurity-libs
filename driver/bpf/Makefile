@@ -31,7 +31,7 @@ clean:
 	$(MAKE) -C $(KERNELDIR) M=$$PWD clean
 	@rm -f *~
 
-$(obj)/probe.o: $(src)/collector_probe.c \
+$(obj)/probe.o: $(src)/probe.c \
 		$(src)/bpf_helpers.h \
 		$(src)/filler_helpers.h \
 		$(src)/fillers.h \
