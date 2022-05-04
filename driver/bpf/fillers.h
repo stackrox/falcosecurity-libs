@@ -4478,7 +4478,14 @@ FILLER(sys_autofill, true)
 	int res;
 	int j;
 
+	unsigned long ret = 0;
+	unsigned long val = 0;
+
 	evinfo = data->filler_info;
+
+	if (data->state->tail_ctx.evt_type % 2 != 0) {
+		ret = bpf_syscall_get_retval(data->ctx);
+	}
 
 	#pragma unroll
 	for (j = 0; j < PPM_MAX_AUTOFILL_ARGS; j++) {
@@ -4491,7 +4498,7 @@ FILLER(sys_autofill, true)
 		if (arg.id >= 0)
 			val = bpf_syscall_get_argument(data, arg.id);
 		else if (arg.id == AF_ID_RETVAL)
-			val = bpf_syscall_get_retval(data->ctx);
+			val = ret;
 		else if (arg.id == AF_ID_USEDEFAULT)
 			val = arg.default_val;
 
