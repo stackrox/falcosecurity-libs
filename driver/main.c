@@ -815,7 +815,7 @@ static int ppm_open(struct inode *inode, struct file *filp)
 			}
 		}
 		set_bit(PPME_DROP_X, consumer->events_mask);
-		set_bit(PPME_SYSDIGEVENT_E, consumer->events_mask);
+		set_bit(PPME_PLUGINEVENT_E, consumer->events_mask);
 		set_bit(PPME_CONTAINER_E, consumer->events_mask);
 		set_bit(PPME_CONTAINER_X, consumer->events_mask);
 	} else {
