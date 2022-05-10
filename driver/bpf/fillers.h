@@ -3240,7 +3240,12 @@ FILLER(sys_io_uring_setup_x, true)
 	flags = io_uring_setup_flags_to_scap(params.flags);
 	sq_thread_cpu = params.sq_thread_cpu;
 	sq_thread_idle = params.sq_thread_idle;
+
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 	features = io_uring_setup_feats_to_scap(params.features);
+#endif
+
 #else
 	sq_entries = 0;
 	cq_entries = 0;
