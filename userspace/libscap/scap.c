@@ -259,7 +259,11 @@ scap_t* scap_open_live_int(char *error, int32_t *rc,
 	//
 	if((*rc = handle->m_vtable->init(handle, oargs)) != SCAP_SUCCESS)
 	{
-		if((*rc = scap_bpf_load(handle, bpf_probe)) != SCAP_SUCCESS)
+		if((*rc = scap_bpf_load(
+			    (struct bpf_engine*)handle->m_bpf_handle.m_handle,
+			    bpf_probe,
+		            &handle->m_api_version,
+		            &handle->m_schema_version) != SCAP_SUCCESS))
 		{
 			snprintf(error, SCAP_LASTERR_SIZE, "%s", handle->m_lasterr);
 			scap_close(handle);

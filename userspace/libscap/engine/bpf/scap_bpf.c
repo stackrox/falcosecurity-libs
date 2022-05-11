@@ -476,7 +476,7 @@ static int32_t load_tracepoint(struct bpf_engine* handle, const char *event, str
 	struct perf_event_attr attr = {};
 	enum bpf_prog_type program_type;
 	size_t insns_cnt;
-	char buf[SCAP_MAX_PATH_SIZE];
+	char buf[SCAP_LASTERR_SIZE];
 	bool raw_tp;
 	int efd;
 	int err;
@@ -1409,6 +1409,15 @@ int32_t scap_bpf_load(
 	int online_cpu;
 	int j;
 	struct scap_bpf_engine_params* bpf_args = oargs->engine_params;
+	/* Begin StackRox */
+	int hotplug_enabled = 0;
+	char hotplug_filename[SCAP_MAX_PATH_SIZE];
+
+	snprintf(hotplug_filename, sizeof(hotplug_filename), "%s/sys/devices/system/cpu/hotplug/states", scap_get_host_root());
+	if(access(hotplug_filename, F_OK) == 0) {
+		hotplug_enabled = 1;
+	}
+	/* End StackRox */
 
 	if(set_runtime_params(handle) != SCAP_SUCCESS)
 	{
@@ -1837,7 +1846,6 @@ const struct scap_vtable scap_bpf_engine = {
 	.name = BPF_ENGINE,
 	.mode = SCAP_MODE_LIVE,
 	.savefile_ops = NULL,
-
 	.match = match,
 	.alloc_handle = alloc_handle,
 	.init = init,
