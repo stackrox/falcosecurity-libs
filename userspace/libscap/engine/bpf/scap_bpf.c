@@ -36,6 +36,10 @@ limitations under the License.
 #include <unistd.h>
 /* End StackRox */
 
+#include "bpf.h"
+#define SCAP_HANDLE_T struct bpf_engine
+
+#include "engine_handle.h"
 #include "scap.h"
 #include "scap-int.h"
 #include "scap_bpf.h"
@@ -295,7 +299,7 @@ static int cmp_symbols(const void *l, const void *r)
 	}
 }
 
-static int32_t load_elf_maps_section(scap_t *handle, struct bpf_map_data *maps,
+static int32_t load_elf_maps_section(struct bpf_engine *handle, struct bpf_map_data *maps,
 				     int maps_shndx, Elf *elf, Elf_Data *symbols,
 				     int strtabidx, int *nr_maps)
 {
@@ -353,7 +357,7 @@ static int32_t load_elf_maps_section(scap_t *handle, struct bpf_map_data *maps,
 	return SCAP_SUCCESS;
 }
 
-static int32_t load_maps(scap_t *handle, struct bpf_map_data *maps, int nr_maps)
+static int32_t load_maps(struct bpf_engine *handle, struct bpf_map_data *maps, int nr_maps)
 {
 	int j;
 
@@ -377,7 +381,8 @@ static int32_t load_maps(scap_t *handle, struct bpf_map_data *maps, int nr_maps)
 
 		if(handle->m_bpf_map_fds[j] < 0)
 		{
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't create map: %s", scap_strerror(handle, errno));
+			char buf[SCAP_LASTERR_SIZE];
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't create map: %s", scap_strerror_r(buf, errno));
 			return SCAP_FAILURE;
 		}
 
@@ -390,7 +395,7 @@ static int32_t load_maps(scap_t *handle, struct bpf_map_data *maps, int nr_maps)
 	return SCAP_SUCCESS;
 }
 
-static int32_t parse_relocations(scap_t *handle, Elf_Data *data, Elf_Data *symbols,
+static int32_t parse_relocations(struct bpf_engine *handle, Elf_Data *data, Elf_Data *symbols,
 				 GElf_Shdr *shdr, struct bpf_insn *insn,
 				 struct bpf_map_data *maps, int nr_maps)
 {
@@ -444,12 +449,12 @@ static int32_t parse_relocations(scap_t *handle, Elf_Data *data, Elf_Data *symbo
 	return SCAP_SUCCESS;
 }
 
-static int32_t load_tracepoint(scap_t* handle, const char *event, struct bpf_insn *prog, int size)
+static int32_t load_tracepoint(struct bpf_engine* handle, const char *event, struct bpf_insn *prog, int size)
 {
 	struct perf_event_attr attr = {};
 	enum bpf_prog_type program_type;
 	size_t insns_cnt;
-	char buf[SCAP_MAX_PATH_SIZE];
+	char buf[SCAP_LASTERR_SIZE];
 	bool raw_tp;
 	int efd;
 	int err;
@@ -556,7 +561,7 @@ static int32_t load_tracepoint(scap_t* handle, const char *event, struct bpf_ins
 		efd = bpf_raw_tracepoint_open(event, fd);
 		if(efd < 0)
 		{
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "BPF_RAW_TRACEPOINT_OPEN: event %s: %s", event, scap_strerror(handle, errno));
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "BPF_RAW_TRACEPOINT_OPEN: event %s: %s", event, scap_strerror_r(buf, errno));
 			return SCAP_FAILURE;
 		}
 	}
@@ -583,7 +588,7 @@ static int32_t load_tracepoint(scap_t* handle, const char *event, struct bpf_ins
 		if(err < 0 || err >= sizeof(buf))
 		{
 			close(efd);
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "read from '%s' failed '%s'", event, scap_strerror(handle, errno));
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "read from '%s' failed '%s'", event, scap_strerror_r(buf, errno));
 			return SCAP_FAILURE;
 		}
 
@@ -596,14 +601,14 @@ static int32_t load_tracepoint(scap_t* handle, const char *event, struct bpf_ins
 		efd = sys_perf_event_open(&attr, -1, 0, -1, 0);
 		if(efd < 0)
 		{
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "event %d fd %d err %s", id, efd, scap_strerror(handle, errno));
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "event %d fd %d err %s", id, efd, scap_strerror_r(buf, errno));
 			return SCAP_FAILURE;
 		}
 
 		if(ioctl(efd, PERF_EVENT_IOC_SET_BPF, fd))
 		{
 			close(efd);
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "PERF_EVENT_IOC_SET_BPF: %s", scap_strerror(handle, errno));
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "PERF_EVENT_IOC_SET_BPF: %s", scap_strerror_r(buf, errno));
 			return SCAP_FAILURE;
 		}
 	}
@@ -615,7 +620,10 @@ static int32_t load_tracepoint(scap_t* handle, const char *event, struct bpf_ins
 	return SCAP_SUCCESS;
 }
 
-static int32_t load_bpf_file(scap_t *handle, const char *path)
+static int32_t load_bpf_file(
+	struct bpf_engine *handle, const char *path,
+	uint64_t *api_version_p,
+	uint64_t *schema_version_p)
 {
 	int j;
 	int maps_shndx = 0;
@@ -649,7 +657,8 @@ static int32_t load_bpf_file(scap_t *handle, const char *path)
 	int program_fd = open(path, O_RDONLY, 0);
 	if(program_fd < 0)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't open BPF probe '%s': %s", path, scap_strerror(handle, errno));
+		char buf[SCAP_LASTERR_SIZE];
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't open BPF probe '%s': %s", path, scap_strerror_r(buf, errno));
 		return SCAP_FAILURE;
 	}
 
@@ -693,11 +702,11 @@ static int32_t load_bpf_file(scap_t *handle, const char *path)
 		}
 		else if(strcmp(shname, "api_version") == 0) {
 			got_api_version = true;
-			memcpy(&handle->m_api_version, data->d_buf, sizeof(handle->m_api_version));
+			memcpy(api_version_p, data->d_buf, sizeof(*api_version_p));
 		}
 		else if(strcmp(shname, "schema_version") == 0) {
 			got_schema_version = true;
-			memcpy(&handle->m_schema_version, data->d_buf, sizeof(handle->m_schema_version));
+			memcpy(schema_version_p, data->d_buf, sizeof(*schema_version_p));
 		}
 		else if(strcmp(shname, "license") == 0)
 		{
@@ -786,12 +795,13 @@ cleanup:
 	return res;
 }
 
-static void *perf_event_mmap(scap_t *handle, int fd)
+static void *perf_event_mmap(struct bpf_engine *handle, int fd)
 {
 	int page_size = getpagesize();
 	int ring_size = page_size * BUF_SIZE_PAGES;
 	int header_size = page_size;
 	int total_size = ring_size * 2 + header_size;
+	char buf[SCAP_LASTERR_SIZE];
 
 	//
 	// All this playing with MAP_FIXED might be very very wrong, revisit
@@ -800,7 +810,7 @@ static void *perf_event_mmap(scap_t *handle, int fd)
 	void *tmp = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	if(tmp == MAP_FAILED)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "mmap (1): %s", scap_strerror(handle, errno));
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "mmap (1): %s", scap_strerror_r(buf, errno));
 		return MAP_FAILED;
 	}
 
@@ -808,7 +818,7 @@ static void *perf_event_mmap(scap_t *handle, int fd)
 	void *p1 = mmap(tmp + ring_size, ring_size + header_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0);
 	if(p1 == MAP_FAILED)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "mmap (2): %s", scap_strerror(handle, errno));
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "mmap (2): %s", scap_strerror_r(buf, errno));
 		munmap(tmp, total_size);
 		return MAP_FAILED;
 	}
@@ -819,7 +829,7 @@ static void *perf_event_mmap(scap_t *handle, int fd)
 	void *p2 = mmap(tmp, ring_size + header_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0);
 	if(p2 == MAP_FAILED)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "mmap (3): %s", scap_strerror(handle, errno));
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "mmap (3): %s", scap_strerror_r(buf, errno));
 		munmap(tmp, total_size);
 		return MAP_FAILED;
 	}
@@ -829,7 +839,7 @@ static void *perf_event_mmap(scap_t *handle, int fd)
 	return tmp;
 }
 
-static int32_t populate_syscall_routing_table_map(scap_t *handle)
+static int32_t populate_syscall_routing_table_map(struct bpf_engine *handle)
 {
 	int j;
 
@@ -846,7 +856,7 @@ static int32_t populate_syscall_routing_table_map(scap_t *handle)
 	return bpf_map_freeze(handle->m_bpf_map_fds[SCAP_SYSCALL_CODE_ROUTING_TABLE]);
 }
 
-static int32_t populate_syscall_table_map(scap_t *handle)
+static int32_t populate_syscall_table_map(struct bpf_engine *handle)
 {
 	static const struct syscall_evt_pair uninterested_pair = { .flags = UF_UNINTERESTING };
 	int j;
@@ -854,7 +864,7 @@ static int32_t populate_syscall_table_map(scap_t *handle)
 	for(j = 0; j < SYSCALL_TABLE_SIZE; ++j)
 	{
 		const struct syscall_evt_pair *p = &g_syscall_table[j];
-		if (!handle->syscalls_of_interest[j] || g_bpf_drop_syscalls[j])
+		if (!handle->m_syscalls_of_interest[j] || g_bpf_drop_syscalls[j])
 		{
 			p = &uninterested_pair;
 		}
@@ -869,7 +879,7 @@ static int32_t populate_syscall_table_map(scap_t *handle)
 	return SCAP_SUCCESS;
 }
 
-static int32_t populate_event_table_map(scap_t *handle)
+static int32_t populate_event_table_map(struct bpf_engine *handle)
 {
 	int j;
 
@@ -886,7 +896,7 @@ static int32_t populate_event_table_map(scap_t *handle)
 	return bpf_map_freeze(handle->m_bpf_map_fds[SCAP_EVENT_INFO_TABLE]);
 }
 
-static int32_t populate_fillers_table_map(scap_t *handle)
+static int32_t populate_fillers_table_map(struct bpf_engine *handle)
 {
 	int j;
 
@@ -930,12 +940,9 @@ static int32_t calibrate_socket_file_ops()
 	return SCAP_SUCCESS;
 }
 
-#endif // MINIMAL_BUILD
-
-#ifndef MINIMAL_BUILD
-
-int32_t scap_bpf_start_capture(scap_t *handle)
+int32_t scap_bpf_start_capture(struct scap_engine_handle engine)
 {
+	struct bpf_engine* handle = engine.m_handle;
 	struct scap_bpf_settings settings;
 	int k = 0;
 
@@ -962,8 +969,9 @@ int32_t scap_bpf_start_capture(scap_t *handle)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_stop_capture(scap_t *handle)
+int32_t scap_bpf_stop_capture(struct scap_engine_handle engine)
 {
+	struct bpf_engine* handle = engine.m_handle;
 	struct scap_bpf_settings settings;
 	int k = 0;
 
@@ -983,9 +991,10 @@ int32_t scap_bpf_stop_capture(scap_t *handle)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_set_snaplen(scap_t* handle, uint32_t snaplen)
+int32_t scap_bpf_set_snaplen(struct scap_engine_handle engine, uint32_t snaplen)
 {
 	struct scap_bpf_settings settings;
+	struct bpf_engine *handle = engine.m_handle;
 	int k = 0;
 
 	if(snaplen > RW_MAX_SNAPLEN)
@@ -1010,9 +1019,10 @@ int32_t scap_bpf_set_snaplen(scap_t* handle, uint32_t snaplen)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, uint16_t range_end)
+int32_t scap_bpf_set_fullcapture_port_range(struct scap_engine_handle engine, uint16_t range_start, uint16_t range_end)
 {
 	struct scap_bpf_settings settings;
+	struct bpf_engine *handle = engine.m_handle;
 	int k = 0;
 
 	if(bpf_map_lookup_elem(handle->m_bpf_map_fds[SCAP_SETTINGS_MAP], &k, &settings) != 0)
@@ -1032,9 +1042,10 @@ int32_t scap_bpf_set_fullcapture_port_range(scap_t* handle, uint16_t range_start
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_set_statsd_port(scap_t* const handle, const uint16_t port)
+int32_t scap_bpf_set_statsd_port(struct scap_engine_handle engine, const uint16_t port)
 {
 	struct scap_bpf_settings settings = {};
+	struct bpf_engine *handle = engine.m_handle;
 	int k = 0;
 
 	if(bpf_map_lookup_elem(handle->m_bpf_map_fds[SCAP_SETTINGS_MAP], &k, &settings) != 0)
@@ -1054,9 +1065,10 @@ int32_t scap_bpf_set_statsd_port(scap_t* const handle, const uint16_t port)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_disable_dynamic_snaplen(scap_t* handle)
+int32_t scap_bpf_disable_dynamic_snaplen(struct scap_engine_handle engine)
 {
 	struct scap_bpf_settings settings;
+	struct bpf_engine *handle = engine.m_handle;
 	int k = 0;
 
 	if(bpf_map_lookup_elem(handle->m_bpf_map_fds[SCAP_SETTINGS_MAP], &k, &settings) != 0)
@@ -1075,8 +1087,9 @@ int32_t scap_bpf_disable_dynamic_snaplen(scap_t* handle)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio)
+int32_t scap_bpf_start_dropping_mode(struct scap_engine_handle engine, uint32_t sampling_ratio)
 {
+	struct bpf_engine *handle = engine.m_handle;
 	switch(sampling_ratio)
 	{
 		case 1:
@@ -1113,9 +1126,10 @@ int32_t scap_bpf_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_stop_dropping_mode(scap_t* handle)
+int32_t scap_bpf_stop_dropping_mode(struct scap_engine_handle engine)
 {
 	struct scap_bpf_settings settings;
+	struct bpf_engine *handle = engine.m_handle;
 	int k = 0;
 
 	if(bpf_map_lookup_elem(handle->m_bpf_map_fds[SCAP_SETTINGS_MAP], &k, &settings) != 0)
@@ -1135,9 +1149,10 @@ int32_t scap_bpf_stop_dropping_mode(scap_t* handle)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_enable_dynamic_snaplen(scap_t* handle)
+int32_t scap_bpf_enable_dynamic_snaplen(struct scap_engine_handle engine)
 {
 	struct scap_bpf_settings settings;
+	struct bpf_engine *handle = engine.m_handle;
 	int k = 0;
 
 	if(bpf_map_lookup_elem(handle->m_bpf_map_fds[SCAP_SETTINGS_MAP], &k, &settings) != 0)
@@ -1156,9 +1171,10 @@ int32_t scap_bpf_enable_dynamic_snaplen(scap_t* handle)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_enable_page_faults(scap_t* handle)
+int32_t scap_bpf_enable_page_faults(struct scap_engine_handle engine)
 {
 	struct scap_bpf_settings settings;
+	struct bpf_engine *handle = engine.m_handle;
 	int k = 0;
 
 	if(bpf_map_lookup_elem(handle->m_bpf_map_fds[SCAP_SETTINGS_MAP], &k, &settings) != 0)
@@ -1177,9 +1193,10 @@ int32_t scap_bpf_enable_page_faults(scap_t* handle)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_enable_tracers_capture(scap_t* handle)
+int32_t scap_bpf_enable_tracers_capture(struct scap_engine_handle engine)
 {
 	struct scap_bpf_settings settings;
+	struct bpf_engine *handle = engine.m_handle;
 	int k = 0;
 
 	if(bpf_map_lookup_elem(handle->m_bpf_map_fds[SCAP_SETTINGS_MAP], &k, &settings) != 0)
@@ -1198,8 +1215,9 @@ int32_t scap_bpf_enable_tracers_capture(scap_t* handle)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_close(scap_t *handle)
+int32_t scap_bpf_close(struct scap_engine_handle engine)
 {
+	struct bpf_engine *handle = engine.m_handle;
 	int j;
 
 	int page_size = getpagesize();
@@ -1263,75 +1281,75 @@ int32_t scap_bpf_close(scap_t *handle)
 
 #else // MINIMAL_BUILD
 
-int32_t scap_bpf_start_capture(scap_t *handle)
+int32_t scap_bpf_start_capture(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_stop_capture(scap_t *handle)
+int32_t scap_bpf_stop_capture(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_set_snaplen(scap_t* handle, uint32_t snaplen)
+int32_t scap_bpf_set_snaplen(struct scap_engine_handle engine, uint32_t snaplen)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, uint16_t range_end)
+int32_t scap_bpf_set_fullcapture_port_range(struct scap_engine_handle engine, uint16_t range_start, uint16_t range_end)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_set_statsd_port(scap_t* const handle, const uint16_t port)
+int32_t scap_bpf_set_statsd_port(struct scap_engine_handle engine, const uint16_t port)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_disable_dynamic_snaplen(scap_t* handle)
+int32_t scap_bpf_disable_dynamic_snaplen(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio)
+int32_t scap_bpf_start_dropping_mode(struct scap_engine_handle engine, uint32_t sampling_ratio)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_stop_dropping_mode(scap_t* handle)
+int32_t scap_bpf_stop_dropping_mode(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_enable_dynamic_snaplen(scap_t* handle)
+int32_t scap_bpf_enable_dynamic_snaplen(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_enable_page_faults(scap_t* handle)
+int32_t scap_bpf_enable_page_faults(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_enable_tracers_capture(scap_t* handle)
+int32_t scap_bpf_enable_tracers_capture(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_close(scap_t *handle)
+int32_t scap_bpf_close(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
@@ -1342,7 +1360,7 @@ int32_t scap_bpf_close(scap_t *handle)
 // This is completely horrible, revisit this shameful code
 // with a proper solution
 //
-static int32_t set_boot_time(scap_t *handle, uint64_t *boot_time)
+static int32_t set_boot_time(struct bpf_engine *handle, uint64_t *boot_time)
 {
 	struct timespec ts_uptime;
 	struct timeval tv_now;
@@ -1370,7 +1388,7 @@ static int32_t set_boot_time(scap_t *handle, uint64_t *boot_time)
 	return SCAP_SUCCESS;
 }
 
-static int32_t set_runtime_params(scap_t *handle)
+static int32_t set_runtime_params(struct bpf_engine *handle)
 {
 	struct rlimit rl;
 	rl.rlim_max = RLIM_INFINITY;
@@ -1420,7 +1438,7 @@ static int32_t set_runtime_params(scap_t *handle)
 	return SCAP_SUCCESS;
 }
 
-static int32_t set_default_settings(scap_t *handle)
+static int32_t set_default_settings(struct bpf_engine *handle)
 {
 	struct scap_bpf_settings settings;
 
@@ -1453,10 +1471,12 @@ static int32_t set_default_settings(scap_t *handle)
 
 	return SCAP_SUCCESS;
 }
-#endif // MINIMAL_BUILD
 
-#ifndef MINIMAL_BUILD
-int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
+int32_t scap_bpf_load(
+	struct bpf_engine *handle,
+	const char *bpf_probe,
+	uint64_t *api_version_p,
+	uint64_t *schema_version_p)
 {
 	int online_cpu;
 	int j;
@@ -1469,6 +1489,7 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 		hotplug_enabled = 1;
 	}
 	/* End StackRox */
+	char buf[SCAP_LASTERR_SIZE];
 
 	if(set_runtime_params(handle) != SCAP_SUCCESS)
 	{
@@ -1483,7 +1504,7 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 		return SCAP_FAILURE;
 	}
 
-	if(load_bpf_file(handle, bpf_probe) != SCAP_SUCCESS)
+	if(load_bpf_file(handle, bpf_probe, api_version_p, schema_version_p) != SCAP_SUCCESS)
 	{
 		return SCAP_FAILURE;
 	}
@@ -1535,7 +1556,7 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 			fp = fopen(filename, "r");
 			if(fp == NULL)
 			{
-				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't open %s: %s", filename, scap_strerror(handle, errno));
+				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't open %s: %s", filename, scap_strerror_r(buf, errno));
 				return SCAP_FAILURE;
 			}
 
@@ -1543,7 +1564,7 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 			{
 				fclose(fp);
 
-				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't read %s: %s", filename, scap_strerror(handle, errno));
+				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't read %s: %s", filename, scap_strerror_r(buf, errno));
 				return SCAP_FAILURE;
 			}
 
@@ -1566,7 +1587,7 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 		pmu_fd = sys_perf_event_open(&attr, -1, j, -1, 0);
 		if(pmu_fd < 0)
 		{
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "pmu_fd < 0: %s", scap_strerror(handle, errno));
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "pmu_fd < 0: %s", scap_strerror_r(buf, errno));
 			return SCAP_FAILURE;
 		}
 
@@ -1574,7 +1595,7 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 
 		if(bpf_map_update_elem(handle->m_bpf_map_fds[SCAP_PERF_MAP], &j, &pmu_fd, BPF_ANY) != 0)
 		{
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "SCAP_PERF_MAP bpf_map_update_elem < 0: %s", scap_strerror(handle, errno));
+			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "SCAP_PERF_MAP bpf_map_update_elem < 0: %s", scap_strerror_r(buf, errno));
 			return SCAP_FAILURE;
 		}
 
@@ -1610,8 +1631,9 @@ int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_get_stats(scap_t* handle, OUT scap_stats* stats)
+int32_t scap_bpf_get_stats(struct scap_engine_handle engine, OUT scap_stats* stats)
 {
+	struct bpf_engine *handle = engine.m_handle;
 	int j;
 
 	for(j = 0; j < handle->m_ncpus; j++)
@@ -1637,8 +1659,9 @@ int32_t scap_bpf_get_stats(scap_t* handle, OUT scap_stats* stats)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_get_n_tracepoint_hit(scap_t* handle, long* ret)
+int32_t scap_bpf_get_n_tracepoint_hit(struct scap_engine_handle engine, long* ret)
 {
+	struct bpf_engine *handle = engine.m_handle;
 	int j;
 
 	for(j = 0; j < handle->m_ncpus; j++)
@@ -1656,23 +1679,25 @@ int32_t scap_bpf_get_n_tracepoint_hit(scap_t* handle, long* ret)
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_bpf_set_simple_mode(scap_t* handle)
+int32_t scap_bpf_set_simple_mode(struct scap_engine_handle engine)
 {
+	struct bpf_engine *handle = engine.m_handle;
 	int j;
 	for(j = 0; j < SYSCALL_TABLE_SIZE; ++j)
 	{
 		const struct syscall_evt_pair *p = &g_syscall_table[j];
 		if(!(p->flags & UF_SIMPLEDRIVER_KEEP))
 		{
-			handle->syscalls_of_interest[j] = false;
+			handle->m_syscalls_of_interest[j] = false;
 		}
 	}
 	return populate_syscall_table_map(handle);
 }
 
-int32_t scap_bpf_handle_event_mask(scap_t *handle, uint32_t op, uint32_t event_id) {
+int32_t scap_bpf_handle_event_mask(struct scap_engine_handle engine, uint32_t op, uint32_t event_id) {
 	int j;
 	bool quit = false;
+	struct bpf_engine *handle = engine.m_handle;
 	for(j = 0; j < SYSCALL_TABLE_SIZE && !quit; ++j)
 	{
 		/*
@@ -1684,14 +1709,14 @@ int32_t scap_bpf_handle_event_mask(scap_t *handle, uint32_t op, uint32_t event_i
 			switch(op)
 			{
 			case PPM_IOCTL_MASK_ZERO_EVENTS:
-				handle->syscalls_of_interest[j] = false;
+				handle->m_syscalls_of_interest[j] = false;
 				break;
 			case PPM_IOCTL_MASK_SET_EVENT:
-				handle->syscalls_of_interest[j] = true;
+				handle->m_syscalls_of_interest[j] = true;
 				quit = true;
 				break;
 			case PPM_IOCTL_MASK_UNSET_EVENT:
-				handle->syscalls_of_interest[j] = false;
+				handle->m_syscalls_of_interest[j] = false;
 				quit = true;
 				break;
 			default:
@@ -1705,45 +1730,49 @@ int32_t scap_bpf_handle_event_mask(scap_t *handle, uint32_t op, uint32_t event_i
 	return populate_syscall_table_map(handle);
 }
 
-int32_t scap_next_bpf(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
+int32_t scap_next_bpf(struct scap_engine_handle engine, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
 {
-	return ringbuffer_next(&handle->m_dev_set, pevent, pcpuid);
+	return ringbuffer_next(&engine.m_handle->m_dev_set, pevent, pcpuid);
 }
 #else // MINIMAL_BUILD
 
-int32_t scap_bpf_load(scap_t *handle, const char *bpf_probe)
+int32_t scap_bpf_load(
+	struct bpf_engine *handle,
+	const char *bpf_probe,
+	uint64_t *api_version_p,
+	uint64_t *schema_version_p)
 {
 	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_get_stats(scap_t* handle, OUT scap_stats* stats)
+int32_t scap_bpf_get_stats(struct scap_engine_handle engine, OUT scap_stats* stats)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_get_n_tracepoint_hit(scap_t* handle, long* ret)
+int32_t scap_bpf_get_n_tracepoint_hit(struct scap_engine_handle engine, long* ret)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_set_simple_mode(scap_t* handle)
+int32_t scap_bpf_set_simple_mode(struct scap_engine_handle engine)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_bpf_handle_event_mask(scap_t *handle, uint32_t op, uint32_t event_id)
+int32_t scap_bpf_handle_event_mask(struct scap_engine_handle engine, uint32_t op, uint32_t event_id)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 
-int32_t scap_next_bpf(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
+int32_t scap_next_bpf(struct scap_engine_handle engine, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
 {
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
+	snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "The eBPF probe driver is not supported when using a minimal build");
 	return SCAP_FAILURE;
 }
 #endif // MINIMAL_BUILD
