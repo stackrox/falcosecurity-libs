@@ -455,8 +455,6 @@ int32_t scap_kmod_get_stats(struct scap_engine_handle engine, scap_stats* stats)
 		stats->n_preemptions += dev->m_bufinfo->n_preemptions;
 }
 
-return SCAP_SUCCESS;
-}
 
 //
 // Stop capturing the events
