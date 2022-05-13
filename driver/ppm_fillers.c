@@ -5138,6 +5138,8 @@ int f_sys_io_uring_setup_x (struct event_filler_arguments *args)
 	sq_thread_idle = params.sq_thread_idle;
 #ifdef IORING_FEAT_SINGLE_MMAP
 	features = io_uring_setup_feats_to_scap(params.features);
+#else
+	features = 0;
 #endif
 #endif // __NR_io_uring_setup
 	/*
