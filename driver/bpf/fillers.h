@@ -3244,7 +3244,11 @@ FILLER(sys_io_uring_setup_x, true)
 
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+	// the features variable only exists past 5.4.0, introduced in this commit:
+	// https://github.com/torvalds/linux/commit/ac90f249e15cd2a850daa9e36e15f81ce1ff6550
 	features = io_uring_setup_feats_to_scap(params.features);
+#else
+	features = 0;
 #endif
 
 #else
