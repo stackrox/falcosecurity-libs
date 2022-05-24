@@ -1685,6 +1685,25 @@ static void add_filtercheck_value(gen_event_filter_check *chk, size_t idx, const
 	}
 }
 
+static void add_filtercheck_value(gen_event_filter_check *chk, size_t idx, const std::string& value)
+{
+	std::vector<char> hex_bytes;
+	switch(chk->m_cmpop)
+	{
+		case CO_BCONTAINS:
+		case CO_BSTARTSWITH:
+			if(!sinsp_utils::unhex(std::vector<char>(value.c_str(), value.c_str() + value.size()), hex_bytes))
+			{
+				throw sinsp_exception("filter error: bcontains and bstartswith operator support hex strings only");
+			}
+			chk->add_filter_value(&hex_bytes[0], hex_bytes.size(), idx);
+			break;
+		default:
+			chk->add_filter_value(value.c_str(), value.size(), idx);
+			break;
+	}
+}
+
 void sinsp_filter_compiler::visit(libsinsp::filter::ast::binary_check_expr* e)
 {
 	m_pos = e->get_pos();
