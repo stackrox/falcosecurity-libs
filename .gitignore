@@ -12,6 +12,7 @@
 build/
 driver/Makefile
 driver/driver_config.h
+driver/ppm_ringbuffer.h
 *.pyc
 *.config
 *.creator
