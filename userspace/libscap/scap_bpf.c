@@ -805,7 +805,7 @@ static int32_t populate_syscall_table_map(scap_t *handle)
 	for(j = 0; j < SYSCALL_TABLE_SIZE; ++j)
 	{
 		const struct syscall_evt_pair *p = &g_syscall_table[j];
-		if (!handle->syscalls_of_interest[j])
+		if (!handle->syscalls_of_interest[j] || g_bpf_drop_syscalls[j])
 		{
 			p = &uninterested_pair;
 		}
