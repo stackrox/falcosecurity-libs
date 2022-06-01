@@ -2687,7 +2687,7 @@ int32_t scap_disable_dynamic_snaplen(scap_t* handle)
 
 const char* scap_get_host_root()
 {
-	char* p = getenv("COLLECTOR_HOST_ROOT");
+	char* p = getenv("SCAP_HOST_ROOT_ENV_VAR_NAME");
 	static char env_str[SCAP_MAX_PATH_SIZE + 1];
 	static bool inited = false;
 	if (! inited) {
