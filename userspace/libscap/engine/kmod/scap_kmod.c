@@ -756,7 +756,6 @@ static int32_t scap_kmod_get_threadlist(struct scap_engine_handle engine, struct
 		{
 			return scap_errprintf(kmod_engine->m_lasterr, errno, "Error calling PPM_IOCTL_GET_PROCLIST");
 		}
-	}
 
 	return SCAP_SUCCESS;
 }
