@@ -154,6 +154,7 @@ static __always_inline unsigned long bpf_syscall_get_argument_from_ctx(void *ctx
 #ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
 
 	struct sys_enter_args *args = (struct sys_enter_args *)ctx;
+	/* This is used both by ARM64 and x86. */
 	struct pt_regs *regs = (struct pt_regs *)args->regs;
 
 #ifdef CONFIG_X86_64
