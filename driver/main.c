@@ -117,6 +117,13 @@ struct event_data_t {
 			struct linux_binprm *bprm;
 		} sched_proc_exec_data;
 
+#ifdef __aarch64__
+		struct {
+			struct task_struct *parent;
+			struct task_struct *child;
+		} sched_proc_fork_data;
+#endif
+
 		struct fault_data_t fault_data;
 	} event_info;
 };
@@ -184,6 +191,7 @@ TRACEPOINT_PROBE(page_fault_probe, unsigned long address, struct pt_regs *regs, 
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
 TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm);
+TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_struct *child);
 #endif
 
 /* Begin StackRox section */
@@ -251,6 +259,7 @@ static bool g_fault_tracepoint_disabled;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
 static struct tracepoint *tp_sched_proc_exec;
+static struct tracepoint *tp_sched_proc_fork;
 #endif
 
 #ifdef _DEBUG
@@ -893,6 +902,11 @@ static int ppm_open(struct inode *inode, struct file *filp)
 			pr_err("can't create the 'sched_proc_exec' tracepoint\n");
 			goto err_sched_proc_exec;
 		}
+		ret = compat_register_trace(sched_proc_fork_probe, "sched_process_fork", tp_sched_proc_fork);
+		if (ret) {
+			pr_err("can't create the 'sched_proc_fork' tracepoint\n");
+			goto err_sched_proc_fork;
+		}
 #endif
 		g_tracepoint_registered = true;
 	}
@@ -902,6 +916,8 @@ static int ppm_open(struct inode *inode, struct file *filp)
 	goto cleanup_open;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
+err_sched_proc_fork:
+	compat_unregister_trace(sched_proc_exec_probe, "sched_process_exec", tp_sched_proc_exec);
 err_sched_proc_exec:
 	compat_unregister_trace(signal_deliver_probe, "signal_deliver", tp_signal_deliver);
 #endif
@@ -1015,6 +1031,7 @@ static int ppm_release(struct inode *inode, struct file *filp)
 #endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
 			compat_unregister_trace(sched_proc_exec_probe, "sched_process_exec", tp_sched_proc_exec);
+			compat_unregister_trace(sched_proc_fork_probe, "sched_process_fork", tp_sched_proc_fork);
 #endif
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 			tracepoint_synchronize_unregister();
@@ -2247,19 +2264,24 @@ static int record_event_consumer_for(struct task_struct* task,
 		 * Fire the filler callback
 		 */
 		
-		/* For events of type `PPMC_SCHED_PROC_EXEC` or `PPMC_SCHED_PROC_FORK` we 
-		 * don't have a filler in the table or better we need to call another filler
-		 * for that event that is not in the table.
+		/* For events with category `PPMC_SCHED_PROC_EXEC` or `PPMC_SCHED_PROC_FORK`
+		 * we need to call dedicated fillers that are not in our `g_ppm_events` table.
 		 */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
-		if(event_datap->category == PPMC_SCHED_PROC_EXEC)
+		switch (event_datap->category)
 		{
+#ifdef __aarch64__
+		case PPMC_SCHED_PROC_EXEC:
 			cbres = f_sched_prog_exec(&args);
-		}
-#endif
+			break;
 
-		if(event_datap->category != PPMC_SCHED_PROC_EXEC) 
-		{
+		case PPMC_SCHED_PROC_FORK:
+			/* First of all we need to update the event header with the child pid. */
+			args.child = event_datap->event_info.sched_proc_fork_data.child;
+			hdr->tid = args.child->pid;
+			cbres = f_sched_prog_fork(&args);
+			break;
+#endif
+		default:
 			if (likely(g_ppm_events[event_type].filler_callback)) 
 			{
 				cbres = g_ppm_events[event_type].filler_callback(&args);
@@ -2269,6 +2291,7 @@ static int record_event_consumer_for(struct task_struct* task,
 				pr_err("corrupted filler for event type %d: NULL callback\n", event_type);
 				ASSERT(0);
 			}
+			break;
 		}
 
 		if (likely(cbres == PPM_SUCCESS)) {
@@ -2688,6 +2711,17 @@ TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, st
 
 	record_event_all_consumers(PPME_SYSCALL_EXECVE_19_X, UF_NEVER_DROP, &event_data);
 }
+
+TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_struct *child)
+{
+	struct event_data_t event_data;
+
+	g_n_tracepoint_hit_inc();
+
+	event_data.category = PPMC_SCHED_PROC_FORK;
+	event_data.event_info.sched_proc_fork_data.child = child;
+	record_event_all_consumers(PPME_SYSCALL_CLONE_20_X, UF_NEVER_DROP, &event_data);
+}
 #endif
 
 static int init_ring_buffer(struct ppm_ring_buffer_context *ring)
@@ -2804,6 +2838,8 @@ static void visit_tracepoint(struct tracepoint *tp, void *priv)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
 	else if (!strcmp(tp->name, "sched_process_exec"))
 		tp_sched_proc_exec = tp;
+	else if (!strcmp(tp->name, "sched_process_fork"))
+		tp_sched_proc_fork = tp;	
 #endif
 }
 
@@ -2849,6 +2885,11 @@ static int get_tracepoint_handles(void)
 	if (!tp_sched_proc_exec)
 	{
 		pr_err("failed to find 'sched_process_exec' tracepoint\n");
+		return -ENOENT;
+	}
+	if (!tp_sched_proc_fork)
+	{
+		pr_err("failed to find 'sched_process_fork' tracepoint\n");
 		return -ENOENT;
 	}
 #endif
