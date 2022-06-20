@@ -76,8 +76,9 @@ MODULE_AUTHOR("StackRox, Inc.");
     #define TRACEPOINT_PROBE(probe, args...) static void probe(void *__data, args)
 #endif
 
-#ifndef pgprot_encrypted
-#define pgprot_encrypted(x) (x)
+// Allow build even on arch where PAGE_ENC is not implemented
+#ifndef _PAGE_ENC
+#define _PAGE_ENC 0
 #endif
 
 struct ppm_device {
@@ -1592,8 +1593,9 @@ static int ppm_mmap(struct file *filp, struct vm_area_struct *vma)
 
 			pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 
+			pgprot_val(vma->vm_page_prot) = pgprot_val(PAGE_SHARED) | _PAGE_ENC;
 			ret = remap_pfn_range(vma, useraddr, pfn,
-					      PAGE_SIZE, pgprot_encrypted(PAGE_SHARED));
+					      PAGE_SIZE, vma->vm_page_prot);
 			if (ret < 0) {
 				pr_err("remap_pfn_range failed (1)\n");
 				goto cleanup_mmap;
@@ -1630,8 +1632,9 @@ static int ppm_mmap(struct file *filp, struct vm_area_struct *vma)
 			while (mlength > 0) {
 				pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 
+				pgprot_val(vma->vm_page_prot) = pgprot_val(PAGE_SHARED) | _PAGE_ENC;
 				ret = remap_pfn_range(vma, useraddr, pfn,
-						      PAGE_SIZE, pgprot_encrypted(PAGE_SHARED));
+						      PAGE_SIZE, vma->vm_page_prot);
 				if (ret < 0) {
 					pr_err("remap_pfn_range failed (1)\n");
 					goto cleanup_mmap;
@@ -1652,8 +1655,9 @@ static int ppm_mmap(struct file *filp, struct vm_area_struct *vma)
 			while (mlength > 0) {
 				pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 
+				pgprot_val(vma->vm_page_prot) = pgprot_val(PAGE_SHARED) | _PAGE_ENC;
 				ret = remap_pfn_range(vma, useraddr, pfn,
-						      PAGE_SIZE, pgprot_encrypted(PAGE_SHARED));
+						      PAGE_SIZE, vma->vm_page_prot);
 				if (ret < 0) {
 					pr_err("remap_pfn_range failed (1)\n");
 					goto cleanup_mmap;
