@@ -213,6 +213,10 @@ TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_
 TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm);
 #endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
+TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm);
+#endif
+
 /* Begin StackRox section */
 
 static int s_syscallIds[PPM_EVENT_MAX];
@@ -942,6 +946,14 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		if (ret) {
 			pr_err("can't create the signal_deliver tracepoint\n");
 			goto err_signal_deliver;
+		}
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
+		ret = compat_register_trace(sched_proc_exec_probe, "sched_process_exec", tp_sched_proc_exec);
+		if (ret) {
+			pr_err("can't create the 'sched_proc_exec' tracepoint\n");
+			goto err_sched_proc_exec;
 		}
 #endif
 		g_tracepoint_registered = true;
@@ -2448,27 +2460,6 @@ static int record_event_consumer_for(struct task_struct* task,
 		 * Fire the filler callback
 		 */
 		
-		/* For events with category `PPMC_SCHED_PROC_EXEC` or `PPMC_SCHED_PROC_FORK`
-		 * we need to call dedicated fillers that are not in our `g_ppm_events` table.
-		 */
-		switch (event_datap->category)
-		{
-#ifdef CAPTURE_SCHED_PROC_EXEC
-		case PPMC_SCHED_PROC_EXEC:
-			cbres = f_sched_prog_exec(&args);
-			break;
-#endif
-
-#ifdef CAPTURE_SCHED_PROC_FORK
-		case PPMC_SCHED_PROC_FORK:
-			/* First of all we need to update the event header with the child pid. */
-			args.child = event_datap->event_info.sched_proc_fork_data.child;
-			hdr->tid = args.child->pid;
-			cbres = f_sched_prog_fork(&args);
-			break;
-#endif
-
-		default:
 			if (likely(g_ppm_events[event_type].filler_callback)) 
 			{
 				cbres = g_ppm_events[event_type].filler_callback(&args);
@@ -2478,7 +2469,6 @@ static int record_event_consumer_for(struct task_struct* task,
 				pr_err("corrupted filler for event type %d: NULL callback\n", event_type);
 				ASSERT(0);
 			}
-			break;
 		}
 
 		if (likely(cbres == PPM_SUCCESS)) {
