@@ -220,7 +220,7 @@ TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_
 TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm);
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
+#ifdef CONFIG_ARM64
 TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm);
 TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_struct *child);
 #endif
@@ -958,7 +958,7 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		}
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) && defined(__aarch64__)
+#ifdef CONFIG_ARM64
 		ret = compat_register_trace(sched_proc_exec_probe, "sched_process_exec", tp_sched_proc_exec);
 		if (ret) {
 			pr_err("can't create the 'sched_proc_exec' tracepoint\n");
