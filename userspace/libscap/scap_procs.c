@@ -1023,9 +1023,9 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 		//
 		// Done. Add the entry to the process table, or fire the notification callback
 		//
-		if(handle->m_proc_callback == NULL)
+		if(handle->m_proclist.m_proc_callback == NULL)
 		{
-			HASH_ADD_INT64(handle->m_proclist, tid, tinfo);
+			HASH_ADD_INT64(handle->m_proclist.m_proclist, tid, tinfo);
 			if(uth_status != SCAP_SUCCESS)
 			{
 				snprintf(error, SCAP_LASTERR_SIZE, "process table allocation error (2)");
@@ -1035,7 +1035,9 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 		}
 		else
 		{
-			handle->m_proc_callback(handle->m_proc_callback_context, handle, tinfo->tid, tinfo, NULL);
+			handle->m_proclist.m_proc_callback(
+				handle->m_proclist.m_proc_callback_context,
+				handle->m_proclist.m_main_handle, tinfo->tid, tinfo, NULL);
 			free_tinfo = true;
 		}
 	}
@@ -1149,7 +1151,7 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 		// are an error, or at least unexpected. Check the process
 		// list to see if we've encountered this tid already
 		//
-		HASH_FIND_INT64(handle->m_proclist, &tid, tinfo);
+		HASH_FIND_INT64(handle->m_proclist.m_proclist, &tid, tinfo);
 		if(tinfo != NULL)
 		{
 			ASSERT(false);
@@ -1293,7 +1295,7 @@ void scap_proc_delete(scap_t* handle, scap_threadinfo* proc)
 	//
 	// Second, remove the process descriptor from the table
 	//
-	HASH_DEL(handle->m_proclist, proc);
+	HASH_DEL(handle->m_proclist.m_proclist, proc);
 
 	//
 	// Third, free the memory
@@ -1309,7 +1311,7 @@ void scap_proc_free_table(scap_t* handle)
 	struct scap_threadinfo* tinfo;
 	struct scap_threadinfo* ttinfo;
 
-	HASH_ITER(hh, handle->m_proclist, tinfo, ttinfo)
+	HASH_ITER(hh, handle->m_proclist.m_proclist, tinfo, ttinfo)
 	{
 		scap_proc_delete(handle, tinfo);
 	}
@@ -1415,10 +1417,10 @@ int scap_proc_scan_proc_table(scap_t *handle)
 
 void scap_refresh_proc_table(scap_t* handle)
 {
-	if(handle->m_proclist)
+	if(handle->m_proclist.m_proclist)
 	{
 		scap_proc_free_table(handle);
-		handle->m_proclist = NULL;
+		handle->m_proclist.m_proclist = NULL;
 	}
 	scap_proc_scan_proc_table(handle);
 }
@@ -1450,7 +1452,7 @@ int32_t scap_proc_add(scap_t* handle, uint64_t tid, scap_threadinfo* tinfo)
 {
 	int32_t uth_status = SCAP_SUCCESS;
 
-	HASH_ADD_INT64(handle->m_proclist, tid, tinfo);
+	HASH_ADD_INT64(handle->m_proclist.m_proclist, tid, tinfo);
 	if(uth_status == SCAP_SUCCESS)
 	{
 		return SCAP_SUCCESS;
@@ -1792,7 +1794,7 @@ int32_t scap_fd_scan_vtable(scap_t *handle, const scap_threadinfo *src_tinfo, sc
 			continue;
 		}
 
-		if(handle->m_proc_callback != NULL)
+		if(handle->m_proclist.m_proc_callback != NULL)
 		{
 			if(fdi)
 			{
@@ -1833,10 +1835,10 @@ int32_t scap_proc_scan_vtable(char *error, scap_t *handle)
 		//
 		// Add the entry to the process table, or fire the notification callback
 		//
-		if(handle->m_proc_callback == NULL)
+		if(handle->m_proclist.m_proc_callback == NULL)
 		{
 			int32_t uth_status = SCAP_SUCCESS;
-			HASH_ADD_INT64(handle->m_proclist, tid, tinfo);
+			HASH_ADD_INT64(handle->m_proclist.m_proclist, tid, tinfo);
 			if(uth_status != SCAP_SUCCESS)
 			{
 				snprintf(error, SCAP_LASTERR_SIZE, "process table allocation error (2)");
@@ -1846,7 +1848,9 @@ int32_t scap_proc_scan_vtable(char *error, scap_t *handle)
 		}
 		else
 		{
-			handle->m_proc_callback(handle->m_proc_callback_context, handle, tinfo->tid, tinfo, NULL);
+			handle->m_proclist.m_proc_callback(
+				handle->m_proclist.m_proc_callback_context,
+				handle->m_proclist.m_main_handle, tinfo->tid, tinfo, NULL);
 			free_tinfo = true;
 		}
 
