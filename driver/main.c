@@ -127,7 +127,7 @@ struct event_data_t {
 		/* Here we save only the child task struct since it is the
 		 * unique parameter we will use in our `f_sched_prog_fork`
 		 * filler. On the other side the `f_sched_prog_exec` filler
-		 * won't need any tracepoint parameter so we don't need a 
+		 * won't need any tracepoint parameter so we don't need a
 		 * internal struct here.
 		 */
 		struct {
@@ -2477,8 +2477,8 @@ static int record_event_consumer_for(struct task_struct* task,
 			if (likely(g_ppm_events[event_type].filler_callback)) 
 			{
 				cbres = g_ppm_events[event_type].filler_callback(&args);
-			} 
-			else 
+			}
+			else
 			{
 				pr_err("corrupted filler for event type %d: NULL callback\n", event_type);
 				ASSERT(0);
@@ -2542,6 +2542,7 @@ static int record_event_consumer_for(struct task_struct* task,
 		if (cbres == PPM_SUCCESS) {
 			ASSERT(freespace < sizeof(struct ppm_evt_hdr) + args.arg_data_offset);
 			ring_info->n_drops_buffer++;
+			drops_buffer_syscall_categories_counters(event_type, ring_info);
 		} else if (cbres == PPM_FAILURE_INVALID_USER_MEMORY) {
 #ifdef _DEBUG
 			pr_err("Invalid read from user for event %d\n", event_type);
@@ -2551,6 +2552,7 @@ static int record_event_consumer_for(struct task_struct* task,
 			ring_info->n_drops_buffer++;
 			drops_buffer_syscall_categories_counters(event_type, ring_info);
 //			pr_err("Dropped event %d\n", event_type);
+			drops_buffer_syscall_categories_counters(event_type, ring_info);
 		} else {
 			ASSERT(false);
 		}
@@ -2916,7 +2918,7 @@ TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_
 
 	g_n_tracepoint_hit_inc();
 
-	/* We are not interested in kernel threads. 
+	/* We are not interested in kernel threads.
 	 * The current thread here is the `parent`.
 	 */
 	if(unlikely(current->flags & PF_KTHREAD))
@@ -3071,7 +3073,7 @@ static void visit_tracepoint(struct tracepoint *tp, void *priv)
 	else if (!strcmp(tp->name, tp_names[SCHED_PROC_EXEC]))
 		tp_sched_proc_exec = tp;
 	else if (!strcmp(tp->name, "sched_process_fork"))
-		tp_sched_proc_fork = tp;	
+		tp_sched_proc_fork = tp;
 #endif
 
 #ifdef CAPTURE_SCHED_PROC_FORK
