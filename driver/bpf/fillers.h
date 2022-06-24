@@ -5880,15 +5880,18 @@ FILLER(sys_dup3_x, true)
  * a real syscall, we only send the same event from another
  * tracepoint.
  * 
+ * These `sched_proc_exec` fillers will generate a 
+ * `PPME_SYSCALL_EXECVE_19_X` event.
+ * 
  * Please note: `is_syscall` is used only if `BPF_RAW_TRACEPOINT`
- * are not defined but in our ARM implementation they are akways defined,
- * so value of this flag is not relevant at all. 
+ * are not defined but in our ARM implementation they are always defined,
+ * so the value of this flag is not relevant at all.
  */
 FILLER(sched_prog_exec, false)
 {
 	int res = 0;
 
-	/* 1° Parameter: res (type: PT_ERRNO) */
+	/* Parameter 1: res (type: PT_ERRNO) */
 	/* Please note: if this filler is called the execve is correctly
 	 * performed, so the return value will be always 0.
 	 */
@@ -5906,10 +5909,8 @@ FILLER(sched_prog_exec, false)
 	}
 
 	/*
-	* The call always succeed so get `exe`, `args` from the current
-	* process; put one \0-separated exe-args string into
-	* str_storage
-	*/
+	 * The call always succeed so get `exe`, `args` from the current process.
+	 */
 	unsigned long arg_start = 0;
 	unsigned long arg_end = 0;
 
@@ -5933,7 +5934,6 @@ FILLER(sched_prog_exec, false)
 	 */
 	if(args_len && correctly_read == 0)
 	{
-
 		data->buf[(data->state->tail_ctx.curoff + args_len - 1) & SCRATCH_SIZE_MAX] = 0;
 
 		/* We need the len of the second param `exe`. */
@@ -5946,7 +5946,7 @@ FILLER(sched_prog_exec, false)
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 		}
 
-		/* 2° Parameter: exe (type: PT_CHARBUF) */
+		/* Parameter 2: exe (type: PT_CHARBUF) */
 		data->curarg_already_on_frame = true;
 		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false);
 		if(res != PPM_SUCCESS)
@@ -5954,7 +5954,7 @@ FILLER(sched_prog_exec, false)
 			return res;
 		}
 
-		/* 3° Parameter: args (type: PT_CHARBUFARRAY) */
+		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
 		data->curarg_already_on_frame = true;
 		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false);
 		if(res != PPM_SUCCESS)
@@ -5964,14 +5964,14 @@ FILLER(sched_prog_exec, false)
 	}
 	else
 	{
-		/* 2° Parameter: exe (type: PT_CHARBUF) */
+		/* Parameter 2: exe (type: PT_CHARBUF) */
 		res = bpf_val_to_ring_type(data, 0, PT_CHARBUF);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
 		}
 
-		/* 3° Parameter: args (type: PT_CHARBUFARRAY) */
+		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
 		res = bpf_val_to_ring_type(data, 0, PT_BYTEBUF);
 		if(res != PPM_SUCCESS)
 		{
@@ -5979,7 +5979,7 @@ FILLER(sched_prog_exec, false)
 		}
 	}
 
-	/* 4° Parameter: tid (type: PT_PID) */
+	/* Parameter 4: tid (type: PT_PID) */
 	pid_t pid = _READ(task->pid);
 	res = bpf_val_to_ring_type(data, pid, PT_PID);
 	if(res != PPM_SUCCESS)
@@ -5987,7 +5987,7 @@ FILLER(sched_prog_exec, false)
 		return res;
 	}
 
-	/* 5° Parameter: pid (type: PT_PID) */
+	/* Parameter 5: pid (type: PT_PID) */
 	pid_t tgid = _READ(task->tgid);
 	res = bpf_val_to_ring_type(data, tgid, PT_PID);
 	if(res != PPM_SUCCESS)
@@ -5995,7 +5995,7 @@ FILLER(sched_prog_exec, false)
 		return res;
 	}
 
-	/* 6° Parameter: ptid (type: PT_PID) */
+	/* Parameter 6: ptid (type: PT_PID) */
 	struct task_struct *real_parent = _READ(task->real_parent);
 	pid_t ptid = _READ(real_parent->pid);
 	res = bpf_val_to_ring_type(data, ptid, PT_PID);
@@ -6004,7 +6004,7 @@ FILLER(sched_prog_exec, false)
 		return res;
 	}
 
-	/* 7° Parameter: cwd (type: PT_CHARBUF)
+	/* Parameter 7: cwd (type: PT_CHARBUF)
 	 * cwd, pushed empty to avoid breaking compatibility
 	 * with the older event format
 	 */
@@ -6014,7 +6014,7 @@ FILLER(sched_prog_exec, false)
 		return res;
 	}
 
-	/* 8° Parameter: fdlimit (type: PT_UINT64) */
+	/* Parameter 8: fdlimit (type: PT_UINT64) */
 	struct signal_struct *signal = _READ(task->signal);
 	unsigned long fdlimit = _READ(signal->rlim[RLIMIT_NOFILE].rlim_cur);
 	res = bpf_val_to_ring_type(data, fdlimit, PT_UINT64);
@@ -6023,7 +6023,7 @@ FILLER(sched_prog_exec, false)
 		return res;
 	}
 
-	/* 9° Parameter: pgft_maj (type: PT_UINT64) */
+	/* Parameter 9: pgft_maj (type: PT_UINT64) */
 	unsigned long maj_flt = _READ(task->maj_flt);
 	res = bpf_val_to_ring_type(data, maj_flt, PT_UINT64);
 	if(res != PPM_SUCCESS)
@@ -6031,7 +6031,7 @@ FILLER(sched_prog_exec, false)
 		return res;
 	}
 
-	/* 10° Parameter: pgft_min (type: PT_UINT64) */
+	/* Parameter 10: pgft_min (type: PT_UINT64) */
 	unsigned long min_flt = _READ(task->min_flt);
 	res = bpf_val_to_ring_type(data, min_flt, PT_UINT64);
 	if(res != PPM_SUCCESS)
@@ -6051,28 +6051,28 @@ FILLER(sched_prog_exec, false)
 		swap = bpf_get_mm_swap(mm) << (PAGE_SHIFT - 10);
 	}
 
-	/* 11° Parameter: vm_size (type: PT_UINT32) */
+	/* Parameter 11: vm_size (type: PT_UINT32) */
 	res = bpf_val_to_ring_type(data, total_vm, PT_UINT32);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
 	}
 
-	/* 12° Parameter: vm_rss (type: PT_UINT32) */
+	/* Parameter 12: vm_rss (type: PT_UINT32) */
 	res = bpf_val_to_ring_type(data, total_rss, PT_UINT32);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
 	}
 
-	/* 13° Parameter: vm_swap (type: PT_UINT32) */
+	/* Parameter 13: vm_swap (type: PT_UINT32) */
 	res = bpf_val_to_ring_type(data, swap, PT_UINT32);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
 	}
 
-	/* 14° Parameter: comm (type: PT_CHARBUF) */
+	/* Parameter 14: comm (type: PT_CHARBUF) */
 	res = bpf_val_to_ring_type(data, (unsigned long)task->comm, PT_CHARBUF);
 	if(res != PPM_SUCCESS)
 	{
@@ -6088,7 +6088,6 @@ FILLER(sched_prog_exec_2, false)
 {
 	int cgroups_len = 0;
 	int res = 0;
-
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 
 	res = bpf_append_cgroup(task, data->tmp_scratch, &cgroups_len);
@@ -6097,7 +6096,7 @@ FILLER(sched_prog_exec_2, false)
 		return res;
 	}
 
-	/* 15° Parameter: cgroups (type: PT_CHARBUFARRAY) */
+	/* Parameter 15: cgroups (type: PT_CHARBUFARRAY) */
 	res = __bpf_val_to_ring(data, (unsigned long)data->tmp_scratch, cgroups_len, PT_BYTEBUF, -1, false);
 	if(res != PPM_SUCCESS)
 	{
@@ -6143,7 +6142,7 @@ FILLER(sched_prog_exec_3, false)
 		}
 	}
 
-	/* 16° Parameter: env (type: PT_CHARBUFARRAY) */
+	/* Parameter 16: env (type: PT_CHARBUFARRAY) */
 	data->curarg_already_on_frame = true;
 	res = __bpf_val_to_ring(data, 0, env_len, PT_BYTEBUF, -1, false);
 	if(res != PPM_SUCCESS)
@@ -6151,7 +6150,7 @@ FILLER(sched_prog_exec_3, false)
 		return res;
 	}
 
-	/* 17° Parameter: tty (type: PT_INT32) */
+	/* Parameter 17: tty (type: PT_INT32) */
 	int tty = bpf_ppm_get_tty(task);
 	res = bpf_val_to_ring_type(data, tty, PT_INT32);
 	if(res != PPM_SUCCESS)
@@ -6159,7 +6158,7 @@ FILLER(sched_prog_exec_3, false)
 		return res;
 	}
 
-	/* 18° Parameter: pgid (type: PT_PID) */
+	/* Parameter 18: pgid (type: PT_PID) */
 	res = bpf_val_to_ring_type(data, bpf_task_pgrp_vnr(task), PT_PID);
 	if(res != PPM_SUCCESS)
 	{
@@ -6184,7 +6183,7 @@ FILLER(sched_prog_exec_3, false)
 	loginuid = _READ(task->loginuid);
 #endif
 
-	/* 19° Parameter: loginuid (type: PT_INT32) */
+	/* Parameter 19: loginuid (type: PT_INT32) */
 	res = bpf_val_to_ring_type(data, loginuid.val, PT_INT32);
 	if(res != PPM_SUCCESS)
 	{
@@ -6200,11 +6199,10 @@ FILLER(sched_prog_exec_4, false)
 {
 
 	int res = 0;
-
+	uint32_t flags = 0;
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	struct cred *cred = (struct cred *)_READ(task->cred);
 
-	uint32_t flags = 0;
 
 	/* `exe_writable` flag logic */
 	bool exe_writable = false;
@@ -6216,7 +6214,7 @@ FILLER(sched_prog_exec_4, false)
 
 	// write all additional flags for execve family here...
 
-	/* 20° Parameter: flags (type: PT_FLAGS32) */
+	/* Parameter 20: flags (type: PT_FLAGS32) */
 	res = bpf_val_to_ring_type(data, flags, PT_UINT32);
 	if(res != PPM_SUCCESS)
 	{
@@ -6226,7 +6224,7 @@ FILLER(sched_prog_exec_4, false)
 	kernel_cap_t cap;
 	unsigned long val;
 
-	/* 21° Parameter: cap_inheritable (type: PT_UINT64) */
+	/* Parameter 21: cap_inheritable (type: PT_UINT64) */
 	cap = _READ(cred->cap_inheritable);
 	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
 	res = bpf_val_to_ring(data, capabilities_to_scap(val));
@@ -6235,7 +6233,7 @@ FILLER(sched_prog_exec_4, false)
 		return res;
 	}
 
-	/* 22° Parameter: cap_permitted (type: PT_UINT64) */
+	/* Parameter 22: cap_permitted (type: PT_UINT64) */
 	cap = _READ(cred->cap_permitted);
 	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
 	res = bpf_val_to_ring(data, capabilities_to_scap(val));
@@ -6244,7 +6242,7 @@ FILLER(sched_prog_exec_4, false)
 		return res;
 	}
 
-	/* 23° Parameter: cap_effective (type: PT_UINT64) */
+	/* Parameter 23: cap_effective (type: PT_UINT64) */
 	cap = _READ(cred->cap_effective);
 	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
 	res = bpf_val_to_ring(data, capabilities_to_scap(val));
@@ -6252,11 +6250,18 @@ FILLER(sched_prog_exec_4, false)
 	return res;
 }
 
+/* These `sched_proc_fork` fillers will generate a 
+ * `PPME_SYSCALL_CLONE_20_X` event.
+ */
 FILLER(sched_prog_fork, false)
 {
 	int res = 0;
 
-	/* First of all we need to update the event header with the child pid. */
+	/* First of all we need to update the event header with the child tid.
+	 * The clone child exit event must be generated by the child but while
+	 * we are sending this event, we are still the parent so we have to
+	 * modify the event header to simulate it.
+	 */
 	struct sched_process_fork_raw_args* original_ctx = (struct sched_process_fork_raw_args*)data->ctx;
 	struct task_struct *task = (struct task_struct *)original_ctx->child;
 	pid_t child_pid = _READ(task->pid);
@@ -6264,7 +6269,7 @@ FILLER(sched_prog_fork, false)
 	struct ppm_evt_hdr *evt_hdr = (struct ppm_evt_hdr *)data->buf;
 	evt_hdr->tid = (uint64_t)child_pid;
 
-	/* 1° Parameter: res (type: PT_ERRNO) */
+	/* Parameter 1: res (type: PT_ERRNO) */
 	/* Please note: here we are in the clone child exit
 	 * event, so the return value will be always 0.
 	 */
@@ -6308,7 +6313,6 @@ FILLER(sched_prog_fork, false)
 	 */
 	if(args_len && correctly_read == 0)
 	{
-
 		data->buf[(data->state->tail_ctx.curoff + args_len - 1) & SCRATCH_SIZE_MAX] = 0;
 
 		/* We need the len of the second param `exe`. */
@@ -6321,7 +6325,7 @@ FILLER(sched_prog_fork, false)
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 		}
 
-		/* 2° Parameter: exe (type: PT_CHARBUF) */
+		/* Parameter 2: exe (type: PT_CHARBUF) */
 		data->curarg_already_on_frame = true;
 		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false);
 		if(res != PPM_SUCCESS)
@@ -6329,7 +6333,7 @@ FILLER(sched_prog_fork, false)
 			return res;
 		}
 
-		/* 3° Parameter: args (type: PT_CHARBUFARRAY) */
+		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
 		data->curarg_already_on_frame = true;
 		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false);
 		if(res != PPM_SUCCESS)
@@ -6339,14 +6343,14 @@ FILLER(sched_prog_fork, false)
 	}
 	else
 	{
-		/* 2° Parameter: exe (type: PT_CHARBUF) */
+		/* Parameter 2: exe (type: PT_CHARBUF) */
 		res = bpf_val_to_ring_type(data, 0, PT_CHARBUF);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
 		}
 
-		/* 3° Parameter: args (type: PT_CHARBUFARRAY) */
+		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
 		res = bpf_val_to_ring_type(data, 0, PT_BYTEBUF);
 		if(res != PPM_SUCCESS)
 		{
@@ -6354,7 +6358,7 @@ FILLER(sched_prog_fork, false)
 		}
 	}
 
-	/* 4° Parameter: tid (type: PT_PID) */
+	/* Parameter 4: tid (type: PT_PID) */
 	pid_t pid = _READ(task->pid);
 	res = bpf_val_to_ring_type(data, pid, PT_PID);
 	if(res != PPM_SUCCESS)
@@ -6362,7 +6366,7 @@ FILLER(sched_prog_fork, false)
 		return res;
 	}
 
-	/* 5° Parameter: pid (type: PT_PID) */
+	/* Parameter 5: pid (type: PT_PID) */
 	pid_t tgid = _READ(task->tgid);
 	res = bpf_val_to_ring_type(data, tgid, PT_PID);
 	if(res != PPM_SUCCESS)
@@ -6370,7 +6374,7 @@ FILLER(sched_prog_fork, false)
 		return res;
 	}
 
-	/* 6° Parameter: ptid (type: PT_PID) */
+	/* Parameter 6: ptid (type: PT_PID) */
 	struct task_struct *real_parent = _READ(task->real_parent);
 	pid_t ptid = _READ(real_parent->pid);
 	res = bpf_val_to_ring_type(data, ptid, PT_PID);
@@ -6379,7 +6383,7 @@ FILLER(sched_prog_fork, false)
 		return res;
 	}
 
-	/* 7° Parameter: cwd (type: PT_CHARBUF)
+	/* Parameter 7: cwd (type: PT_CHARBUF)
 	 * cwd, pushed empty to avoid breaking compatibility
 	 * with the older event format
 	 */
@@ -6389,7 +6393,7 @@ FILLER(sched_prog_fork, false)
 		return res;
 	}
 
-	/* 8° Parameter: fdlimit (type: PT_UINT64) */
+	/* Parameter 8: fdlimit (type: PT_UINT64) */
 	struct signal_struct *signal = _READ(task->signal);
 	unsigned long fdlimit = _READ(signal->rlim[RLIMIT_NOFILE].rlim_cur);
 	res = bpf_val_to_ring_type(data, fdlimit, PT_UINT64);
@@ -6398,7 +6402,7 @@ FILLER(sched_prog_fork, false)
 		return res;
 	}
 
-	/* 9° Parameter: pgft_maj (type: PT_UINT64) */
+	/* Parameter 9: pgft_maj (type: PT_UINT64) */
 	unsigned long maj_flt = _READ(task->maj_flt);
 	res = bpf_val_to_ring_type(data, maj_flt, PT_UINT64);
 	if(res != PPM_SUCCESS)
@@ -6406,7 +6410,7 @@ FILLER(sched_prog_fork, false)
 		return res;
 	}
 
-	/* 10° Parameter: pgft_min (type: PT_UINT64) */
+	/* Parameter 10: pgft_min (type: PT_UINT64) */
 	unsigned long min_flt = _READ(task->min_flt);
 	res = bpf_val_to_ring_type(data, min_flt, PT_UINT64);
 	if(res != PPM_SUCCESS)
@@ -6426,28 +6430,28 @@ FILLER(sched_prog_fork, false)
 		swap = bpf_get_mm_swap(mm) << (PAGE_SHIFT - 10);
 	}
 
-	/* 11° Parameter: vm_size (type: PT_UINT32) */
+	/* Parameter 11: vm_size (type: PT_UINT32) */
 	res = bpf_val_to_ring_type(data, total_vm, PT_UINT32);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
 	}
 
-	/* 12° Parameter: vm_rss (type: PT_UINT32) */
+	/* Parameter 12: vm_rss (type: PT_UINT32) */
 	res = bpf_val_to_ring_type(data, total_rss, PT_UINT32);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
 	}
 
-	/* 13° Parameter: vm_swap (type: PT_UINT32) */
+	/* Parameter 13: vm_swap (type: PT_UINT32) */
 	res = bpf_val_to_ring_type(data, swap, PT_UINT32);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
 	}
 
-	/* 14° Parameter: comm (type: PT_CHARBUF) */
+	/* Parameter 14: comm (type: PT_CHARBUF) */
 	res = bpf_val_to_ring_type(data, (unsigned long)task->comm, PT_CHARBUF);
 	if(res != PPM_SUCCESS)
 	{
@@ -6463,7 +6467,6 @@ FILLER(sched_prog_fork_2, false)
 {
 	int res = 0;
 	int cgroups_len = 0;
-
 	struct sched_process_fork_raw_args* original_ctx = (struct sched_process_fork_raw_args*)data->ctx;
 	struct task_struct *task = (struct task_struct *)original_ctx->child;
 
@@ -6473,7 +6476,7 @@ FILLER(sched_prog_fork_2, false)
 		return res;
 	}
 
-	/* 15° Parameter: cgroups (type: PT_CHARBUFARRAY) */
+	/* Parameter 15: cgroups (type: PT_CHARBUFARRAY) */
 	res = __bpf_val_to_ring(data, (unsigned long)data->tmp_scratch, cgroups_len, PT_BYTEBUF, -1, false);
 	if(res != PPM_SUCCESS)
 	{
@@ -6491,7 +6494,7 @@ FILLER(sched_prog_fork_3, false)
 	struct sched_process_fork_raw_args* original_ctx = (struct sched_process_fork_raw_args*)data->ctx;
 	struct task_struct *task = (struct task_struct *)original_ctx->child;
 
-	/* 16° Parameter: flags (type: PT_FLAGS32) */
+	/* Parameter 16: flags (type: PT_FLAGS32) */
 	/// TODO: we have to recover them from the kernel in some way.
 	uint32_t flags = 0;
 	res = bpf_val_to_ring_type(data, flags, PT_FLAGS32);
@@ -6502,7 +6505,7 @@ FILLER(sched_prog_fork_3, false)
 
 	struct cred *cred = (struct cred *)_READ(task->cred);
 
-	/* 17° Parameter: uid (type: PT_UINT32) */
+	/* Parameter 17: uid (type: PT_UINT32) */
 	kuid_t euid = _READ(cred->euid);
 	res = bpf_val_to_ring_type(data, euid.val, PT_UINT32);
 	if(res != PPM_SUCCESS)
@@ -6510,7 +6513,7 @@ FILLER(sched_prog_fork_3, false)
 		return res;
 	}
 
-	/* 18° Parameter: gid (type: PT_UINT32) */
+	/* Parameter 18: gid (type: PT_UINT32) */
 	kgid_t egid = _READ(cred->egid);
 	res = bpf_val_to_ring_type(data, egid.val, PT_UINT32);
 	if(res != PPM_SUCCESS)
@@ -6518,13 +6521,13 @@ FILLER(sched_prog_fork_3, false)
 		return res;
 	}
 
-	/* 19° Parameter: vtid (type: PT_PID) */
+	/* Parameter 19: vtid (type: PT_PID) */
 	pid_t vtid = bpf_task_pid_vnr(task);
 	res = bpf_val_to_ring_type(data, vtid, PT_PID);
 	if(res != PPM_SUCCESS)
 		return res;
 
-	/* 20° Parameter: vpid (type: PT_PID) */
+	/* Parameter 20: vpid (type: PT_PID) */
 	pid_t vpid = bpf_task_tgid_vnr(task);
 	res = bpf_val_to_ring_type(data, vpid, PT_PID);
 
