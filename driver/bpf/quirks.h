@@ -47,14 +47,13 @@ or GPL2.txt for full copies of the license.
 #if CAPTURE_SCHED_PROC_FORK && !defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
     #error The CAPTURE_SCHED_PROC_FORK support requires 'raw_tracepoints' so kernel versions greater or equal than '4.17'.
 #endif
-#endif
 
 #define RHEL_RELEASE_VERSION(X,Y) 0
 
 #endif /* RHEL_RELEASE_CODE */
 
 #if defined(__aarch64__) && !defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
-    #error The BPF ARM64 support requires 'raw_tracepoints' so a kernel version greater or equal than '4.17'
+    #error The BPF ARM64 support requires 'raw_tracepoints' so kernel versions greater or equal than '4.17'.
 #endif
 
 /* Redefine asm_volatile_goto to work around clang not supporting it
