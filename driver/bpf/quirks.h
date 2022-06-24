@@ -40,10 +40,8 @@ or GPL2.txt for full copies of the license.
 #define BPF_FORBIDS_ZERO_ACCESS
 #endif
 
-#if (defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(__aarch64__))
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 #define BPF_SUPPORTS_RAW_TRACEPOINTS
-#endif
 #endif
 
 #define RHEL_RELEASE_VERSION(X,Y) 0
@@ -51,7 +49,7 @@ or GPL2.txt for full copies of the license.
 #endif /* RHEL_RELEASE_CODE */
 
 #if defined(__aarch64__) && !defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
-    #error The BPF ARM64 support requires 'raw_tracepoints' so a kernel version greater or equal than '4.17'
+    #error The BPF ARM64 support requires 'raw_tracepoints' so kernel versions greater or equal than '4.17'.
 #endif
 
 /* Redefine asm_volatile_goto to work around clang not supporting it

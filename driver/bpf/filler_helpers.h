@@ -1049,10 +1049,9 @@ static __always_inline int bpf_val_to_ring_type(struct filler_data *data,
 
 static __always_inline bool bpf_in_ia32_syscall()
 {
-	struct task_struct *task;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	u32 status = 0;
 
-	task = (struct task_struct *)bpf_get_current_task();
 #if (defined(__i386__) || defined(__x86_64__) || defined(_M_IX86))
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
@@ -1068,14 +1067,18 @@ static __always_inline bool bpf_in_ia32_syscall()
 #else
 	status = _READ(task->thread_info.status);
 #endif
-
 	return status & TS_COMPAT;
+
 #elif defined(__aarch64__)
+
 	status = _READ(task->thread_info.flags);
 	return status & _TIF_32BIT;
+
 #else
+
 	/* Unknown architecture. */
 	return status;
+
 #endif 
 }
 
