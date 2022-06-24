@@ -83,8 +83,7 @@ list(APPEND targetfiles
 	scap_iflist.c
 	scap_savefile.c
 	scap_procs.c
-	scap_userlist.c
-	engine/savefile/scap_savefile.c)
+	scap_userlist.c)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}) # temporary
@@ -190,6 +189,10 @@ add_subdirectory(engine/noop)
 add_definitions(-DHAS_ENGINE_NODRIVER)
 add_subdirectory(engine/nodriver)
 target_link_libraries(scap scap_engine_nodriver)
+
+add_definitions(-DHAS_ENGINE_SAVEFILE)
+add_subdirectory(engine/savefile)
+target_link_libraries(scap scap_engine_savefile)
 
 add_definitions(-DHAS_ENGINE_SOURCE_PLUGIN)
 add_subdirectory(engine/source_plugin)
