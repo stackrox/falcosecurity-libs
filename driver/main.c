@@ -125,7 +125,7 @@ struct event_data_t {
 		/* Here we save only the child task struct since it is the
 		 * unique parameter we will use in our `f_sched_prog_fork`
 		 * filler. On the other side the `f_sched_prog_exec` filler
-		 * won't need any tracepoint parameter so we don't need a 
+		 * won't need any tracepoint parameter so we don't need a
 		 * internal struct here.
 		 */
 		struct {
@@ -996,11 +996,23 @@ static int ppm_release(struct inode *inode, struct file *filp)
 
 	ring->capture_enabled = false;
 
-	vpr_info("closing ring %d, consumer:%p evt:%llu, dr_buf:%llu, dr_pf:%llu, pr:%llu, cs:%llu\n",
+	vpr_info("closing ring %d, consumer:%p evt:%llu, dr_buf:%llu, dr_buf_clone_fork_e:%llu, dr_buf_clone_fork_x:%llu, dr_buf_execve_e:%llu, dr_buf_execve_x:%llu, dr_buf_connect_e:%llu, dr_buf_connect_x:%llu, dr_buf_open_e:%llu, dr_buf_open_x:%llu, dr_buf_dir_file_e:%llu, dr_buf_dir_file_x:%llu, dr_buf_other_e:%llu, dr_buf_other_x:%llu, dr_pf:%llu, pr:%llu, cs:%llu\n",
 	       ring_no,
 	       consumer_id,
 	       ring->info->n_evts,
 	       ring->info->n_drops_buffer,
+	       ring->info->n_drops_buffer_clone_fork_enter,
+	       ring->info->n_drops_buffer_clone_fork_exit,
+	       ring->info->n_drops_buffer_execve_enter,
+	       ring->info->n_drops_buffer_execve_exit,
+	       ring->info->n_drops_buffer_connect_enter,
+	       ring->info->n_drops_buffer_connect_exit,
+	       ring->info->n_drops_buffer_open_enter,
+	       ring->info->n_drops_buffer_open_exit,
+	       ring->info->n_drops_buffer_dir_file_enter,
+	       ring->info->n_drops_buffer_dir_file_exit,
+	       ring->info->n_drops_buffer_other_interest_enter,
+	       ring->info->n_drops_buffer_other_interest_exit,
 	       ring->info->n_drops_pf,
 	       ring->info->n_preemptions,
 	       ring->info->n_context_switches);
@@ -1875,6 +1887,157 @@ static inline void record_drop_e_for(struct task_struct* task, struct ppm_consum
 	}
 }
 
+static inline void drops_buffer_syscall_categories_counters(enum ppm_event_type event_type,
+				    struct ppm_ring_buffer_info *ring_info)
+{
+	switch (event_type) {
+	// enter
+	case PPME_SYSCALL_OPEN_E:
+	case PPME_SYSCALL_CREAT_E:
+	case PPME_SYSCALL_OPENAT_E:
+	case PPME_SYSCALL_OPENAT_2_E:
+	case PPME_SYSCALL_OPENAT2_E:
+	case PPME_SYSCALL_OPEN_BY_HANDLE_AT_E:
+		ring_info->n_drops_buffer_open_enter++;
+		break;
+	case PPME_SYSCALL_DUP_E:
+	case PPME_SYSCALL_CHMOD_E:
+	case PPME_SYSCALL_FCHMOD_E:
+	case PPME_SYSCALL_FCHMODAT_E:
+	case PPME_SYSCALL_LINK_E:
+	case PPME_SYSCALL_LINK_2_E:
+	case PPME_SYSCALL_LINKAT_E:
+	case PPME_SYSCALL_LINKAT_2_E:
+	case PPME_SYSCALL_MKDIR_E:
+	case PPME_SYSCALL_MKDIR_2_E:
+	case PPME_SYSCALL_MKDIRAT_E:
+	case PPME_SYSCALL_MOUNT_E:
+	case PPME_SYSCALL_RENAME_E:
+	case PPME_SYSCALL_RENAMEAT_E:
+	case PPME_SYSCALL_RENAMEAT2_E:
+	case PPME_SYSCALL_RMDIR_E:
+	case PPME_SYSCALL_RMDIR_2_E:
+	case PPME_SYSCALL_SYMLINK_E:
+	case PPME_SYSCALL_SYMLINKAT_E:
+	case PPME_SYSCALL_UNLINK_E:
+	case PPME_SYSCALL_UNLINK_2_E:
+	case PPME_SYSCALL_UNLINKAT_E:
+	case PPME_SYSCALL_UNLINKAT_2_E:
+		ring_info->n_drops_buffer_dir_file_enter++;
+		break;
+	case PPME_SYSCALL_CLONE_11_E:
+	case PPME_SYSCALL_CLONE_16_E:
+	case PPME_SYSCALL_CLONE_17_E:
+	case PPME_SYSCALL_CLONE_20_E:
+	case PPME_SYSCALL_CLONE3_E:
+	case PPME_SYSCALL_FORK_E:
+	case PPME_SYSCALL_FORK_20_E:
+	case PPME_SYSCALL_VFORK_E:
+	case PPME_SYSCALL_VFORK_20_E:
+		ring_info->n_drops_buffer_clone_fork_enter++;
+		break;
+	case PPME_SYSCALL_EXECVE_8_E:
+	case PPME_SYSCALL_EXECVE_13_E:
+	case PPME_SYSCALL_EXECVE_14_E:
+	case PPME_SYSCALL_EXECVE_15_E:
+	case PPME_SYSCALL_EXECVE_16_E:
+	case PPME_SYSCALL_EXECVE_17_E:
+	case PPME_SYSCALL_EXECVE_18_E:
+	case PPME_SYSCALL_EXECVE_19_E:
+	case PPME_SYSCALL_EXECVEAT_E:
+		ring_info->n_drops_buffer_execve_enter++;
+		break;
+	case PPME_SOCKET_CONNECT_E:
+		ring_info->n_drops_buffer_connect_enter++;
+		break;
+	case PPME_SYSCALL_BPF_E:
+	case PPME_SYSCALL_FCHDIR_E:
+	case PPME_SYSCALL_SETPGID_E:
+	case PPME_SYSCALL_PTRACE_E:
+	case PPME_SYSCALL_SECCOMP_E:
+	case PPME_SYSCALL_SETNS_E:
+	case PPME_SYSCALL_SETRESGID_E:
+	case PPME_SYSCALL_SETRESUID_E:
+	case PPME_SYSCALL_SETSID_E:
+	case PPME_SYSCALL_UNSHARE_E:
+		ring_info->n_drops_buffer_other_interest_enter++;
+		break;
+	// exit
+	case PPME_SYSCALL_OPEN_X:
+	case PPME_SYSCALL_CREAT_X:
+	case PPME_SYSCALL_OPENAT_X:
+	case PPME_SYSCALL_OPENAT_2_X:
+	case PPME_SYSCALL_OPENAT2_X:
+	case PPME_SYSCALL_OPEN_BY_HANDLE_AT_X:
+		ring_info->n_drops_buffer_open_exit++;
+		break;
+	case PPME_SYSCALL_DUP_X:
+	case PPME_SYSCALL_CHMOD_X:
+	case PPME_SYSCALL_FCHMOD_X:
+	case PPME_SYSCALL_FCHMODAT_X:
+	case PPME_SYSCALL_LINK_X:
+	case PPME_SYSCALL_LINK_2_X:
+	case PPME_SYSCALL_LINKAT_X:
+	case PPME_SYSCALL_LINKAT_2_X:
+	case PPME_SYSCALL_MKDIR_X:
+	case PPME_SYSCALL_MKDIR_2_X:
+	case PPME_SYSCALL_MKDIRAT_X:
+	case PPME_SYSCALL_MOUNT_X:
+	case PPME_SYSCALL_RENAME_X:
+	case PPME_SYSCALL_RENAMEAT_X:
+	case PPME_SYSCALL_RENAMEAT2_X:
+	case PPME_SYSCALL_RMDIR_X:
+	case PPME_SYSCALL_RMDIR_2_X:
+	case PPME_SYSCALL_SYMLINK_X:
+	case PPME_SYSCALL_SYMLINKAT_X:
+	case PPME_SYSCALL_UNLINK_X:
+	case PPME_SYSCALL_UNLINK_2_X:
+	case PPME_SYSCALL_UNLINKAT_X:
+	case PPME_SYSCALL_UNLINKAT_2_X:
+		ring_info->n_drops_buffer_dir_file_exit++;
+		break;
+	case PPME_SYSCALL_CLONE_11_X:
+	case PPME_SYSCALL_CLONE_16_X:
+	case PPME_SYSCALL_CLONE_17_X:
+	case PPME_SYSCALL_CLONE_20_X:
+	case PPME_SYSCALL_CLONE3_X:
+	case PPME_SYSCALL_FORK_X:
+	case PPME_SYSCALL_FORK_20_X:
+	case PPME_SYSCALL_VFORK_X:
+	case PPME_SYSCALL_VFORK_20_X:
+		ring_info->n_drops_buffer_clone_fork_exit++;
+		break;
+	case PPME_SYSCALL_EXECVE_8_X:
+	case PPME_SYSCALL_EXECVE_13_X:
+	case PPME_SYSCALL_EXECVE_14_X:
+	case PPME_SYSCALL_EXECVE_15_X:
+	case PPME_SYSCALL_EXECVE_16_X:
+	case PPME_SYSCALL_EXECVE_17_X:
+	case PPME_SYSCALL_EXECVE_18_X:
+	case PPME_SYSCALL_EXECVE_19_X:
+	case PPME_SYSCALL_EXECVEAT_X:
+		ring_info->n_drops_buffer_execve_exit++;
+		break;
+	case PPME_SOCKET_CONNECT_X:
+		ring_info->n_drops_buffer_connect_exit++;
+		break;
+	case PPME_SYSCALL_BPF_X:
+	case PPME_SYSCALL_FCHDIR_X:
+	case PPME_SYSCALL_SETPGID_X:
+	case PPME_SYSCALL_PTRACE_X:
+	case PPME_SYSCALL_SECCOMP_X:
+	case PPME_SYSCALL_SETNS_X:
+	case PPME_SYSCALL_SETRESGID_X:
+	case PPME_SYSCALL_SETRESUID_X:
+	case PPME_SYSCALL_SETSID_X:
+	case PPME_SYSCALL_UNSHARE_X:
+		ring_info->n_drops_buffer_other_interest_exit++;
+		break;
+	default:
+		break;
+	}
+}
+
 static inline void record_drop_x_for(struct task_struct* task, struct ppm_consumer_t *consumer,
                                  nanoseconds ns,
                                  enum syscall_flags drop_flags)
@@ -2273,7 +2436,7 @@ static int record_event_consumer_for(struct task_struct* task,
 		/*
 		 * Fire the filler callback
 		 */
-		
+
 		/* For events with category `PPMC_SCHED_PROC_EXEC` or `PPMC_SCHED_PROC_FORK`
 		 * we need to call dedicated fillers that are not in our `g_ppm_events` table.
 		 */
@@ -2292,11 +2455,11 @@ static int record_event_consumer_for(struct task_struct* task,
 			break;
 #endif
 		default:
-			if (likely(g_ppm_events[event_type].filler_callback)) 
+			if (likely(g_ppm_events[event_type].filler_callback))
 			{
 				cbres = g_ppm_events[event_type].filler_callback(&args);
-			} 
-			else 
+			}
+			else
 			{
 				pr_err("corrupted filler for event type %d: NULL callback\n", event_type);
 				ASSERT(0);
@@ -2360,6 +2523,7 @@ static int record_event_consumer_for(struct task_struct* task,
 		if (cbres == PPM_SUCCESS) {
 			ASSERT(freespace < sizeof(struct ppm_evt_hdr) + args.arg_data_offset);
 			ring_info->n_drops_buffer++;
+			drops_buffer_syscall_categories_counters(event_type, ring_info);
 		} else if (cbres == PPM_FAILURE_INVALID_USER_MEMORY) {
 #ifdef _DEBUG
 			pr_err("Invalid read from user for event %d\n", event_type);
@@ -2368,18 +2532,31 @@ static int record_event_consumer_for(struct task_struct* task,
 		} else if (cbres == PPM_FAILURE_BUFFER_FULL) {
 			ring_info->n_drops_buffer++;
 //			pr_err("Dropped event %d\n", event_type);
+			drops_buffer_syscall_categories_counters(event_type, ring_info);
 		} else {
 			ASSERT(false);
 		}
 	}
 
 	if (MORE_THAN_ONE_SECOND_AHEAD(ns, ring->last_print_time + 1) && !(drop_flags & UF_ATOMIC)) {
-		vpr_info("consumer:%p CPU:%d, use:%d%%, ev:%llu, dr_buf:%llu, dr_pf:%llu, pr:%llu, cs:%llu\n",
+		vpr_info("consumer:%p CPU:%d, use:%d%%, ev:%llu, dr_buf:%llu, dr_buf_clone_fork_e:%llu, dr_buf_clone_fork_x:%llu, dr_buf_execve_e:%llu, dr_buf_execve_x:%llu, dr_buf_connect_e:%llu, dr_buf_connect_x:%llu, dr_buf_open_e:%llu, dr_buf_open_x:%llu, dr_buf_dir_file_e:%llu, dr_buf_dir_file_x:%llu, dr_buf_other_e:%llu, dr_buf_other_x:%llu, dr_pf:%llu, pr:%llu, cs:%llu\n",
 			   consumer->consumer_id,
 		       smp_processor_id(),
 		       (usedspace * 100) / RING_BUF_SIZE,
 		       ring_info->n_evts,
 		       ring_info->n_drops_buffer,
+		       ring_info->n_drops_buffer_clone_fork_enter,
+		       ring_info->n_drops_buffer_clone_fork_exit,
+		       ring_info->n_drops_buffer_execve_enter,
+		       ring_info->n_drops_buffer_execve_exit,
+		       ring_info->n_drops_buffer_connect_enter,
+		       ring_info->n_drops_buffer_connect_exit,
+		       ring_info->n_drops_buffer_open_enter,
+		       ring_info->n_drops_buffer_open_exit,
+		       ring_info->n_drops_buffer_dir_file_enter,
+		       ring_info->n_drops_buffer_dir_file_exit,
+		       ring_info->n_drops_buffer_other_interest_enter,
+		       ring_info->n_drops_buffer_other_interest_exit,
 		       ring_info->n_drops_pf,
 		       ring_info->n_preemptions,
 		       ring->info->n_context_switches);
@@ -2710,7 +2887,7 @@ TRACEPOINT_PROBE(page_fault_probe, unsigned long address, struct pt_regs *regs, 
 #ifdef CONFIG_ARM64
 /* We explained why we need these tracepoints for ARM64 in the BPF probe code.
  * Please take a look at `/bpf/probe.c`.
- */ 
+ */
 TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm)
 {
 	struct event_data_t event_data;
@@ -2733,7 +2910,7 @@ TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_
 
 	g_n_tracepoint_hit_inc();
 
-	/* We are not interested in kernel threads. 
+	/* We are not interested in kernel threads.
 	 * The current thread here is the `parent`.
 	 */
 	if(unlikely(current->flags & PF_KTHREAD))
@@ -2829,6 +3006,18 @@ static void reset_ring_buffer(struct ppm_ring_buffer_context *ring)
 	ring->nevents = 0;
 	ring->info->n_evts = 0;
 	ring->info->n_drops_buffer = 0;
+	ring->info->n_drops_buffer_clone_fork_enter = 0;
+	ring->info->n_drops_buffer_clone_fork_exit = 0;
+	ring->info->n_drops_buffer_execve_enter = 0;
+	ring->info->n_drops_buffer_execve_exit = 0;
+	ring->info->n_drops_buffer_connect_enter = 0;
+	ring->info->n_drops_buffer_connect_exit = 0;
+	ring->info->n_drops_buffer_open_enter = 0;
+	ring->info->n_drops_buffer_open_exit = 0;
+	ring->info->n_drops_buffer_dir_file_enter = 0;
+	ring->info->n_drops_buffer_dir_file_exit = 0;
+	ring->info->n_drops_buffer_other_interest_enter = 0;
+	ring->info->n_drops_buffer_other_interest_exit = 0;
 	ring->info->n_drops_pf = 0;
 	ring->info->n_preemptions = 0;
 	ring->info->n_context_switches = 0;
@@ -2862,7 +3051,7 @@ static void visit_tracepoint(struct tracepoint *tp, void *priv)
 	else if (!strcmp(tp->name, "sched_process_exec"))
 		tp_sched_proc_exec = tp;
 	else if (!strcmp(tp->name, "sched_process_fork"))
-		tp_sched_proc_fork = tp;	
+		tp_sched_proc_fork = tp;
 #endif
 }
 
