@@ -3223,7 +3223,7 @@ FILLER(sys_io_uring_setup_x, true)
 	unsigned long flags;
 	unsigned long sq_thread_cpu;
 	unsigned long sq_thread_idle;
-	unsigned long features;
+	unsigned long features = 0;
 
 #ifdef __NR_io_uring_setup
 	struct io_uring_params params;
@@ -3254,16 +3254,9 @@ FILLER(sys_io_uring_setup_x, true)
 	flags = io_uring_setup_flags_to_scap(params.flags);
 	sq_thread_cpu = params.sq_thread_cpu;
 	sq_thread_idle = params.sq_thread_idle;
-
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
-	// the features variable only exists past 5.4.0, introduced in this commit:
-	// https://github.com/torvalds/linux/commit/ac90f249e15cd2a850daa9e36e15f81ce1ff6550
+#ifdef IORING_FEAT_SINGLE_MMAP	
 	features = io_uring_setup_feats_to_scap(params.features);
-#else
-	features = 0;
-#endif
-
+#endif	
 #else
 	sq_entries = 0;
 	cq_entries = 0;
