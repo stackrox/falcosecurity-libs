@@ -10,37 +10,22 @@ or GPL2.txt for full copies of the license.
 #ifndef PPM_H_
 #define PPM_H_
 
-#ifndef UDIG
-#include <linux/version.h>
-#endif
 
 /*
  * Our Own ASSERT implementation, so we can easily switch among BUG_ON, WARN_ON and nothing
  */
 #ifndef UDIG
+
+#include <linux/time.h>
+
 #ifdef _DEBUG
 #define ASSERT(expr) WARN_ON(!(expr))
 #else
 #define ASSERT(expr)
-#endif
+#endif /* _DEBUG */
 
-typedef u64 nanoseconds;
+#endif /* UDIG */
 
-/* Begin StackRox Section */
-#include <linux/pid_namespace.h>
-/* End StackRox Section */
-
-/*
- * Global defines
- */
-#define CAPTURE_CONTEXT_SWITCHES
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 32))
-#define CAPTURE_SIGNAL_DELIVERIES
-#endif
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 12, 0)) && defined(CONFIG_X86)
-#define CAPTURE_PAGE_FAULTS
-#endif
-#endif // UDIG
 #define RW_SNAPLEN_EVENT 4096
 #define DPI_LOOKAHEAD_SIZE 16
 #define PPM_NULL_RDEV MKDEV(1, 3)
@@ -50,6 +35,10 @@ typedef u64 nanoseconds;
 #define PPM_PORT_MONGODB 27017
 
 typedef u64 nanoseconds;
+
+/* Begin StackRox Section */
+#include <linux/pid_namespace.h>
+/* End StackRox Section */
 
 /*
  * The ring descriptor.
@@ -67,7 +56,7 @@ struct ppm_ring_buffer_context {
 	u32 nevents;
 #ifndef UDIG
 	atomic_t preempt_count;
-#endif	
+#endif
 	char *str_storage;	/* String storage. Size is one page. */
 };
 
