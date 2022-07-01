@@ -7145,7 +7145,10 @@ cgroups_error:
 
 	return add_sentinel(args);
 }
+#endif
 
+
+#ifdef DEDICATED_CLONE_EXIT_CHILD_EVENT
 int f_sched_prog_fork(struct event_filler_arguments *args)
 {
 	int res = 0;

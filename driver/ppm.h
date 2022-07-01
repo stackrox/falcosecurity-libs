@@ -62,7 +62,7 @@ struct ppm_ring_buffer_context {
 	u32 nevents;
 #ifndef UDIG
 	atomic_t preempt_count;
-#endif	
+#endif
 	char *str_storage;	/* String storage. Size is one page. */
 };
 

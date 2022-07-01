@@ -220,9 +220,12 @@ TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_
 TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm);
 #endif
 
-#ifdef CONFIG_ARM64
-TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm);
+#ifdef DEDICATED_CLONE_EXIT_CHILD_EVENT
 TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_struct *child);
+#endif
+
+#ifdef DEDICATED_EXECVE_EXIT_EVENT
+TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm);
 #endif
 
 /* Begin StackRox section */
@@ -295,6 +298,10 @@ static struct tracepoint *tp_sched_proc_fork;
 #ifdef CAPTURE_SCHED_PROC_EXEC
 static struct tracepoint *tp_sched_proc_exec;
 static struct tracepoint *tp_sched_proc_fork;
+#endif
+
+#ifdef DEDICATED_EXECVE_EXIT_EVENT
+static struct tracepoint *tp_sched_proc_exec;
 #endif
 
 #ifdef _DEBUG
@@ -916,6 +923,9 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		 * Enable the tracepoints
 		 */
 
+		/*
+		 * SYS_EXIT
+		 */
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 		ret = compat_register_trace(syscall_exit_probe, "sys_exit", tp_sys_exit);
 #else
@@ -926,6 +936,9 @@ static int ppm_open(struct inode *inode, struct file *filp)
 			goto err_sys_exit;
 		}
 
+		/*
+		 * SYS_ENTER
+		 */
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 		ret = compat_register_trace(syscall_enter_probe, "sys_enter", tp_sys_enter);
 #else
@@ -936,12 +949,18 @@ static int ppm_open(struct inode *inode, struct file *filp)
 			goto err_sys_enter;
 		}
 
+		/*
+		 * SCHED_PROCESS_EXIT
+		 */
 		ret = compat_register_trace(syscall_procexit_probe, "sched_process_exit", tp_sched_process_exit);
 		if (ret) {
 			pr_err("can't create the sched_process_exit tracepoint\n");
 			goto err_sched_procexit;
 		}
 
+		/*
+		 * CAPTURE_CONTEXT_SWITCHES
+		 */
 #ifdef CAPTURE_CONTEXT_SWITCHES
 		ret = compat_register_trace(sched_switch_probe, "sched_switch", tp_sched_switch);
 		if (ret) {
@@ -950,6 +969,9 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		}
 #endif
 
+		/*
+		 * CAPTURE_SIGNAL_DELIVERIES
+		 */
 #ifdef CAPTURE_SIGNAL_DELIVERIES
 		ret = compat_register_trace(signal_deliver_probe, "signal_deliver", tp_signal_deliver);
 		if (ret) {
@@ -958,12 +980,21 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		}
 #endif
 
-#ifdef CONFIG_ARM64
+		/*
+		 * DEDICATED_EXECVE_EXIT_EVENT
+		 */
+#ifdef DEDICATED_EXECVE_EXIT_EVENT
 		ret = compat_register_trace(sched_proc_exec_probe, "sched_process_exec", tp_sched_proc_exec);
 		if (ret) {
 			pr_err("can't create the 'sched_proc_exec' tracepoint\n");
 			goto err_sched_proc_exec;
 		}
+#endif
+
+		/*
+		 * DEDICATED_CLONE_EXIT_CHILD_EVENT
+		 */
+#ifdef DEDICATED_CLONE_EXIT_CHILD_EVENT
 		ret = compat_register_trace(sched_proc_fork_probe, "sched_process_fork", tp_sched_proc_fork);
 		if (ret) {
 			pr_err("can't create the 'sched_proc_fork' tracepoint\n");
@@ -977,9 +1008,11 @@ static int ppm_open(struct inode *inode, struct file *filp)
 	goto cleanup_open;
 
 err_init_ring_buffer:
+
 	check_remove_consumer(consumer, in_list);
 
 cleanup_open:
+
 	mutex_unlock(&g_consumer_mutex);
 
 	return ret;
@@ -3072,6 +3105,9 @@ static void visit_tracepoint(struct tracepoint *tp, void *priv)
 #ifdef CAPTURE_SCHED_PROC_EXEC
 	else if (!strcmp(tp->name, tp_names[SCHED_PROC_EXEC]))
 		tp_sched_proc_exec = tp;
+#endif
+
+#ifdef DEDICATED_CLONE_EXIT_CHILD_EVENT
 	else if (!strcmp(tp->name, "sched_process_fork"))
 		tp_sched_proc_fork = tp;
 #endif
@@ -3130,6 +3166,9 @@ static int get_tracepoint_handles(void)
 		pr_err("failed to find 'sched_process_exec' tracepoint\n");
 		return -ENOENT;
 	}
+#endif
+
+#ifdef DEDICATED_CLONE_EXIT_CHILD_EVENT
 	if (!tp_sched_proc_fork)
 	{
 		pr_err("failed to find 'sched_process_fork' tracepoint\n");
