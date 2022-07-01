@@ -4661,7 +4661,7 @@ FILLER(sys_flock_e, true)
 
 FILLER(sys_pread64_e, true)
 {
-#ifndef _64BIT_ARGS_SINGLE_REGISTER
+#ifndef CAPTURE_64BIT_ARGS_SINGLE_REGISTER
 #error Implement this
 #endif
 	return PPM_FAILURE_BUG;
@@ -4669,7 +4669,7 @@ FILLER(sys_pread64_e, true)
 
 FILLER(sys_preadv64_e, true)
 {
-#ifndef _64BIT_ARGS_SINGLE_REGISTER
+#ifndef CAPTURE_64BIT_ARGS_SINGLE_REGISTER
 #error Implement this
 #endif
 	return PPM_FAILURE_BUG;
@@ -4677,7 +4677,7 @@ FILLER(sys_preadv64_e, true)
 
 FILLER(sys_pwrite64_e, true)
 {
-#ifndef _64BIT_ARGS_SINGLE_REGISTER
+#ifndef CAPTURE_64BIT_ARGS_SINGLE_REGISTER
 #error Implement this
 #endif
 	return PPM_FAILURE_BUG;
@@ -6030,7 +6030,7 @@ FILLER(sys_dup3_x, true)
 	return res;
 }
 
-#ifdef DEDICATED_EXECVE_EXIT_EVENT
+#ifdef CAPTURE_SCHED_PROC_EXEC
 /* We set `is_syscall` flag to `false` since this is not
  * a real syscall, we only send the same event from another
  * tracepoint.
@@ -6410,7 +6410,7 @@ FILLER(sched_prog_exec_4, false)
 }
 #endif
 
-#ifdef DEDICATED_CLONE_EXIT_CHILD_EVENT
+#ifdef CAPTURE_SCHED_PROC_FORK
 /* These `sched_proc_fork` fillers will generate a 
  * `PPME_SYSCALL_CLONE_20_X` event.
  */
