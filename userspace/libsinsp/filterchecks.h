@@ -267,6 +267,7 @@ public:
 		TYPE_DEV_MAJOR = 39,
 		TYPE_DEV_MINOR = 40,
 		TYPE_INO = 41,
+		TYPE_FDNAMERAW = 42,
 	};
 
 	enum fd_type
@@ -303,7 +304,7 @@ public:
 
 private:
 	uint8_t* extract_from_null_fd(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings);
-	bool extract_fdname_from_creator(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings);
+	bool extract_fdname_from_creator(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings, bool fd_nameraw);
 	bool extract_fd(sinsp_evt *evt);
 };
 
@@ -368,6 +369,9 @@ public:
 		TYPE_CAP_PERMITTED = 50,
 		TYPE_CAP_INHERITABLE = 51,
 		TYPE_CAP_EFFECTIVE = 52,
+		TYPE_CMDNARGS = 53,
+		TYPE_CMDLENARGS = 54,
+		TYPE_PVPID = 55,
 	};
 
 	sinsp_filter_check_thread();
