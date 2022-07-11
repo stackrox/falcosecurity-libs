@@ -761,7 +761,7 @@ void sinsp_threadinfo::set_cgroups(const char* cgroups, size_t len)
 		tmp_cgroups->push_back(std::make_pair(subsys, cgroup));
 		offset += subsys_length + 1 + cgroup.length() + 1;
 		if (subsys == "perf_event" || subsys == "cpu" || subsys == "cpuset" || subsys == "memory") {
-			m_cgroups.emplace_back(std::move(subsys), std::move(cgroup));
+			tmp_cgroups->emplace_back(std::move(subsys), std::move(cgroup));
 		}
 	}
 
