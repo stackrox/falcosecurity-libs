@@ -79,6 +79,7 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
 add_library(scap
 	scap.c
