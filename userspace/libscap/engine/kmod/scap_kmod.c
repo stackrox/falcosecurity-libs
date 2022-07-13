@@ -824,7 +824,7 @@ int scap_ioctl(scap_t* handle, int devnum, unsigned long request, void* arg) {
 		return SCAP_FAILURE;
 	}
 
-    struct kmod_engine* engine = handle->m_engine.m_handle;
+	struct kmod_engine* engine = handle->m_engine.m_handle;
 	ioctl_ret = ioctl(engine->m_dev_set.m_devs[devnum].m_fd, request, arg);
 	if (ioctl_ret != 0) {
 		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed due to ioctl error (%s)", strerror(errno));
