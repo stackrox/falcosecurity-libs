@@ -665,13 +665,14 @@ int32_t scap_kmod_set_statsd_port(struct scap_engine_handle engine, const uint16
 int scap_ioctl(scap_t* handle, int devnum, unsigned long request, void* arg) {
 	int ioctl_ret = 0;
 
-	if (devnum >= handle->m_ndevs) {
+	if (devnum >= scap_get_ndevs(handle)) {
 		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed, invalid device number %d", devnum);
 		ASSERT(false);
 		return SCAP_FAILURE;
 	}
 
-	ioctl_ret = ioctl(handle->m_devs[devnum].m_fd, request, arg);
+	struct kmod_engine* engine = handle->m_engine.m_handle;
+	ioctl_ret = ioctl(engine->m_dev_set.m_devs[devnum].m_fd, request, arg);
 	if (ioctl_ret != 0) {
 		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed due to ioctl error (%s)", strerror(errno));
 		return SCAP_FAILURE;
