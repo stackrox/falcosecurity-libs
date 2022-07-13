@@ -563,21 +563,6 @@ void sinsp_threadinfo::set_loginuser(uint32_t loginuid)
 	}
 }
 
-std::string sinsp_threadinfo::get_comm() const
-{
-	return m_comm;
-}
-
-std::string sinsp_threadinfo::get_exe() const
-{
-	return m_exe;
-}
-
-std::string sinsp_threadinfo::get_exepath() const
-{
-	return m_exepath;
-}
-
 void sinsp_threadinfo::set_args(const char* args, size_t len)
 {
 	m_args.clear();

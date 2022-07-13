@@ -73,6 +73,7 @@ include_directories("${WIN_HAL_INCLUDE}")
 endif()
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
 list(APPEND targetfiles
 	scap.c
