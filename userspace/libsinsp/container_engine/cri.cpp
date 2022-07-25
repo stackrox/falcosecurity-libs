@@ -131,6 +131,15 @@ bool cri_async_source::parse(const key_type& key, sinsp_container_info& containe
 
 	/* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
 #if 0
+	for(const auto &pair : resp_container.annotations())
+	{
+		if (pair.first == "io.kubernetes.cri-o.MountPoint")
+		{
+			container.m_overlayfs_root = pair.second;
+		}
+	}
+
+
 	for(const auto &pair : resp_container.labels())
 	{
 		if(pair.second.length() <= sinsp_container_info::m_container_label_max_length)

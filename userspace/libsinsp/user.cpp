@@ -151,6 +151,10 @@ void sinsp_usergroup_manager::subscribe_container_mgr()
 		m_inspector->m_container_manager.subscribe_on_remove_container([&](const sinsp_container_info &cinfo) -> void {
 			delete_container_users_groups(cinfo);
 		});
+
+		m_inspector->m_container_manager.subscribe_on_new_container([&](const sinsp_container_info&cinfo, sinsp_threadinfo *tinfo) -> void {
+		        load_from_container(cinfo.m_id, cinfo.m_overlayfs_root);
+	       });
 	}
 }
 
