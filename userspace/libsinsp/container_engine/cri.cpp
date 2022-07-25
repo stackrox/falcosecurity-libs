@@ -100,8 +100,8 @@ bool cri_async_source::parse(const key_type& key, sinsp_container_info& containe
 			container.m_is_pod_sandbox = true;
 			return true;
 		}
-		g_logger.format(sinsp_logger::SEV_DEBUG, "cri (%s): id is neither a container nor a pod sandbox",
-			container.m_id.c_str());
+		g_logger.format(sinsp_logger::SEV_DEBUG, "cri (%s): id is neither a container nor a pod sandbox: %s",
+				container.m_id.c_str(), status.error_message().c_str());
 		return false;
 	}
 
@@ -120,9 +120,19 @@ bool cri_async_source::parse(const key_type& key, sinsp_container_info& containe
 
 	/* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
 #if 0
+	for(const auto &pair : resp_container.annotations())
+	{
+		if (pair.first == "io.kubernetes.cri-o.MountPoint")
+		{
+			container.m_overlayfs_root = pair.second;
+		}
+	}
+
+
 	for(const auto &pair : resp_container.labels())
 	{
-		if(pair.second.length() <= sinsp_container_info::m_container_label_max_length) {
+		if(pair.second.length() <= sinsp_container_info::m_container_label_max_length)
+		{
 			container.m_labels[pair.first] = pair.second;
 		}
 	}
