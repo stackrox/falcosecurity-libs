@@ -40,8 +40,8 @@ or GPL2.txt for full copies of the license.
 #define BPF_FORBIDS_ZERO_ACCESS
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
-#define BPF_SUPPORTS_RAW_TRACEPOINTS
+#if (defined(CONFIG_X86_64) || defined(CONFIG_ARM64) || defined(CONFIG_S390)) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+    #define BPF_SUPPORTS_RAW_TRACEPOINTS
 #endif
 
 #define RHEL_RELEASE_VERSION(X,Y) 0
