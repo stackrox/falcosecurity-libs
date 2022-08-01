@@ -231,7 +231,6 @@ static struct class *g_ppm_class;
 static unsigned int g_ppm_numdevs;
 static int g_ppm_major;
 bool g_tracers_enabled = false;
-bool g_simple_mode_enabled = false;
 static DEFINE_PER_CPU(long, g_n_tracepoint_hit);
 static const struct file_operations g_ppm_fops = {
 	.open = ppm_open,
@@ -1160,11 +1159,6 @@ static int ppm_release(struct inode *inode, struct file *filp)
 			g_tracepoint_registered = false;
 
 			/*
-			 * While we're here, disable simple mode if it's active
-			 */
-			g_simple_mode_enabled = false;
-
-			/*
 			 * Reset tracepoint counter
 			 */
 			for_each_possible_cpu(cpu) {
@@ -1624,13 +1618,6 @@ cleanup_ioctl_procinfo:
 	{
 		vpr_info("PPM_IOCTL_SET_TRACERS_CAPTURE, consumer %p\n", consumer_id);
 		g_tracers_enabled = true;
-		ret = 0;
-		goto cleanup_ioctl;
-	}
-	case PPM_IOCTL_SET_SIMPLE_MODE:
-	{
-		vpr_info("PPM_IOCTL_SET_SIMPLE_MODE, consumer %p\n", consumer_id);
-		g_simple_mode_enabled = true;
 		ret = 0;
 		goto cleanup_ioctl;
 	}
@@ -2340,7 +2327,6 @@ static int record_event_consumer_for(struct task_struct* task,
 	ASSERT(ring);
 
 	ring_info = ring->info;
-
 	if (!ring->capture_enabled) {
 		put_cpu();
 		return res;
@@ -2735,15 +2721,6 @@ TRACEPOINT_PROBE(syscall_enter_probe, struct pt_regs *regs, long id)
 		enum syscall_flags drop_flags = cur_g_syscall_table[table_index].flags;
 		enum ppm_event_type type;
 
-		/*
-		 * Simple mode event filtering
-		 */
-		if (g_simple_mode_enabled) {
-			if ((drop_flags & UF_SIMPLEDRIVER_KEEP) == 0) {
-				return;
-			}
-		}
-
 #ifdef _HAS_SOCKETCALL
 		if (id == socketcall_syscall) {
 			used = true;
@@ -2820,15 +2797,6 @@ TRACEPOINT_PROBE(syscall_exit_probe, struct pt_regs *regs, long ret)
 		int used = cur_g_syscall_table[table_index].flags & UF_USED;
 		enum syscall_flags drop_flags = cur_g_syscall_table[table_index].flags;
 		enum ppm_event_type type;
-
-		/*
-		 * Simple mode event filtering
-		 */
-		if (g_simple_mode_enabled) {
-			if ((drop_flags & UF_SIMPLEDRIVER_KEEP) == 0) {
-				return;
-			}
-		}
 
 #ifdef _HAS_SOCKETCALL
 		if (id == socketcall_syscall) {
