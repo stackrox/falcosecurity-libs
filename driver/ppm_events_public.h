@@ -1908,8 +1908,6 @@ enum syscall_flags {
 	UF_ALWAYS_DROP = (1 << 2),
 	// UF_SIMPLEDRIVER_KEEP = (1 << 3), ///< Mark a syscall to be kept in simpledriver mode, see scap_enable_simpledriver_mode() -> SUPPORT DROPPED
 	UF_ATOMIC = (1 << 4), ///< The handler should not block (interrupt context)
-	UF_UNINTERESTING = (1 << 5), ///< Marks a syscall as not interesting. Currently only used by BPF probe to avoid tracing uninteresting syscalls.
-				     ///< Kmod uses a different logic path as we communicate with it through ioctls
 };
 
 struct syscall_evt_pair {

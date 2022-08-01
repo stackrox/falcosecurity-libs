@@ -70,7 +70,6 @@ std::atomic<int> sinsp::instance_count{0};
 
 sinsp::sinsp(bool static_container, const std::string &static_id, const std::string &static_name, const std::string &static_image) :
 	m_external_event_processor(),
-	m_simpleconsumer(false),
 	m_evt(this),
 	m_lastevent_ts(0),
 	m_host_root(scap_get_host_root()),
@@ -447,6 +446,24 @@ void sinsp::set_import_users(bool import_users)
 	m_usergroup_manager.m_import_users = import_users;
 }
 
+void sinsp::set_syscalls_of_interest(std::unordered_set<uint32_t> &syscalls_of_interest)
+{
+	m_ppm_sc_of_interest = syscalls_of_interest;
+}
+
+void sinsp::mark_syscall_of_interest(uint32_t ppm_sc, bool enabled)
+{
+	if (enabled)
+	{
+		m_ppm_sc_of_interest.insert(ppm_sc);
+	}
+	else
+	{
+		m_ppm_sc_of_interest.erase(ppm_sc);
+
+	}
+}
+
 void sinsp::fill_syscalls_of_interest(scap_open_args *oargs)
 {
 	// Fallback to set all events as interesting
@@ -700,11 +717,6 @@ bool sinsp::check_current_engine(const std::string& engine_name)
 std::string sinsp::generate_gvisor_config(std::string socket_path)
 {
 	return gvisor_config::generate(socket_path);
-}
-
-void sinsp::set_simple_consumer()
-{
-	m_simpleconsumer = true;
 }
 
 int64_t sinsp::get_file_size(const std::string& fname, char *error)

@@ -1283,8 +1283,6 @@ private:
 	uint64_t m_nevts;
 	int64_t m_filesize;
 
-	bool m_simpleconsumer;
-
 	scap_mode_t m_mode = SCAP_MODE_NONE;
 
 	// If non-zero, reading from this fd and m_input_filename contains "fd

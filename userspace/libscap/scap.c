@@ -1458,22 +1458,6 @@ uint64_t scap_get_unexpected_block_readsize(scap_t* handle)
 	return handle->m_unexpected_block_readsize;
 }
 
-int32_t scap_enable_simpledriver_mode(scap_t* handle)
-{
-	if(handle->m_vtable)
-	{
-		return handle->m_vtable->configure(handle->m_engine, SCAP_SIMPLEDRIVER_MODE, 1, 0);
-	}
-
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
-	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "setting simpledriver mode not supported on this scap mode");
-	return SCAP_FAILURE;
-#endif
-}
-
 int32_t scap_get_n_tracepoint_hit(scap_t* handle, long* ret)
 {
 	if(handle->m_vtable)
