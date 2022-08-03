@@ -25,6 +25,26 @@ limitations under the License.
 #include "driver_config.h"
 #endif
 
+void fill_syscalls_of_interest(interesting_ppm_sc_set *ppm_sc_of_interest, bool *syscalls_of_interest)
+{
+	for (int i = 0; i < PPM_SC_MAX; i++)
+	{
+		// We need to convert from PPM_SC to SYSCALL_NR, using the routing table
+		for(int syscall_nr = 0; syscall_nr < SYSCALL_TABLE_SIZE; syscall_nr++)
+		{
+			// Find the match between the ppm_sc and the syscall_nr
+			if(g_syscall_code_routing_table[syscall_nr] == i)
+			{
+				if (!ppm_sc_of_interest || ppm_sc_of_interest->ppm_sc[i])
+				{
+					syscalls_of_interest[syscall_nr] = true;
+				}
+				// DO NOT break as some PPM_SC are used multiple times for different syscalls! (eg: PPM_SC_SETRESUID...)
+			}
+		}
+	}
+}
+
 int32_t check_api_compatibility(scap_t *handle, char *error)
 {
 #ifdef PPM_API_CURRENT_VERSION_MAJOR

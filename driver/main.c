@@ -917,7 +917,7 @@ static int ppm_open(struct inode *inode, struct file *filp)
 	}
 	/* End StackRox section */
 
-	if (!g_tracepoint_registered) {
+	if (g_tracepoints_attached == 0) {
 		pr_info("starting capture\n");
 		/*
 		 * Enable the tracepoints
@@ -931,10 +931,12 @@ static int ppm_open(struct inode *inode, struct file *filp)
 #else
 		ret = register_trace_syscall_exit(syscall_exit_probe);
 #endif
-		if (ret) {
+		if(ret)
+		{
 			pr_err("can't create the sys_exit tracepoint\n");
 			goto err_sys_exit;
 		}
+		g_tracepoints_attached |= 1 << SYS_EXIT;
 
 		/*
 		 * SYS_ENTER
@@ -944,29 +946,35 @@ static int ppm_open(struct inode *inode, struct file *filp)
 #else
 		ret = register_trace_syscall_enter(syscall_enter_probe);
 #endif
-		if (ret) {
+		if(ret)
+		{
 			pr_err("can't create the sys_enter tracepoint\n");
 			goto err_sys_enter;
 		}
+		g_tracepoints_attached |= 1 << SYS_ENTER;
 
 		/*
 		 * SCHED_PROCESS_EXIT
 		 */
 		ret = compat_register_trace(syscall_procexit_probe, "sched_process_exit", tp_sched_process_exit);
-		if (ret) {
+		if(ret)
+		{
 			pr_err("can't create the sched_process_exit tracepoint\n");
 			goto err_sched_procexit;
 		}
+		g_tracepoints_attached |= 1 << SCHED_PROC_EXIT;
 
 		/*
 		 * CAPTURE_CONTEXT_SWITCHES
 		 */
 #ifdef CAPTURE_CONTEXT_SWITCHES
 		ret = compat_register_trace(sched_switch_probe, "sched_switch", tp_sched_switch);
-		if (ret) {
+		if(ret)
+		{
 			pr_err("can't create the sched_switch tracepoint\n");
 			goto err_sched_switch;
 		}
+		g_tracepoints_attached |= 1 << SCHED_SWITCH;
 #endif
 
 		/*
@@ -974,10 +982,12 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		 */
 #ifdef CAPTURE_SIGNAL_DELIVERIES
 		ret = compat_register_trace(signal_deliver_probe, "signal_deliver", tp_signal_deliver);
-		if (ret) {
+		if(ret)
+		{
 			pr_err("can't create the signal_deliver tracepoint\n");
 			goto err_signal_deliver;
 		}
+		g_tracepoints_attached |= 1 << SIGNAL_DELIVER;
 #endif
 
 		/*
@@ -985,10 +995,12 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		 */
 #ifdef DEDICATED_EXECVE_EXIT_EVENT
 		ret = compat_register_trace(sched_proc_exec_probe, "sched_process_exec", tp_sched_proc_exec);
-		if (ret) {
+		if(ret)
+		{
 			pr_err("can't create the 'sched_proc_exec' tracepoint\n");
 			goto err_sched_proc_exec;
 		}
+		g_tracepoints_attached |= 1 << SCHED_PROC_EXEC;
 #endif
 
 		/*
@@ -996,12 +1008,13 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		 */
 #ifdef DEDICATED_CLONE_EXIT_CHILD_EVENT
 		ret = compat_register_trace(sched_proc_fork_probe, "sched_process_fork", tp_sched_proc_fork);
-		if (ret) {
+		if(ret)
+		{
 			pr_err("can't create the 'sched_proc_fork' tracepoint\n");
 			goto err_sched_proc_fork;
 		}
+		g_tracepoints_attached |= 1 << SCHED_PROC_FORK;
 #endif
-		g_tracepoint_registered = true;
 	}
 
 	ret = 0;
@@ -1658,6 +1671,11 @@ cleanup_ioctl_procinfo:
 		ret = 0;
 		if(put_user(consumer->tracepoints_attached, out))
 			ret = -EINVAL;
+		goto cleanup_ioctl;
+	}
+	case PPM_IOCTL_MANAGE_TP:
+	{
+		ret = force_tp_set( (u32)arg);
 		goto cleanup_ioctl;
 	}
 	default:

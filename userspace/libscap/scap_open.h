@@ -32,48 +32,43 @@ limitations under the License.
 #include "../../driver/ppm_tp.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
+/*!
+  \brief Arguments for scap_open
+*/
+typedef enum {
 	/*!
-	  \brief Scap possible modes
-	*/
-	typedef enum
-	{
-		/*!
-		 * Default value that mostly exists so that sinsp can have a valid value
-		 * before it is initialized.
-		 */
-		SCAP_MODE_NONE = 0,
-		/*!
-		 * Read system call data from a capture file.
-		 */
-		SCAP_MODE_CAPTURE,
-		/*!
-		 * Read system call data from the underlying operating system.
-		 */
-		SCAP_MODE_LIVE,
-		/*!
-		 * Do not read system call data. If next is called, a dummy event is
-		 * returned.
-		 */
-		SCAP_MODE_NODRIVER,
-		/*!
-		 * Do not read system call data. Events come from the configured input plugin.
-		 */
-		SCAP_MODE_PLUGIN,
-	} scap_mode_t;
-
-	/*!
-	 * \brief Argument for scap_open
-	 * Set any PPM_SC syscall idx to true to enable its tracing at driver level,
-	 * otherwise syscalls are not traced (so called "uninteresting syscalls").
+	 * Default value that mostly exists so that sinsp can have a valid value
+	 * before it is initialized.
 	 */
-	typedef struct
-	{
-		bool ppm_sc[PPM_SC_MAX];
-	} interesting_ppm_sc_set;
+	SCAP_MODE_NONE = 0,
+	/*!
+	 * Read system call data from a capture file.
+	 */
+	SCAP_MODE_CAPTURE,
+	/*!
+	 * Read system call data from the underlying operating system.
+	 */
+	SCAP_MODE_LIVE,
+	/*!
+	 * Do not read system call data. If next is called, a dummy event is
+	 * returned.
+	 */
+	SCAP_MODE_NODRIVER,
+	/*!
+	 * Do not read system call data. Events come from the configured input plugin.
+	 */
+	SCAP_MODE_PLUGIN,
+#ifdef HAS_ENGINE_MODERN_BPF
+	/*!
+	 * Read system call data from the underlying operating system using a modern
+	 * bpf probe.
+	 */
+	SCAP_MODE_MODERN_BPF,
+#endif
+} scap_mode_t;
 
 	/*!
 	 * \brief Argument for scap_open

@@ -469,10 +469,8 @@ void sinsp::fill_syscalls_of_interest(scap_open_args *oargs)
 	// Fallback to set all events as interesting
 	if (m_mode != SCAP_MODE_LIVE  || m_ppm_sc_of_interest.empty())
 	{
-		for(int i = 0; i < PPM_SC_MAX; i++)
-		{
-			m_ppm_sc_of_interest.insert(i);
-		}
+		// Default NULL value will handle everything for us
+		return;
 	}
 
 	/*
@@ -493,8 +491,9 @@ void sinsp::fill_syscalls_of_interest(scap_open_args *oargs)
 	// Finally, set scap_open_args syscalls_of_interest
 	for (int i = 0; i < PPM_SC_MAX; i++)
 	{
-		oargs->ppm_sc_of_interest.ppm_sc[i] = m_ppm_sc_of_interest.find(i) != m_ppm_sc_of_interest.end();
+		ppm_sc_of_interest.ppm_sc[i] = m_ppm_sc_of_interest.find(i) != m_ppm_sc_of_interest.end();
 	}
+	oargs->ppm_sc_of_interest = &ppm_sc_of_interest;
 }
 
 void sinsp::open_live_common(uint32_t timeout_ms, scap_mode_t mode)

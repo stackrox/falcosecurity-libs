@@ -449,6 +449,50 @@ void enable_simple_set()
 
 /*=============================== SYSCALLS/TRACEPOINTS ===========================*/
 
+void enable_single_tp(const char *tp_basename)
+{
+	static const char *names[] = {
+#define X(name, tp_path) tp_path,
+		TP_FIELDS
+#undef X
+	};
+
+	bool found = false;
+	for (int i = 0; i < TP_VAL_MAX && !found; i++)
+	{
+		if (strcmp(names[i], tp_basename) == 0)
+		{
+			tp_of_interest.tp[i] = true;
+			found = true;
+		}
+	}
+	if (!found)
+	{
+		fprintf(stderr, "Tracepoint '%s' not found. Unsupported or wrong parameter?\n", tp_basename);
+		fprintf(stderr, "Please choose between:\n");
+		for (int i = 0; i < TP_VAL_MAX; i++)
+		{
+			fprintf(stderr, "\t* %s\n", names[i]);
+		}
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		tp_is_set = true;
+	}
+}
+
+void enable_single_ppm_sc(int ppm_sc_code)
+{
+	if (ppm_sc_code < 0 || ppm_sc_code >= PPM_SC_MAX)
+	{
+		fprintf(stderr, "Unexistent ppm_sc code: %d. Wrong parameter?\n", ppm_sc_code);
+		exit(EXIT_FAILURE);
+	}
+	ppm_sc_of_interest.ppm_sc[ppm_sc_code] = true;
+	ppm_sc_is_set = true;
+}
+
 /*=============================== PRINT EVENT PARAMS ===========================*/
 
 void print_ipv4(int starting_index)
@@ -841,6 +885,25 @@ void parse_CLI_options(int argc, char** argv)
 		/*=============================== SCAP SOURCES ===========================*/
 
 		/*=============================== CONFIGURATIONS ===========================*/
+		if(!strcmp(argv[i], TP_OPTION))
+		{
+			if(!(i + 1 < argc))
+			{
+				printf("\nYou need to specify also the basename of the tracepoint you are interested in! Bye!\n");
+				exit(EXIT_FAILURE);
+			}
+			enable_single_tp(argv[++i]);
+		}
+
+		if(!strcmp(argv[i], PPM_SC_OPTION))
+		{
+			if(!(i + 1 < argc))
+			{
+				printf("\nYou need to specify also the syscall ppm_sc code! Bye!\n");
+				exit(EXIT_FAILURE);
+			}
+			enable_single_ppm_sc(atoi(argv[++i]));
+		}
 
 		if(!strcmp(argv[i], BUFFER_OPTION))
 		{
@@ -1019,6 +1082,15 @@ int main(int argc, char** argv)
 	g_syscall_info_table = scap_get_syscall_info_table();
 
 	parse_CLI_options(argc, argv);
+
+	if (ppm_sc_is_set)
+	{
+		oargs.ppm_sc_of_interest = ppm_sc_of_interest;
+	}
+	if (tp_is_set)
+	{
+		oargs.tp_of_interest = tp_of_interest;
+	}
 
 	print_scap_source();
 

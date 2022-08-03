@@ -663,7 +663,8 @@ static bool is_tp_enabled(interesting_tp_set *tp_of_interest, const char *shname
 static int32_t load_bpf_file(
 	struct bpf_engine *handle,
 	uint64_t *api_version_p,
-	uint64_t *schema_version_p)
+	uint64_t *schema_version_p,
+	interesting_tp_set *tp_of_interest)
 {
 	int j;
 	int maps_shndx = 0;
