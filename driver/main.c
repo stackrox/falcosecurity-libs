@@ -730,6 +730,7 @@ static int ppm_open(struct inode *inode, struct file *filp)
 {
 	int ret;
 	int syscallIndex;
+	u32 val;
 	int in_list = false;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 	int ring_no = iminor(filp->f_path.dentry->d_inode);
@@ -919,22 +920,15 @@ static int ppm_open(struct inode *inode, struct file *filp)
 
 	if (g_tracepoints_attached == 0) {
 		pr_info("starting capture\n");
+
 		/*
 		 * Enable the tracepoints
 		 */
-
-		/*
-		 * SYS_EXIT
-		 */
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
-		ret = compat_register_trace(syscall_exit_probe, "sys_exit", tp_sys_exit);
-#else
-		ret = register_trace_syscall_exit(syscall_exit_probe);
-#endif
-		if(ret)
+		val = (1 << TP_VAL_MAX) - 1;
+		ret = force_tp_set(val, TP_VAL_MAX);
+		if (ret != 0)
 		{
-			pr_err("can't create the sys_exit tracepoint\n");
-			goto err_sys_exit;
+			goto err_tp_set;
 		}
 		g_tracepoints_attached |= 1 << SYS_EXIT;
 
@@ -1021,11 +1015,11 @@ static int ppm_open(struct inode *inode, struct file *filp)
 	goto cleanup_open;
 
 err_init_ring_buffer:
-
 	check_remove_consumer(consumer, in_list);
 
 cleanup_open:
 
+cleanup_open:
 	mutex_unlock(&g_consumer_mutex);
 
 	return ret;
@@ -1287,6 +1281,7 @@ static long ppm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int cpu;
 	int ret;
+	u32 new_tp_set;
 	struct task_struct *consumer_id = filp->private_data;
 	struct ppm_consumer_t *consumer = NULL;
 
@@ -1675,7 +1670,7 @@ cleanup_ioctl_procinfo:
 	}
 	case PPM_IOCTL_MANAGE_TP:
 	{
-		ret = force_tp_set( (u32)arg);
+		ret = force_tp_set((u32)arg, TP_VAL_MAX);
 		goto cleanup_ioctl;
 	}
 	default:
