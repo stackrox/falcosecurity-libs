@@ -922,9 +922,12 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		pr_info("starting capture\n");
 
 		/*
-		 * Enable the tracepoints
+		 * Enable the tracepoints, excepts for page faults
+		 * that are enabled through PPM_IOCTL_ENABLE_PAGE_FAULTS
 		 */
 		val = (1 << TP_VAL_MAX) - 1;
+		val &= ~(1 << PAGE_FAULT_USER);
+		val &= ~(1 << PAGE_FAULT_KERN);
 		ret = force_tp_set(val, TP_VAL_MAX);
 		if (ret != 0)
 		{
