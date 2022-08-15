@@ -69,12 +69,12 @@ static __always_inline char *bpf_get_path(struct filler_data *data, int fd)
 	const unsigned char** pointers_buf = (const unsigned char**)data->tmp_scratch;
 	char *filepath = (char *)&data->tmp_scratch[(MAX_PATH_COMPONENTS* sizeof(const unsigned char*)) & SCRATCH_SIZE_HALF];
 
-	struct dentry *de_p = _READ(f->f_path.dentry); 
+	struct dentry *de_p = _READ(f->f_path.dentry);
 	if(!de_p)
 	{
 		return NULL;
 	}
-	struct dentry de = _READ(*de_p); 
+	struct dentry de = _READ(*de_p);
 	uint16_t i = 0;
 	pointers_buf[i & (MAX_PATH_COMPONENTS-1)] = de.d_name.name;
 	uint16_t nreads = 1;
@@ -95,9 +95,9 @@ static __always_inline char *bpf_get_path(struct filler_data *data, int fd)
 	# pragma unroll MAX_PATH_COMPONENTS
 	for(i = 1; i < MAX_PATH_COMPONENTS && i <= nreads && res >= 0; i++)
 	{
-		path_level = (nreads-i) & (MAX_PATH_COMPONENTS-1);	
+		path_level = (nreads-i) & (MAX_PATH_COMPONENTS-1);
 		res = bpf_probe_read_str(&filepath[curoff_bounded], MAX_PATH_LENGTH,
-				(const void*)pointers_buf[path_level]);	
+				(const void*)pointers_buf[path_level]);
 		curoff_bounded = (curoff_bounded+res-1) & SCRATCH_SIZE_HALF;
 		if(i>1 && i<nreads && res>0)
 		{
@@ -809,8 +809,8 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 					     bool enforce_snaplen)
 {
 	unsigned int len_dyn = 0;
-	unsigned int len;
-	unsigned long curoff_bounded;
+	unsigned int len = 0;
+	unsigned long curoff_bounded = 0;
 
 	if (data->state->tail_ctx.curoff > SCRATCH_SIZE_HALF)
 	{
@@ -835,7 +835,7 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 	case PT_CHARBUF:
 	case PT_FSPATH:
 	case PT_FSRELPATH: {
-		if (!data->curarg_already_on_frame) 
+		if (!data->curarg_already_on_frame)
 		{
 			int res;
 
@@ -845,50 +845,70 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 			if (res == -EFAULT || res == 0)
 				return PPM_FAILURE_INVALID_USER_MEMORY;
 			len = res;
-		} 
-		else 
+		}
+		else
 		{
 			len = val_len;
 		}
 		break;
 	}
 	case PT_BYTEBUF: {
-		if (data->curarg_already_on_frame || (val && val_len))  
+		if(data->curarg_already_on_frame || (val && val_len))
 		{
 			len = val_len;
 
-			if (enforce_snaplen) {
+			if(enforce_snaplen)
+			{
 				u32 dpi_lookahead_size = DPI_LOOKAHEAD_SIZE;
 				unsigned int sl;
 
-				if (dpi_lookahead_size > len)
+				if(dpi_lookahead_size > len)
+				{
 					dpi_lookahead_size = len;
+				}
 
-				if (!data->curarg_already_on_frame) {
+				if(!data->curarg_already_on_frame)
+				{
+					/* We need to read the first `dpi_lookahead_size` bytes.
+					 * If we are not able to read at least `dpi_lookahead_size`
+					 * we send an empty param `len=0`.
+					 */
 					volatile u16 read_size = dpi_lookahead_size;
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-					if (read_size)
-						if (bpf_probe_read(&data->buf[curoff_bounded],
-								   ((read_size - 1) & SCRATCH_SIZE_HALF) + 1,
-								   (void *)val))
+					if(!read_size || bpf_probe_read(&data->buf[curoff_bounded],
+								((read_size - 1) & SCRATCH_SIZE_HALF) + 1,
+								(void *)val))
+					{
+						len=0;
+						break;
+					}
 #else
-					if (bpf_probe_read(&data->buf[curoff_bounded],
-							   read_size & SCRATCH_SIZE_HALF,
-							   (void *)val))
-#endif
-						return PPM_FAILURE_INVALID_USER_MEMORY;
+					if(bpf_probe_read(&data->buf[curoff_bounded],
+								read_size & SCRATCH_SIZE_HALF,
+								(void *)val))
+					{
+						len=0;
+						break;
+					}
+#endif /* BPF_FORBIDS_ZERO_ACCESS */
 				}
 
+				/* If `curarg` was already on frame, we are interested only in this computation,
+				 * so we can understand how many bytes of the `curarg` we have to consider.
+				 */
 				sl = bpf_compute_snaplen(data, dpi_lookahead_size);
-				if (len > sl)
+				if(len > sl)
+				{
 					len = sl;
+				}
 			}
 
 			if (len > PPM_MAX_ARG_SIZE)
 				len = PPM_MAX_ARG_SIZE;
 
-			if (!data->curarg_already_on_frame) {
+			if(!data->curarg_already_on_frame)
+			{
 				volatile u16 read_size = len;
 
 				curoff_bounded = data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF;
@@ -898,23 +918,28 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 				}
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-				if (read_size)
-					if (bpf_probe_read(&data->buf[curoff_bounded],
-							   ((read_size - 1) & SCRATCH_SIZE_HALF) + 1,
-							   (void *)val))
+
+				if (!read_size || bpf_probe_read(&data->buf[curoff_bounded],
+							((read_size - 1) & SCRATCH_SIZE_HALF) + 1,
+							(void *)val))
+				{
+					len=0;
+					break;
+				}
 #else
 				if (bpf_probe_read(&data->buf[curoff_bounded],
-						   read_size & SCRATCH_SIZE_HALF,
-						   (void *)val))
-#endif
-					return PPM_FAILURE_INVALID_USER_MEMORY;
+							read_size & SCRATCH_SIZE_HALF,
+							(void *)val))
+				{
+					len=0;
+					break;
+				}
+#endif /* BPF_FORBIDS_ZERO_ACCESS */
 			}
-		} 
-		else 
+		}
+		else
 		{
-			/*
-			 * Handle NULL pointers
-			 */
+			/* Handle NULL pointers */
 			len = 0;
 		}
 		break;
@@ -1083,7 +1108,7 @@ static __always_inline bool bpf_in_ia32_syscall()
 
 #elif defined(CONFIG_S390)
 
-	/* See here for the definition: 
+	/* See here for the definition:
 	 * https://github.com/torvalds/linux/blob/69cb6c6556ad89620547318439d6be8bb1629a5a/arch/s390/include/asm/thread_info.h#L101
 	 */
 	status = _READ(task->thread_info.flags);
