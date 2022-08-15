@@ -1793,7 +1793,6 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	case PPME_SYSCALL_EXECVE_17_X:
 	case PPME_SYSCALL_EXECVE_18_X:
 	case PPME_SYSCALL_EXECVE_19_X:
-	case PPME_SYSCALL_EXECVEAT_X:
 		// Get the comm
 		parinfo = evt->get_param(13);
 		evt->m_tinfo->m_comm = parinfo->m_val;
@@ -1839,7 +1838,6 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	case PPME_SYSCALL_EXECVE_17_X:
 	case PPME_SYSCALL_EXECVE_18_X:
 	case PPME_SYSCALL_EXECVE_19_X:
-	case PPME_SYSCALL_EXECVEAT_X:
 		// Get the pgflt_maj
 		parinfo = evt->get_param(8);
 		ASSERT(parinfo->m_len == sizeof(uint64_t));
@@ -1888,7 +1886,6 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	case PPME_SYSCALL_EXECVE_17_X:
 	case PPME_SYSCALL_EXECVE_18_X:
 	case PPME_SYSCALL_EXECVE_19_X:
-	case PPME_SYSCALL_EXECVEAT_X:
 		// Get the environment
 		parinfo = evt->get_param(15);
 		evt->m_tinfo->set_env(parinfo->m_val, parinfo->m_len);
@@ -1926,7 +1923,6 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	case PPME_SYSCALL_EXECVE_17_X:
 	case PPME_SYSCALL_EXECVE_18_X:
 	case PPME_SYSCALL_EXECVE_19_X:
-	case PPME_SYSCALL_EXECVEAT_X:
 		// Get the tty
 		parinfo = evt->get_param(16);
 		ASSERT(parinfo->m_len == sizeof(int32_t));
@@ -2065,14 +2061,6 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 											namelen, 
 											m_inspector->m_is_windows);
 			}
-			char fullpath[SCAP_MAX_PATH_SIZE];
-			sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE,
-										   sdir.c_str(),
-										   (uint32_t)sdir.length(),
-										   pathname,
-										   namelen,
-										   m_inspector->m_is_windows);
-			evt->m_tinfo->m_exepath = fullpath;
 		}
 		evt->m_tinfo->m_exepath = fullpath;
 	}
@@ -2088,7 +2076,6 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	case PPME_SYSCALL_EXECVE_18_X:
 		break;
 	case PPME_SYSCALL_EXECVE_19_X:
-	case PPME_SYSCALL_EXECVEAT_X:
 		// Get the vpgid
 		parinfo = evt->get_param(17);
 		ASSERT(parinfo->m_len == sizeof(int64_t));
@@ -2131,7 +2118,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	// Get capabilities
 	if(evt->get_num_params() > 22)
 	{
-		if(etype == PPME_SYSCALL_EXECVE_19_X || etype == PPME_SYSCALL_EXECVEAT_X)
+		if(etype == PPME_SYSCALL_EXECVE_19_X)
 		{
 			parinfo = evt->get_param(20);
 			ASSERT(parinfo->m_len == sizeof(uint64_t));
