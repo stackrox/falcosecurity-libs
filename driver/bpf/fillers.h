@@ -3354,7 +3354,7 @@ FILLER(sys_open_by_handle_at_x, true)
 	char* filepath = NULL;
 	if(retval > 0)
 	{
-		char* filepath = bpf_get_path(data, retval);
+		filepath = bpf_get_path(data, retval);
 	} 
 	res = bpf_val_to_ring(data,(unsigned long)filepath);
 	return res;
