@@ -117,7 +117,6 @@ int32_t scap_proc_fill_info_from_stats(scap_t *handle, char* procdirname, struct
 	FILE* f = fopen(filename, "r");
 	if(f == NULL)
 	{
-		ASSERT(false);
 		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "open status file %s failed (%s)",
 			 filename, scap_strerror(handle, errno));
 		return SCAP_FAILURE;
@@ -419,7 +418,6 @@ int32_t scap_proc_fill_cgroups(scap_t *handle, struct scap_threadinfo* tinfo, co
 	FILE* f = fopen(filename, "r");
 	if(f == NULL)
 	{
-		ASSERT(false);
 		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "open cgroup file %s failed (%s)",
 			 filename, scap_strerror(handle, errno));
 		return SCAP_FAILURE;
