@@ -1211,6 +1211,7 @@ VISIBILITY_PROTECTED
 	}
 	/* End StackRox Section */
 
+/// TODO: do we need this MACRO?
 VISIBILITY_PRIVATE
 
 // Doxygen doesn't understand VISIBILITY_PRIVATE
