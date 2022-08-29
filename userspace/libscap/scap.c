@@ -1269,6 +1269,20 @@ int64_t scap_get_readfile_offset(scap_t* handle)
 
 static int32_t scap_handle_eventmask(scap_t* handle, uint32_t op, uint32_t event_id)
 {
+	switch(op)
+	{
+	case SCAP_EVENTMASK_SET:
+	case SCAP_EVENTMASK_UNSET:
+	case SCAP_EVENTMASK_ZERO:
+		break;
+	
+	default:
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s(%d) internal error", __FUNCTION__, op);
+		ASSERT(false);
+		return SCAP_FAILURE;
+		break;
+	}
+
 	if(handle->m_vtable)
 	{
 		return handle->m_vtable->configure(handle->m_engine, SCAP_EVENTMASK, op, event_id);

@@ -171,6 +171,10 @@ static int32_t scap_modern_bpf__configure(struct scap_engine_handle engine, enum
 		{
 			pman_clean_all_64bit_interesting_syscalls();
 		}
+		else if(arg1 == SCAP_EVENTMASK_ZERO)
+		{
+			pman_clean_all_64bit_interesting_syscalls();
+		}
 		return SCAP_SUCCESS;
 	case SCAP_TPMASK:
 		return pman_update_single_program(arg2, arg1 == SCAP_TPMASK_SET);

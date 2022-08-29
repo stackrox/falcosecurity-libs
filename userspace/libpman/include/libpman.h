@@ -390,6 +390,11 @@ extern "C"
 	 */
 	int pman_consume_one_from_buffers(void** event_ptr, uint16_t* cpu_id);
 
+	/////////////////////////////
+	// TEST HELPERS
+	/////////////////////////////
+#ifdef TEST_HELPERS
+
 	/**
 	 * @brief Print some statistics about events captured and
 	 * events dropped
