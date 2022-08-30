@@ -1805,6 +1805,8 @@ struct syscall_evt_pair {
 	int flags;
 	enum ppm_event_type enter_event_type;
 	enum ppm_event_type exit_event_type;
+	enum ppm_syscall_code ppm_sc;
+
 } _packed;
 
 #define SYSCALL_TABLE_SIZE 512
