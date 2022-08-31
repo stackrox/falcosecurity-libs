@@ -249,6 +249,21 @@ int32_t scap_kmod_init(scap_t *handle, scap_open_args *oargs)
 		return rc;
 	}
 
+	/* Obtain the single buffer dimension */
+	long page_size = sysconf(_SC_PAGESIZE);
+	if(page_size <= 0)
+	{
+		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "_SC_PAGESIZE: %s", scap_strerror(handle, errno));
+		return SCAP_FAILURE;
+	}
+	unsigned long single_buffer_dim = page_size * params->buffer_num_pages;
+	set_per_cpu_buffer_dim(single_buffer_dim);
+	
+	/* We need to enforce the buffer dim before opening the devices
+	 * otherwise this dimension will be not set during the opening phase!
+	 */
+	enforce_into_kmod_single_buffer_dim(handle, single_buffer_dim);
+
 	//
 	// Allocate the device descriptors.
 	//
