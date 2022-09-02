@@ -1423,6 +1423,12 @@ cleanup_ioctl_procinfo:
 	} else if (cmd == PPM_IOCTL_GET_SCHEMA_VERSION) {
 		ret = PPM_SCHEMA_CURRENT_VERSION;
 		goto cleanup_ioctl_nolock;
+	} else if (cmd == PPM_IOCTL_GET_TPMASK) {
+		u32 __user *out = (u32 __user *) arg;
+		ret = 0;
+		if(put_user(g_tracepoints_attached, out))
+			ret = -EINVAL;
+		goto cleanup_ioctl_nolock;
 	}
 
 	mutex_lock(&g_consumer_mutex);

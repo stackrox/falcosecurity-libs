@@ -41,6 +41,11 @@ enum scap_tpmask_op {
 	SCAP_TPMASK_UNSET = 1, //< disable a tp
 };
 
+enum scap_tpmask_op {
+	SCAP_TPMASK_SET = 0x8306, //< enable a to
+	SCAP_TPMASK_UNSET = 0x8307, //< disable a tp
+};
+
 /**
  * @brief settings configurable for scap engines
  */
