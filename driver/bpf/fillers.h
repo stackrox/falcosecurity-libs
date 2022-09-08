@@ -454,7 +454,7 @@ FILLER(sys_read_x, true)
 	 * data
 	 */
 	data->fd = bpf_syscall_get_argument(data, 0);
-	res = __bpf_val_to_ring(data, val, bufsize, PT_BYTEBUF, -1, true);
+	res = __bpf_val_to_ring(data, val, bufsize, PT_BYTEBUF, -1, true, USER);
 
 	return res;
 }
@@ -482,7 +482,7 @@ FILLER(sys_write_x, true)
 	val = bpf_syscall_get_argument(data, 1);
 	bufsize = bpf_syscall_get_argument(data, 2);
 
-	res = __bpf_val_to_ring(data, val, bufsize, PT_BYTEBUF, -1, true);
+	res = __bpf_val_to_ring(data, val, bufsize, PT_BYTEBUF, -1, true, USER);
 
 	return res;
 }
@@ -559,7 +559,7 @@ static __always_inline int bpf_poll_parse_fds(struct filler_data *data,
 
 	*((u16 *)&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]) = fds_count;
 	data->curarg_already_on_frame = true;
-	return __bpf_val_to_ring(data, 0, off - data->state->tail_ctx.curoff, PT_FDLIST, -1, false);
+	return __bpf_val_to_ring(data, 0, off - data->state->tail_ctx.curoff, PT_FDLIST, -1, false, KERNEL);
 }
 
 FILLER(sys_poll_e, true)
@@ -706,7 +706,7 @@ static __always_inline int bpf_parse_readv_writev_bufs(struct filler_data *data,
 
 		data->fd = bpf_syscall_get_argument(data, 0);
 		data->curarg_already_on_frame = true;
-		return __bpf_val_to_ring(data, 0, size, PT_BYTEBUF, -1, true);
+		return __bpf_val_to_ring(data, 0, size, PT_BYTEBUF, -1, true, KERNEL);
 	}
 
 	return res;
@@ -1434,10 +1434,10 @@ static int __always_inline parse_sockopt(struct filler_data *data, int level, in
 				return bpf_val_to_ring_dyn(data, u.val32, PT_UINT32, PPM_SOCKOPT_IDX_UINT32);
 
 			default:
-				return __bpf_val_to_ring(data, (unsigned long)optval, optlen, PT_BYTEBUF, PPM_SOCKOPT_IDX_UNKNOWN, false);
+				return __bpf_val_to_ring(data, (unsigned long)optval, optlen, PT_BYTEBUF, PPM_SOCKOPT_IDX_UNKNOWN, false, USER);
 		}
 	} else {
-		return __bpf_val_to_ring(data, (unsigned long)optval, optlen, PT_BYTEBUF, PPM_SOCKOPT_IDX_UNKNOWN, false);
+		return __bpf_val_to_ring(data, (unsigned long)optval, optlen, PT_BYTEBUF, PPM_SOCKOPT_IDX_UNKNOWN, false, USER);
 	}
 }
 
@@ -1655,7 +1655,7 @@ FILLER(sys_send_x, true)
 	}
 
 	data->fd = bpf_syscall_get_argument(data, 0);
-	res = __bpf_val_to_ring(data, val, bufsize, PT_BYTEBUF, -1, true);
+	res = __bpf_val_to_ring(data, val, bufsize, PT_BYTEBUF, -1, true, USER);
 
 	return res;
 }
@@ -1669,7 +1669,7 @@ FILLER(sys_execve_e, true)
 	 * filename
 	 */
 	val = bpf_syscall_get_argument(data, 0);
-	res = bpf_val_to_ring(data, val);
+	res = bpf_val_to_ring_mem(data, val, USER);
 	return res;
 }
 
@@ -1700,7 +1700,7 @@ FILLER(sys_execveat_e, true)
 	 */
 	val = bpf_syscall_get_argument(data, 1);
 
-	res = bpf_val_to_ring(data, val);
+	res = bpf_val_to_ring_mem(data, val, USER);
 	if (res != PPM_SUCCESS)
 	{
 		return res;
@@ -2440,7 +2440,7 @@ FILLER(proc_startupdate, true)
 		 * exe
 		 */
 		data->curarg_already_on_frame = true;
-		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false);
+		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false, KERNEL);
 		if (res != PPM_SUCCESS)
 			return res;
 
@@ -2448,21 +2448,21 @@ FILLER(proc_startupdate, true)
 		 * Args
 		 */
 		data->curarg_already_on_frame = true;
-		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false);
+		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false, KERNEL);
 		if (res != PPM_SUCCESS)
 			return res;
 	} else {
 		/*
 		 * exe
 		 */
-		res = bpf_val_to_ring_type(data, (unsigned long)&empty, PT_CHARBUF);
+		res = bpf_val_to_ring_type_mem(data, (unsigned long)&empty, PT_CHARBUF, KERNEL);
 		if (res != PPM_SUCCESS)
 			return res;
 
 		/*
 		 * Args
 		 */
-		res = bpf_val_to_ring_type(data, 0, PT_BYTEBUF);
+		res = bpf_val_to_ring_type_mem(data, 0, PT_BYTEBUF, KERNEL);
 		if (res != PPM_SUCCESS)
 			return res;
 	}
@@ -2499,7 +2499,7 @@ FILLER(proc_startupdate, true)
 	 * cwd, pushed empty to avoid breaking compatibility
 	 * with the older event format
 	 */
-	res = bpf_val_to_ring_type(data, (unsigned long)&empty, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, (unsigned long)&empty, PT_CHARBUF, KERNEL);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -2566,7 +2566,7 @@ FILLER(proc_startupdate, true)
 	/*
 	 * comm
 	 */
-	res = bpf_val_to_ring_type(data, (unsigned long)task->comm, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, (unsigned long)task->comm, PT_CHARBUF, KERNEL);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -2590,7 +2590,7 @@ FILLER(proc_startupdate_2, true)
 	if (res != PPM_SUCCESS)
 		return res;
 
-	res = __bpf_val_to_ring(data, (unsigned long)data->tmp_scratch, cgroups_len, PT_BYTEBUF, -1, false);
+	res = __bpf_val_to_ring(data, (unsigned long)data->tmp_scratch, cgroups_len, PT_BYTEBUF, -1, false, KERNEL);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -2789,7 +2789,7 @@ FILLER(proc_startupdate_3, true)
 		}
 
 		data->curarg_already_on_frame = true;
-		res = __bpf_val_to_ring(data, 0, env_len, PT_BYTEBUF, -1, false);
+		res = __bpf_val_to_ring(data, 0, env_len, PT_BYTEBUF, -1, false, KERNEL);
 		if (res != PPM_SUCCESS)
 			return res;
 
@@ -2945,7 +2945,7 @@ FILLER(sys_accept_x, true)
 	 * Copy the endpoint info into the ring
 	 */
 	data->curarg_already_on_frame = true;
-	res = __bpf_val_to_ring(data, 0, size, PT_SOCKTUPLE, -1, false);
+	res = __bpf_val_to_ring(data, 0, size, PT_SOCKTUPLE, -1, false, KERNEL);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -3361,7 +3361,7 @@ FILLER(sys_open_by_handle_at_x, true)
 	{
 		filepath = bpf_get_path(data, retval);
 	} 
-	res = bpf_val_to_ring(data,(unsigned long)filepath);
+	res = bpf_val_to_ring_mem(data,(unsigned long)filepath, KERNEL);
 	return res;
 }
 
@@ -4137,7 +4137,7 @@ static __always_inline int f_sys_recv_x_common(struct filler_data *data, long re
 	}
 
 	data->fd = bpf_syscall_get_argument(data, 0);
-	res = __bpf_val_to_ring(data, val, bufsize, PT_BYTEBUF, -1, true);
+	res = __bpf_val_to_ring(data, val, bufsize, PT_BYTEBUF, -1, true, USER);
 
 	return res;
 }
@@ -4214,7 +4214,7 @@ FILLER(sys_recvfrom_x, true)
 	 * Copy the endpoint info into the ring
 	 */
 	data->curarg_already_on_frame = true;
-	res = __bpf_val_to_ring(data, 0, size, PT_SOCKTUPLE, -1, false);
+	res = __bpf_val_to_ring(data, 0, size, PT_SOCKTUPLE, -1, false, KERNEL);
 
 	return res;
 }
@@ -4346,7 +4346,7 @@ FILLER(sys_recvmsg_x_2, true)
 	}
 
 	data->curarg_already_on_frame = true;
-	res = __bpf_val_to_ring(data, 0, size, PT_SOCKTUPLE, -1, false);
+	res = __bpf_val_to_ring(data, 0, size, PT_SOCKTUPLE, -1, false, KERNEL);
 
 	return res;
 }
@@ -4423,7 +4423,7 @@ FILLER(sys_sendmsg_e, true)
 	}
 
 	data->curarg_already_on_frame = true;
-	res = __bpf_val_to_ring(data, 0, size, PT_SOCKTUPLE, -1, false);
+	res = __bpf_val_to_ring(data, 0, size, PT_SOCKTUPLE, -1, false, KERNEL);
 
 	return res;
 }
@@ -4475,7 +4475,7 @@ FILLER(sys_creat_e, true)
 	 * name
 	 */
 	val = bpf_syscall_get_argument(data, 0);
-	res = bpf_val_to_ring(data, val);
+	res = bpf_val_to_ring_mem(data, val, USER);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -4509,7 +4509,7 @@ FILLER(sys_creat_x, true)
 	 * name
 	 */
 	val = bpf_syscall_get_argument(data, 0);
-	res = bpf_val_to_ring(data, val);
+	res = bpf_val_to_ring_mem(data, val, USER);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -4879,7 +4879,7 @@ FILLER(sys_renameat_x, true)
 	 * oldpath
 	 */
 	val = bpf_syscall_get_argument(data, 1);
-	res = bpf_val_to_ring(data, val);
+	res = bpf_val_to_ring_mem(data, val, USER);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -4899,7 +4899,7 @@ FILLER(sys_renameat_x, true)
 	 * newpath
 	 */
 	val = bpf_syscall_get_argument(data, 3);
-	res = bpf_val_to_ring(data, val);
+	res = bpf_val_to_ring_mem(data, val, USER);
 
 	return res;
 }
@@ -4931,7 +4931,7 @@ FILLER(sys_renameat2_x, true)
 	 * oldpath
 	 */
 	val = bpf_syscall_get_argument(data, 1);
-	res = bpf_val_to_ring(data, val);
+	res = bpf_val_to_ring_mem(data, val, USER);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -4951,7 +4951,7 @@ FILLER(sys_renameat2_x, true)
 	 * newpath
 	 */
 	val = bpf_syscall_get_argument(data, 3);
-	res = bpf_val_to_ring(data, val);
+	res = bpf_val_to_ring_mem(data, val, USER);
 
 	/*
 	 * flags
@@ -4977,7 +4977,7 @@ FILLER(sys_symlinkat_x, true)
 	 * oldpath
 	 */
 	val = bpf_syscall_get_argument(data, 0);
-	res = bpf_val_to_ring_type(data, val, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, val, PT_CHARBUF, USER);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -4997,7 +4997,7 @@ FILLER(sys_symlinkat_x, true)
 	 * newpath
 	 */
 	val = bpf_syscall_get_argument(data, 2);
-	res = bpf_val_to_ring_type(data, val, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, val, PT_CHARBUF, USER);
 
 	return res;
 }
@@ -5347,7 +5347,7 @@ FILLER(sys_quotactl_x, true)
 	 * Add special
 	 */
 	val = bpf_syscall_get_argument(data, 1);
-	res = bpf_val_to_ring_type(data, val, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, val, PT_CHARBUF, USER);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -5360,11 +5360,11 @@ FILLER(sys_quotactl_x, true)
 	 * get quotafilepath only for QUOTAON
 	 */
 	if (cmd == PPM_Q_QUOTAON) {
-		res = bpf_val_to_ring_type(data, val, PT_CHARBUF);
+		res = bpf_val_to_ring_type_mem(data, val, PT_CHARBUF, USER);
 		if (res != PPM_SUCCESS)
 			return res;
 	} else {
-		res = bpf_val_to_ring_type(data, (unsigned long)empty, PT_CHARBUF);
+		res = bpf_val_to_ring_type_mem(data, (unsigned long)empty, PT_CHARBUF, KERNEL);
 		if (res != PPM_SUCCESS)
 			return res;
 	}
@@ -6267,8 +6267,7 @@ FILLER(sched_prog_exec, false)
 
 		/* Parameter 2: exe (type: PT_CHARBUF) */
 		data->curarg_already_on_frame = true;
-		/** XXX: memory from mm ... kernel */
-		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false);
+		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false, KERNEL);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
@@ -6276,8 +6275,7 @@ FILLER(sched_prog_exec, false)
 
 		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
 		data->curarg_already_on_frame = true;
-		/** XXX: memory from mm ... kernel */
-		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false);
+		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false, KERNEL);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
@@ -6286,14 +6284,14 @@ FILLER(sched_prog_exec, false)
 	else
 	{
 		/* Parameter 2: exe (type: PT_CHARBUF) */
-		res = bpf_val_to_ring_type(data, 0, PT_CHARBUF);
+		res = bpf_val_to_ring_type_mem(data, 0, PT_CHARBUF, KERNEL);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
 		}
 
 		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
-		res = bpf_val_to_ring_type(data, 0, PT_BYTEBUF);
+		res = bpf_val_to_ring_type_mem(data, 0, PT_BYTEBUF, KERNEL);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
@@ -6329,7 +6327,7 @@ FILLER(sched_prog_exec, false)
 	 * cwd, pushed empty to avoid breaking compatibility
 	 * with the older event format
 	 */
-	res = bpf_val_to_ring_type(data, 0, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, 0, PT_CHARBUF, KERNEL);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
@@ -6394,7 +6392,7 @@ FILLER(sched_prog_exec, false)
 	}
 
 	/* Parameter 14: comm (type: PT_CHARBUF) */
-	res = bpf_val_to_ring_type(data, (unsigned long)task->comm, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, (unsigned long)task->comm, PT_CHARBUF, KERNEL);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
@@ -6418,7 +6416,7 @@ FILLER(sched_prog_exec_2, false)
 	}
 
 	/* Parameter 15: cgroups (type: PT_CHARBUFARRAY) */
-	res = __bpf_val_to_ring(data, (unsigned long)data->tmp_scratch, cgroups_len, PT_BYTEBUF, -1, false);
+	res = __bpf_val_to_ring(data, (unsigned long)data->tmp_scratch, cgroups_len, PT_BYTEBUF, -1, false, KERNEL);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
@@ -6471,8 +6469,7 @@ FILLER(sched_prog_exec_3, false)
 
 	/* Parameter 16: env (type: PT_CHARBUFARRAY) */
 	data->curarg_already_on_frame = true;
-	/* XXX: memory from mm ... kernel */
-	res = __bpf_val_to_ring(data, 0, env_len, PT_BYTEBUF, -1, false);
+	res = __bpf_val_to_ring(data, 0, env_len, PT_BYTEBUF, -1, false, KERNEL);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
@@ -6664,7 +6661,7 @@ FILLER(sched_prog_fork, false)
 
 		/* Parameter 2: exe (type: PT_CHARBUF) */
 		data->curarg_already_on_frame = true;
-		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false);
+		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false, KERNEL);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
@@ -6672,7 +6669,7 @@ FILLER(sched_prog_fork, false)
 
 		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
 		data->curarg_already_on_frame = true;
-		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false);
+		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false, KERNEL);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
@@ -6681,14 +6678,14 @@ FILLER(sched_prog_fork, false)
 	else
 	{
 		/* Parameter 2: exe (type: PT_CHARBUF) */
-		res = bpf_val_to_ring_type(data, 0, PT_CHARBUF);
+		res = bpf_val_to_ring_type_mem(data, 0, PT_CHARBUF, KERNEL);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
 		}
 
 		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
-		res = bpf_val_to_ring_type(data, 0, PT_BYTEBUF);
+		res = bpf_val_to_ring_type_mem(data, 0, PT_BYTEBUF, KERNEL);
 		if(res != PPM_SUCCESS)
 		{
 			return res;
@@ -6724,7 +6721,7 @@ FILLER(sched_prog_fork, false)
 	 * cwd, pushed empty to avoid breaking compatibility
 	 * with the older event format
 	 */
-	res = bpf_val_to_ring_type(data, 0, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, 0, PT_CHARBUF, KERNEL);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
@@ -6789,7 +6786,7 @@ FILLER(sched_prog_fork, false)
 	}
 
 	/* Parameter 14: comm (type: PT_CHARBUF) */
-	res = bpf_val_to_ring_type(data, (unsigned long)child->comm, PT_CHARBUF);
+	res = bpf_val_to_ring_type_mem(data, (unsigned long)child->comm, PT_CHARBUF, KERNEL);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
@@ -6814,7 +6811,7 @@ FILLER(sched_prog_fork_2, false)
 	}
 
 	/* Parameter 15: cgroups (type: PT_CHARBUFARRAY) */
-	res = __bpf_val_to_ring(data, (unsigned long)data->tmp_scratch, cgroups_len, PT_BYTEBUF, -1, false);
+	res = __bpf_val_to_ring(data, (unsigned long)data->tmp_scratch, cgroups_len, PT_BYTEBUF, -1, false, KERNEL);
 	if(res != PPM_SUCCESS)
 	{
 		return res;
