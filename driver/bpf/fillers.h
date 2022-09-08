@@ -12,6 +12,7 @@ or GPL2.txt for full copies of the license.
 #include "../systype_compat.h"
 #include "../ppm_flag_helpers.h"
 #include "../ppm_version.h"
+#include "bpf_helpers.h"
 
 #include <linux/tty.h>
 #include <linux/audit.h>
@@ -511,11 +512,11 @@ static __always_inline int bpf_poll_parse_fds(struct filler_data *data,
 	val = bpf_syscall_get_argument(data, 0);
 #ifdef BPF_FORBIDS_ZERO_ACCESS
 	if (read_size)
-		if (bpf_probe_read(fds,
-				   ((read_size - 1) & SCRATCH_SIZE_MAX) + 1,
-				   (void *)val))
+		if (bpf_probe_read_user(fds,
+					((read_size - 1) & SCRATCH_SIZE_MAX) + 1,
+					 (void *)val))
 #else
-	if (bpf_probe_read(fds, read_size & SCRATCH_SIZE_MAX, (void *)val))
+	if (bpf_probe_read_user(fds, read_size & SCRATCH_SIZE_MAX, (void *)val))
 #endif
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
@@ -627,13 +628,13 @@ static __always_inline int bpf_parse_readv_writev_bufs(struct filler_data *data,
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
 	if (copylen)
-		if (bpf_probe_read((void *)iov,
-				   ((copylen - 1) & SCRATCH_SIZE_MAX) + 1,
-				   (void *)iovsrc))
+		if (bpf_probe_read_user((void *)iov,
+					((copylen - 1) & SCRATCH_SIZE_MAX) + 1,
+					(void *)iovsrc))
 #else
-	if (bpf_probe_read((void *)iov,
-			   copylen & SCRATCH_SIZE_MAX,
-			   (void *)iovsrc))
+	if (bpf_probe_read_user((void *)iov,
+				copylen & SCRATCH_SIZE_MAX,
+				(void *)iovsrc))
 #endif
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
@@ -686,13 +687,13 @@ static __always_inline int bpf_parse_readv_writev_bufs(struct filler_data *data,
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
 				if (to_read)
-					if (bpf_probe_read(&data->buf[off_bounded],
-							   ((to_read - 1) & SCRATCH_SIZE_HALF) + 1,
-							   iov[j].iov_base))
+					if (bpf_probe_read_user(&data->buf[off_bounded],
+								((to_read - 1) & SCRATCH_SIZE_HALF) + 1,
+								iov[j].iov_base))
 #else
-				if (bpf_probe_read(&data->buf[off_bounded],
-						   to_read & SCRATCH_SIZE_HALF,
-						   iov[j].iov_base))
+				if (bpf_probe_read_user(&data->buf[off_bounded],
+							to_read & SCRATCH_SIZE_HALF,
+							iov[j].iov_base))
 #endif
 					return PPM_FAILURE_INVALID_USER_MEMORY;
 
@@ -798,7 +799,7 @@ static __always_inline int timespec_parse(struct filler_data *data,
 	u64 longtime;
 	struct timespec ts;
 
-	if (bpf_probe_read(&ts, sizeof(ts), (void *)val))
+	if (bpf_probe_read_user(&ts, sizeof(ts), (void *)val))
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	longtime = ((u64)ts.tv_sec) * 1000000000 + ts.tv_nsec;
@@ -852,7 +853,7 @@ static __always_inline unsigned long bpf_get_mm_counter(struct mm_struct *mm,
 {
 	long val;
 
-	bpf_probe_read(&val, sizeof(val), &mm->rss_stat.count[member]);
+	bpf_probe_read_kernel(&val, sizeof(val), &mm->rss_stat.count[member]);
 	if (val < 0)
 		val = 0;
 
@@ -883,7 +884,7 @@ FILLER(sys_brk_munmap_mmap_x, true)
 
 	task = (struct task_struct *)bpf_get_current_task();
 	mm = NULL;
-	bpf_probe_read(&mm, sizeof(mm), &task->mm);
+	bpf_probe_read_kernel(&mm, sizeof(mm), &task->mm);
 
 	retval = bpf_syscall_get_retval(data->ctx);
 	res = bpf_val_to_ring_type(data, retval, PT_UINT64);
@@ -1095,7 +1096,7 @@ FILLER(sys_getrlimit_setrlrimit_x, true)
 		struct rlimit rl;
 
 		val = bpf_syscall_get_argument(data, 1);
-		if (bpf_probe_read(&rl, sizeof(rl), (void *)val))
+		if (bpf_probe_read_user(&rl, sizeof(rl), (void *)val))
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		cur = rl.rlim_cur;
@@ -1240,7 +1241,7 @@ FILLER(sys_socketpair_x, true)
 
 	if (retval >= 0) {
 		val = bpf_syscall_get_argument(data, 3);
-		if (bpf_probe_read(fds, 2 * sizeof(int), (void *)val))
+		if (bpf_probe_read_user(fds, 2 * sizeof(int), (void *)val))
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		struct socket *sock = bpf_sockfd_lookup(data, fds[0]);
@@ -1280,7 +1281,7 @@ static int __always_inline parse_sockopt(struct filler_data *data, int level, in
 		switch (optname) {
 #ifdef SO_ERROR
 			case SO_ERROR:
-				if (bpf_probe_read(&u.val32, sizeof(u.val32), optval))
+				if (bpf_probe_read_user(&u.val32, sizeof(u.val32), optval))
 					return PPM_FAILURE_INVALID_USER_MEMORY;
 				return bpf_val_to_ring_dyn(data, -u.val32, PT_ERRNO, PPM_SOCKOPT_IDX_ERRNO);
 #endif
@@ -1291,13 +1292,13 @@ static int __always_inline parse_sockopt(struct filler_data *data, int level, in
 #ifdef SO_SNDTIMEO
 			case SO_SNDTIMEO:
 #endif
-				if (bpf_probe_read(&u.tv, sizeof(u.tv), optval))
+				if (bpf_probe_read_user(&u.tv, sizeof(u.tv), optval))
 					return PPM_FAILURE_INVALID_USER_MEMORY;
 				return bpf_val_to_ring_dyn(data, u.tv.tv_sec * 1000000000 + u.tv.tv_usec * 1000, PT_RELTIME, PPM_SOCKOPT_IDX_TIMEVAL);
 
 #ifdef SO_COOKIE
 			case SO_COOKIE:
-				if (bpf_probe_read(&u.val64, sizeof(u.val64), optval))
+				if (bpf_probe_read_user(&u.val64, sizeof(u.val64), optval))
 					return PPM_FAILURE_INVALID_USER_MEMORY;
 				return bpf_val_to_ring_dyn(data, u.val64, PT_UINT64, PPM_SOCKOPT_IDX_UINT64);
 #endif
@@ -1428,7 +1429,7 @@ static int __always_inline parse_sockopt(struct filler_data *data, int level, in
 #ifdef SO_INCOMING_CPU
 			case SO_INCOMING_CPU:
 #endif
-				if (bpf_probe_read(&u.val32, sizeof(u.val32), optval))
+				if (bpf_probe_read_user(&u.val32, sizeof(u.val32), optval))
 					return PPM_FAILURE_INVALID_USER_MEMORY;
 				return bpf_val_to_ring_dyn(data, u.val32, PT_UINT32, PPM_SOCKOPT_IDX_UINT32);
 
@@ -1515,7 +1516,7 @@ FILLER(sys_getsockopt_x, true)
 	/* optval */
 	optval = bpf_syscall_get_argument(data, 3);
 	optlen_p = bpf_syscall_get_argument(data, 4);
-	if (bpf_probe_read(&optlen, sizeof(optlen), (void*)optlen_p))
+	if (bpf_probe_read_user(&optlen, sizeof(optlen), (void*)optlen_p))
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	res = parse_sockopt(data, level, optname, (void*)optval, optlen);
@@ -1933,7 +1934,8 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 	}
 
-	int res = bpf_probe_read_str(&buf[off & SCRATCH_SIZE_HALF],
+	/* XXX kernel or user */
+	int res = bpf_probe_read_kernel_str(&buf[off & SCRATCH_SIZE_HALF],
 				     SCRATCH_SIZE_HALF,
 				     subsys_name);
 	if (res == -EFAULT || res == 0)
@@ -1986,7 +1988,7 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 			return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 		}
 
-		res = bpf_probe_read_str(&buf[off & SCRATCH_SIZE_HALF],
+		res = bpf_probe_read_kernel_str(&buf[off & SCRATCH_SIZE_HALF],
 						SCRATCH_SIZE_HALF,
 						cgroup_path[k]);
 		if (res <= 0)
@@ -2104,7 +2106,7 @@ static __always_inline int bpf_accumulate_argv_or_env(struct filler_data *data,
 			return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 		}
 
-		len = bpf_probe_read_str(&data->buf[off & SCRATCH_SIZE_HALF], SCRATCH_SIZE_HALF, arg);
+		len = bpf_probe_read_user_str(&data->buf[off & SCRATCH_SIZE_HALF], SCRATCH_SIZE_HALF, arg);
 		if (len == -EFAULT || len == 0)
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
@@ -2383,11 +2385,11 @@ FILLER(proc_startupdate, true)
 				args_len = ARGS_ENV_SIZE_MAX;
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-			if (bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+			if (bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
 						((args_len - 1) & SCRATCH_SIZE_HALF) + 1,
 						(void *)arg_start))
 #else
-			if (bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+			if (bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
 						args_len & SCRATCH_SIZE_HALF,
 						(void *)arg_start))
 #endif
@@ -2426,9 +2428,10 @@ FILLER(proc_startupdate, true)
 	if (args_len) {
 		int exe_len;
 
-		exe_len = bpf_probe_read_str(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						SCRATCH_SIZE_HALF,
-						&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
+		/* XXX: kernel or user space address */
+		exe_len = bpf_probe_read_kernel_str(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						    SCRATCH_SIZE_HALF,
+						    &data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
 
 		if (exe_len == -EFAULT || exe_len == 0)
 			return PPM_FAILURE_INVALID_USER_MEMORY;
@@ -2643,7 +2646,7 @@ FILLER(proc_startupdate_3, true)
 		case PPME_SYSCALL_CLONE3_X:
 #ifdef __NR_clone3
 			flags = bpf_syscall_get_argument(data, 0);
-			if (bpf_probe_read(&cl_args, sizeof(struct clone_args), (void *)flags))
+			if (bpf_probe_read_user(&cl_args, sizeof(struct clone_args), (void *)flags))
 			{
 				return PPM_FAILURE_INVALID_USER_MEMORY;
 			}
@@ -2747,13 +2750,13 @@ FILLER(proc_startupdate_3, true)
 					env_len = ARGS_ENV_SIZE_MAX;
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-				if (bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						   ((env_len - 1) & SCRATCH_SIZE_HALF) + 1,
-						   (void *)env_start))
+				if (bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+							  ((env_len - 1) & SCRATCH_SIZE_HALF) + 1,
+							  (void *)env_start))
 #else
-				if (bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						   env_len & SCRATCH_SIZE_HALF,
-						   (void *)env_start))
+				if (bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+							  env_len & SCRATCH_SIZE_HALF,
+							  (void *)env_start))
 #endif
 					env_len = 0;
 				else
@@ -3192,7 +3195,7 @@ FILLER(sys_openat2_e, true)
 	 * how: we get the data structure, and put its fields in the buffer one by one
 	 */
 	val = bpf_syscall_get_argument(data, 2);
-	if (bpf_probe_read(&how, sizeof(struct open_how), (void *)val)) {
+	if (bpf_probe_read_user(&how, sizeof(struct open_how), (void *)val)) {
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 	}
 	flags = open_flags_to_scap(how.flags);
@@ -3270,7 +3273,7 @@ FILLER(sys_openat2_x, true)
 	 * how: we get the data structure, and put its fields in the buffer one by one
 	 */
 	val = bpf_syscall_get_argument(data, 2);
-	if (bpf_probe_read(&how, sizeof(struct open_how), (void *)val)) {
+	if (bpf_probe_read_user(&how, sizeof(struct open_how), (void *)val)) {
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 	}
 	flags = open_flags_to_scap(how.flags);
@@ -3394,7 +3397,7 @@ FILLER(sys_io_uring_setup_x, true)
 	 * io_uring_params: we get the data structure, and put its fields in the buffer one by one
 	 */
 	val = bpf_syscall_get_argument(data, 1);
-	if (bpf_probe_read(&params, sizeof(struct io_uring_params), (void *)val)) {
+	if (bpf_probe_read_user(&params, sizeof(struct io_uring_params), (void *)val)) {
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 	}
 
@@ -3925,7 +3928,7 @@ FILLER(sys_prlimit_x, true)
 	 */
 	if (retval >= 0) {
 		val = bpf_syscall_get_argument(data, 2);
-		if (bpf_probe_read(&rl, sizeof(rl), (void *)val)) {
+		if (bpf_probe_read_user(&rl, sizeof(rl), (void *)val)) {
 			newcur = -1;
 			newmax = -1;
 		} else {
@@ -3938,7 +3941,7 @@ FILLER(sys_prlimit_x, true)
 	}
 
 	val = bpf_syscall_get_argument(data, 3);
-	if (bpf_probe_read(&rl, sizeof(rl), (void *)val)) {
+	if (bpf_probe_read_user(&rl, sizeof(rl), (void *)val)) {
 		oldcur = -1;
 		oldmax = -1;
 	} else {
@@ -4181,7 +4184,7 @@ FILLER(sys_recvfrom_x, true)
 		val = bpf_syscall_get_argument(data, 5);
 
 		if (usrsockaddr && val != 0) {
-			if (bpf_probe_read(&addrlen, sizeof(addrlen),
+			if (bpf_probe_read_user(&addrlen, sizeof(addrlen),
 					   (void *)val))
 				return PPM_FAILURE_INVALID_USER_MEMORY;
 
@@ -4265,7 +4268,7 @@ FILLER(sys_recvmsg_x, true)
 	 * Retrieve the message header
 	 */
 	val = bpf_syscall_get_argument(data, 1);
-	if (bpf_probe_read(&mh, sizeof(mh), (void *)val))
+	if (bpf_probe_read_user(&mh, sizeof(mh), (void *)val))
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	/*
@@ -4308,7 +4311,7 @@ FILLER(sys_recvmsg_x_2, true)
 		 * Retrieve the message header
 		 */
 		val = bpf_syscall_get_argument(data, 1);
-		if (bpf_probe_read(&mh, sizeof(mh), (void *)val))
+		if (bpf_probe_read_user(&mh, sizeof(mh), (void *)val))
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		/*
@@ -4377,7 +4380,7 @@ FILLER(sys_sendmsg_e, true)
 	 * Retrieve the message header
 	 */
 	val = bpf_syscall_get_argument(data, 1);
-	if (bpf_probe_read(&mh, sizeof(mh), (void *)val))
+	if (bpf_probe_read_user(&mh, sizeof(mh), (void *)val))
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	/*
@@ -4450,7 +4453,7 @@ FILLER(sys_sendmsg_x, true)
 	 * data
 	 */
 	val = bpf_syscall_get_argument(data, 1);
-	if (bpf_probe_read(&mh, sizeof(mh), (void *)val))
+	if (bpf_probe_read_user(&mh, sizeof(mh), (void *)val))
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	iov = (const struct iovec *)mh.msg_iov;
@@ -4557,7 +4560,7 @@ FILLER(sys_pipe_x, true)
 	 * fds
 	 */
 	val = bpf_syscall_get_argument(data, 0);
-	if (bpf_probe_read(fds, sizeof(fds), (void *)val))
+	if (bpf_probe_read_user(fds, sizeof(fds), (void *)val))
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	res = bpf_val_to_ring(data, fds[0]);
@@ -4716,7 +4719,7 @@ FILLER(sys_ppoll_e, true)
 	 */
 	val = bpf_syscall_get_argument(data, 3);
 	if (val != (unsigned long)NULL)
-		if (bpf_probe_read(&val, sizeof(val), (void *)val))
+		if (bpf_probe_read_user(&val, sizeof(val), (void *)val))
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 	res = bpf_val_to_ring_type(data, val, PT_SIGSET);
@@ -4762,7 +4765,7 @@ FILLER(sys_semop_x, true)
 			struct sembuf sops = {0, 0, 0};
 
 			if (nsops--)
-				if (bpf_probe_read(&sops, sizeof(sops),
+				if (bpf_probe_read_user(&sops, sizeof(sops),
 						   (void *)&ptr[j]))
 					return PPM_FAILURE_INVALID_USER_MEMORY;
 
@@ -5370,7 +5373,7 @@ FILLER(sys_quotactl_x, true)
 	 * dqblk fields if present
 	 */
 	if (cmd == PPM_Q_GETQUOTA || cmd == PPM_Q_SETQUOTA) {
-		if (bpf_probe_read(&dqblk, sizeof(dqblk),
+		if (bpf_probe_read_user(&dqblk, sizeof(dqblk),
 				   (void *)val))
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 	}
@@ -5442,7 +5445,7 @@ FILLER(sys_quotactl_x, true)
 	 * dqinfo fields if present
 	 */
 	if (cmd == PPM_Q_GETINFO || cmd == PPM_Q_SETINFO) {
-		if (bpf_probe_read(&dqinfo, sizeof(dqinfo),
+		if (bpf_probe_read_user(&dqinfo, sizeof(dqinfo),
 				   (void *)val))
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 	}
@@ -5481,7 +5484,7 @@ FILLER(sys_quotactl_x, true)
 	if (cmd == PPM_Q_GETFMT) {
 		u32 tmp;
 
-		if (bpf_probe_read(&tmp, sizeof(tmp), (void *)val))
+		if (bpf_probe_read_user(&tmp, sizeof(tmp), (void *)val))
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 		quota_fmt_out = quotactl_fmt_to_scap(tmp);
 	}
@@ -5615,7 +5618,7 @@ static __always_inline int bpf_parse_ptrace_data(struct filler_data *data, u16 r
 	case PPM_PTRACE_PEEKUSR:
 		idx = PPM_PTRACE_IDX_UINT64;
 		type = PT_UINT64;
-		if (bpf_probe_read(&dst, sizeof(long), (void *)val))
+		if (bpf_probe_read_user(&dst, sizeof(long), (void *)val))
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		break;
@@ -6236,13 +6239,13 @@ FILLER(sched_prog_exec, false)
 
 	/* `bpf_probe_read()` returns 0 in case of success. */
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-	int correctly_read = bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						((args_len - 1) & SCRATCH_SIZE_HALF) + 1,
-						(void *)arg_start);
+	int correctly_read = bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						 ((args_len - 1) & SCRATCH_SIZE_HALF) + 1,
+						 (void *)arg_start);
 #else						
-	int correctly_read = bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-					    args_len & SCRATCH_SIZE_HALF,
-					    (void *)arg_start);
+	int correctly_read = bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						 args_len & SCRATCH_SIZE_HALF,
+						 (void *)arg_start);
 #endif /* BPF_FORBIDS_ZERO_ACCESS */
 
 	/* If there was something to read and we read it correctly, update all
@@ -6253,9 +6256,9 @@ FILLER(sched_prog_exec, false)
 		data->buf[(data->state->tail_ctx.curoff + args_len - 1) & SCRATCH_SIZE_MAX] = 0;
 
 		/* We need the len of the second param `exe`. */
-		int exe_len = bpf_probe_read_str(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						 SCRATCH_SIZE_HALF,
-						 &data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
+		int exe_len = bpf_probe_read_kernel_str(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						      SCRATCH_SIZE_HALF,
+						      &data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
 
 		if(exe_len == -EFAULT)
 		{
@@ -6264,6 +6267,7 @@ FILLER(sched_prog_exec, false)
 
 		/* Parameter 2: exe (type: PT_CHARBUF) */
 		data->curarg_already_on_frame = true;
+		/** XXX: memory from mm ... kernel */
 		res = __bpf_val_to_ring(data, 0, exe_len, PT_CHARBUF, -1, false);
 		if(res != PPM_SUCCESS)
 		{
@@ -6272,6 +6276,7 @@ FILLER(sched_prog_exec, false)
 
 		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
 		data->curarg_already_on_frame = true;
+		/** XXX: memory from mm ... kernel */
 		res = __bpf_val_to_ring(data, 0, args_len - exe_len, PT_BYTEBUF, -1, false);
 		if(res != PPM_SUCCESS)
 		{
@@ -6447,11 +6452,11 @@ FILLER(sched_prog_exec_3, false)
 		}
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-		if(bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+		if(bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
 				  ((env_len - 1) & SCRATCH_SIZE_HALF) + 1,
 				  (void *)env_start))
 #else
-		if(bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+		if(bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
 				  env_len & SCRATCH_SIZE_HALF,
 				  (void *)env_start))
 #endif /* BPF_FORBIDS_ZERO_ACCESS */
@@ -6466,6 +6471,7 @@ FILLER(sched_prog_exec_3, false)
 
 	/* Parameter 16: env (type: PT_CHARBUFARRAY) */
 	data->curarg_already_on_frame = true;
+	/* XXX: memory from mm ... kernel */
 	res = __bpf_val_to_ring(data, 0, env_len, PT_BYTEBUF, -1, false);
 	if(res != PPM_SUCCESS)
 	{
@@ -6635,9 +6641,9 @@ FILLER(sched_prog_fork, false)
 	}
 
 	/* `bpf_probe_read()` returns 0 in case of success. */
-	int correctly_read = bpf_probe_read(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-					    args_len & SCRATCH_SIZE_HALF,
-					    (void *)arg_start);
+	int correctly_read = bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						 args_len & SCRATCH_SIZE_HALF,
+						 (void *)arg_start);
 
 	/* If there was something to read and we read it correctly, update all
 	 * the offsets, otherwise push empty params to userspace.
@@ -6647,9 +6653,9 @@ FILLER(sched_prog_fork, false)
 		data->buf[(data->state->tail_ctx.curoff + args_len - 1) & SCRATCH_SIZE_MAX] = 0;
 
 		/* We need the len of the second param `exe`. */
-		int exe_len = bpf_probe_read_str(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						 SCRATCH_SIZE_HALF,
-						 &data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
+		int exe_len = bpf_probe_read_kernel_str(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						      SCRATCH_SIZE_HALF,
+						      &data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
 
 		if(exe_len == -EFAULT)
 		{
