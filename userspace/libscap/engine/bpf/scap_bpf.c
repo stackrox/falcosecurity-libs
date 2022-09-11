@@ -869,6 +869,9 @@ static void *perf_event_mmap(struct bpf_engine *handle, int fd, unsigned long *s
 	int header_size = page_size;
 	unsigned long total_size = ring_size * 2 + header_size;
 
+	/* This variable is not used in BPF right now, but just to be future proof we set it. */
+	set_per_cpu_buffer_dim(ring_size);
+
 	*size = 0;
 
 	//
