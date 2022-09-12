@@ -27,7 +27,7 @@ or GPL2.txt for full copies of the license.
 
 #ifdef __KERNEL__ /* Kernel module - BPF probe */
 
-#include <linux/version.h>
+#include "ppm_version.h"
 
 ///////////////////////////////
 // CAPTURE_SCHED_PROC_FORK 
@@ -132,6 +132,15 @@ or GPL2.txt for full copies of the license.
 	#define CAPTURE_PAGE_FAULTS
 #endif
 
+///////////////////////////////
+// USE_BPF_PROBE_KERNEL_USER_VARIANTS
+///////////////////////////////
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,5,0)) || \
+	((PPM_RHEL_RELEASE_CODE > 0) && (PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 5)))
+		#define USE_BPF_PROBE_KERNEL_USER_VARIANTS
+#endif
+
 #elif defined(__USE_VMLINUX__) /* modern BPF probe */
 
 ///////////////////////////////
@@ -148,13 +157,6 @@ or GPL2.txt for full copies of the license.
 
 #if defined(__TARGET_ARCH_arm64) || defined(__TARGET_ARCH_s390)
 	#define CAPTURE_SCHED_PROC_FORK 
-#endif
-///////////////////////////////
-// USE_BPF_PROBE_KERNEL_USER_VARIANTS
-///////////////////////////////
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,5,0)
-	#define USE_BPF_PROBE_KERNEL_USER_VARIANTS
 #endif
 
 #else /* Userspace */
