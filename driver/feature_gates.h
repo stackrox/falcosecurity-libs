@@ -149,6 +149,13 @@ or GPL2.txt for full copies of the license.
 #if defined(__TARGET_ARCH_arm64) || defined(__TARGET_ARCH_s390)
 	#define CAPTURE_SCHED_PROC_FORK 
 #endif
+///////////////////////////////
+// USE_BPF_PROBE_KERNEL_USER_VARIANTS
+///////////////////////////////
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,5,0)
+	#define USE_BPF_PROBE_KERNEL_USER_VARIANTS
+#endif
 
 #else /* Userspace */
 
