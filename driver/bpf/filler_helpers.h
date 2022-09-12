@@ -1081,7 +1081,6 @@ static __always_inline enum read_memory param_type_to_mem(enum ppm_param_type ty
 	case PT_FSPATH:
 	case PT_FSRELPATH:
 	case PT_BYTEBUF:
-	{
 		/* Those above require some review on whether USER reads are
 		 * correct. If not, explicit use the respective helper with
 		 * the _mem() suffix to specify the memory to read from.
@@ -1089,11 +1088,8 @@ static __always_inline enum read_memory param_type_to_mem(enum ppm_param_type ty
 		 * See also the usage below in the helpers.
 		 */
 		return USER;
-	}
 	default:
-	{
 		return KERNEL;
-	}
 	}
 }
 
