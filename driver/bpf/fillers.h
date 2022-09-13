@@ -3719,8 +3719,6 @@ FILLER(sys_fsconfig_x, true)
 		res = bpf_val_to_ring(data, 0);
 		if (res != PPM_SUCCESS)
 			return res;
-
-		res = bpf_val_to_ring(data, aux);
 		break;
 	case PPM_FSCONFIG_SET_STRING:
 		// value is a NUL-terminated string; aux is 0
@@ -3731,11 +3729,6 @@ FILLER(sys_fsconfig_x, true)
 		res = bpf_val_to_ring_type(data, val, PT_CHARBUF);
 		if (res != PPM_SUCCESS)
 			return res;
-
-		/*
-		 * aux -> should be 0
-		 */
-		res = bpf_val_to_ring(data, aux);
 		break;
 	case PPM_FSCONFIG_SET_BINARY:
 		// value points to a blob; aux is its size
@@ -3746,11 +3739,6 @@ FILLER(sys_fsconfig_x, true)
 		res = __bpf_val_to_ring(data, val, aux, PT_BYTEBUF, -1, true);
 		if (res != PPM_SUCCESS)
 			return res;
-
-		/*
-		 * aux -> bytebuf size
-		 */
-		res = bpf_val_to_ring(data, aux);
 		break;
 	case PPM_FSCONFIG_SET_PATH:
 	case PPM_FSCONFIG_SET_PATH_EMPTY:
@@ -3762,11 +3750,6 @@ FILLER(sys_fsconfig_x, true)
 		res = bpf_val_to_ring_type(data, val, PT_CHARBUF);
 		if (res != PPM_SUCCESS)
 			return res;
-
-		/*
-		 * aux -> fd
-		 */
-		res = bpf_val_to_ring(data, aux);
 		break;
 	case PPM_FSCONFIG_SET_FD:
 		// value must be NULL; aux is a fd
@@ -3777,11 +3760,6 @@ FILLER(sys_fsconfig_x, true)
 		res = bpf_val_to_ring(data, 0);
 		if (res != PPM_SUCCESS)
 			return res;
-
-		/*
-		 * aux -> fd
-		 */
-		res = bpf_val_to_ring(data, aux);
 		break;
 	case PPM_FSCONFIG_CMD_CREATE:
 	case PPM_FSCONFIG_CMD_RECONFIGURE:
@@ -3793,14 +3771,10 @@ FILLER(sys_fsconfig_x, true)
 		res = bpf_val_to_ring(data, 0);
 		if (res != PPM_SUCCESS)
 			return res;
-
-		/*
-		 * aux -> should be 0; push what we got
-		 */
-		res = bpf_val_to_ring(data, aux);
 		break;
 	}
 
+	res = bpf_val_to_ring(data, aux);
 	return res;
 }
 
