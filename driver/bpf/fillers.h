@@ -2384,13 +2384,13 @@ FILLER(proc_startupdate, true)
 				args_len = ARGS_ENV_SIZE_MAX;
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-			if (bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						  ((args_len - 1) & SCRATCH_SIZE_HALF) + 1,
-						  (void *)arg_start))
+			if (bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						((args_len - 1) & SCRATCH_SIZE_HALF) + 1,
+						(void *)arg_start))
 #else
-			if (bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						  args_len & SCRATCH_SIZE_HALF,
-						  (void *)arg_start))
+			if (bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						args_len & SCRATCH_SIZE_HALF,
+						(void *)arg_start))
 #endif
 				args_len = 0;
 			else
@@ -6092,13 +6092,13 @@ FILLER(sched_prog_exec, false)
 
 	/* `bpf_probe_read()` returns 0 in case of success. */
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-	int correctly_read = bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-						((args_len - 1) & SCRATCH_SIZE_HALF) + 1,
-						(void *)arg_start);
+	int correctly_read = bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						 ((args_len - 1) & SCRATCH_SIZE_HALF) + 1,
+						 (void *)arg_start);
 #else
-	int correctly_read = bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
-					    args_len & SCRATCH_SIZE_HALF,
-					    (void *)arg_start);
+	int correctly_read = bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+						 args_len & SCRATCH_SIZE_HALF,
+						 (void *)arg_start);
 #endif /* BPF_FORBIDS_ZERO_ACCESS */
 
 	/* If there was something to read and we read it correctly, update all
@@ -6491,7 +6491,7 @@ FILLER(sched_prog_fork, false)
 	}
 
 	/* `bpf_probe_read()` returns 0 in case of success. */
-	int correctly_read = bpf_probe_read_kernel(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
+	int correctly_read = bpf_probe_read_user(&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF],
 						 args_len & SCRATCH_SIZE_HALF,
 						 (void *)arg_start);
 
