@@ -13,6 +13,10 @@ or GPL2.txt for full copies of the license.
 #include <linux/version.h>
 #include <linux/fdtable.h>
 
+#ifdef CAPTURE_SOCKETCALL
+#include <linux/net.h>
+#endif
+
 #include "types.h"
 #include "builtins.h"
 
@@ -83,6 +87,40 @@ static __always_inline void delete_args(void)
 }
 #endif
 
+#ifdef CAPTURE_SOCKETCALL
+
+static __always_inline int stash_socketcall_args(unsigned long *args)
+{
+	unsigned long long id = bpf_get_current_pid_tgid() & 0xffffffff;
+	int ret = bpf_map_update_elem(&socketcall_args_map, &id, args, BPF_ANY);
+
+	if (ret)
+		bpf_printk("error stashing socketcall arguments for %d:%d\n", id, ret);
+
+	return ret;
+}
+
+static __always_inline unsigned long *unstash_socketcall_args()
+{
+	unsigned long long id = bpf_get_current_pid_tgid() & 0xffffffff;
+	unsigned long *sargs;
+
+	sargs = bpf_map_lookup_elem(&socketcall_args_map, &id);
+	if (!sargs)
+		return NULL;
+
+	return sargs;
+}
+
+static __always_inline void delete_socketcall_args()
+{
+	unsigned long long id = bpf_get_current_pid_tgid() & 0xffffffff;
+
+	bpf_map_delete_elem(&socketcall_args_map, &id);
+}
+
+#endif
+
 /* Can be called just from an exit event
  */
 static __always_inline long bpf_syscall_get_retval(void *ctx)
@@ -137,7 +175,7 @@ static __always_inline long bpf_syscall_get_nr(void *ctx)
 	return id;
 }
 
-#ifndef BPF_SUPPORTS_RAW_TRACEPOINTS
+#if !defined(BPF_SUPPORTS_RAW_TRACEPOINTS) || defined(CAPTURE_SOCKETCALL)
 static __always_inline unsigned long bpf_syscall_get_argument_from_args(unsigned long *args,
 									int idx)
 {
@@ -250,6 +288,14 @@ static __always_inline unsigned long bpf_syscall_get_argument_from_ctx(void *ctx
 static __always_inline unsigned long bpf_syscall_get_argument(struct filler_data *data,
 							      int idx)
 {
+#if defined(CAPTURE_SOCKETCALL)
+	if (data->state->tail_ctx.is_socketcall) {
+		unsigned long *sargs = unstash_socketcall_args();
+		if (sargs == NULL)
+			return 0;
+		return bpf_syscall_get_argument_from_args(sargs, idx);
+	}
+#endif
 #ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
 	return bpf_syscall_get_argument_from_ctx(data->ctx, idx);
 #else
@@ -418,6 +464,165 @@ static __always_inline int init_filler_data(void *ctx,
 	return PPM_SUCCESS;
 }
 
+#ifdef CAPTURE_SOCKETCALL
+
+static __always_inline enum ppm_event_type parse_socketcall(int socketcall_id)
+{
+	switch (socketcall_id) {
+	case SYS_SOCKET:
+		return PPME_SOCKET_SOCKET_E;
+	case SYS_BIND:
+		return PPME_SOCKET_BIND_E;
+	case SYS_CONNECT:
+		return PPME_SOCKET_CONNECT_E;
+	case SYS_LISTEN:
+		return PPME_SOCKET_LISTEN_E;
+	case SYS_ACCEPT:
+		return PPME_SOCKET_ACCEPT_5_E;
+	case SYS_GETSOCKNAME:
+		return PPME_SOCKET_GETSOCKNAME_E;
+	case SYS_GETPEERNAME:
+		return PPME_SOCKET_GETPEERNAME_E;
+	case SYS_SOCKETPAIR:
+		return PPME_SOCKET_SOCKETPAIR_E;
+	case SYS_SEND:
+		return PPME_SOCKET_SEND_E;
+	case SYS_SENDTO:
+		return PPME_SOCKET_SENDTO_E;
+	case SYS_RECV:
+		return PPME_SOCKET_RECV_E;
+	case SYS_RECVFROM:
+		return PPME_SOCKET_RECVFROM_E;
+	case SYS_SHUTDOWN:
+		return PPME_SOCKET_SHUTDOWN_E;
+	case SYS_SETSOCKOPT:
+		return PPME_SOCKET_SETSOCKOPT_E;
+	case SYS_GETSOCKOPT:
+		return PPME_SOCKET_GETSOCKOPT_E;
+	case SYS_SENDMSG:
+		return PPME_SOCKET_SENDMSG_E;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0)
+	case SYS_SENDMMSG:
+		return PPME_SOCKET_SENDMMSG_E;
+#endif
+	case SYS_RECVMSG:
+		return PPME_SOCKET_RECVMSG_E;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 33)
+	case SYS_RECVMMSG:
+		return PPME_SOCKET_RECVMMSG_E;
+#endif
+	case SYS_ACCEPT4:
+		return PPME_SOCKET_ACCEPT4_5_E;
+	default:
+		return PPME_GENERIC_E;
+	}
+
+	return PPME_GENERIC_E;
+}
+
+static __always_inline int __bpf_read_socketcall_args(void *dest, void *src, int sc_id)
+{
+	/* BPF verifier:
+	 *
+	 * Using nas[socketcall_id] causes an exception due to arithmetic operations
+	 * on the size argument. Therefore, use a switch statement instead, and directly
+	 * specify the number of bytes (arguments) to read.
+	 */
+#define AL(x) ((x) * sizeof(unsigned long))
+	switch (sc_id) {
+	case 0:
+		return 0;
+	case SYS_SOCKET:
+		return bpf_probe_read_user(dest, AL(3), src);
+	case SYS_BIND:
+		return bpf_probe_read_user(dest, AL(3), src);
+	case SYS_CONNECT:
+		return bpf_probe_read_user(dest, AL(3), src);
+	case SYS_LISTEN:
+		return bpf_probe_read_user(dest, AL(2), src);
+	case SYS_ACCEPT:
+		return bpf_probe_read_user(dest, AL(3), src);
+	case SYS_GETSOCKNAME:
+		return bpf_probe_read_user(dest, AL(3), src);
+	case SYS_GETPEERNAME:
+		return bpf_probe_read_user(dest, AL(3), src);
+	case SYS_SOCKETPAIR:
+		return bpf_probe_read_user(dest, AL(4), src);
+	case SYS_SEND:
+		return bpf_probe_read_user(dest, AL(4), src);
+	case SYS_RECV:
+		return bpf_probe_read_user(dest, AL(4), src);
+	case SYS_SENDTO:
+		return bpf_probe_read_user(dest, AL(6), src);
+	case SYS_RECVFROM:
+		return bpf_probe_read_user(dest, AL(6), src);
+	case SYS_SHUTDOWN:
+		return bpf_probe_read_user(dest, AL(2), src);
+	case SYS_SETSOCKOPT:
+		return bpf_probe_read_user(dest, AL(5), src);
+	case SYS_GETSOCKOPT:
+		return bpf_probe_read_user(dest, AL(5), src);
+	case SYS_SENDMSG:
+		return bpf_probe_read_user(dest, AL(3), src);
+	case SYS_RECVMSG:
+		return bpf_probe_read_user(dest, AL(3), src);
+	case SYS_ACCEPT4:
+		return bpf_probe_read_user(dest, AL(4), src);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 33)
+	case SYS_RECVMMSG:
+		return bpf_probe_read_user(dest, AL(5), src);
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0)
+	case SYS_SENDMMSG:
+		return bpf_probe_read_user(dest, AL(4), src);
+#endif
+	default:
+		return -1;
+	};
+#undef AL
+
+	return 0;
+}
+
+static __always_inline bool handle_socketcall(void *ctx,
+					      struct scap_bpf_per_cpu_state *state,
+					      enum ppm_event_type*evt_type,
+					      enum syscall_flags *drop_flags)
+{
+	int socketcall_id, id;
+	unsigned long scargs;
+	unsigned long args[6];
+	enum ppm_event_type tet;
+
+	id = bpf_syscall_get_nr(ctx);
+	if (id != __NR_socketcall)
+		return false;
+
+	socketcall_id = bpf_syscall_get_argument_from_ctx(ctx, 0);
+	tet = parse_socketcall(socketcall_id);
+	if (tet == PPME_GENERIC_E)
+		return false;
+
+	if (*evt_type == PPME_GENERIC_E)
+		*evt_type = tet;
+	else
+		*evt_type = tet + 1;	/* exit event */
+
+	scargs = bpf_syscall_get_argument_from_ctx(ctx, 1);
+	memset(args, 0, sizeof(args));
+	if (__bpf_read_socketcall_args(args, (void *)scargs, socketcall_id))
+		return true;	/* event will likely be dropped */
+	stash_socketcall_args(args);
+
+	*drop_flags = UF_NEVER_DROP;
+	state->tail_ctx.is_socketcall = true;
+	state->tail_ctx.evt_type = *evt_type;
+
+	return false;
+}
+
+#endif	/* CAPTURE_SOCKETCALL */
+
 static __always_inline int bpf_test_bit(int nr, unsigned long *addr)
 {
 	return 1UL & (_READ(addr[BIT_WORD(nr)]) >> (nr & (BITS_PER_LONG - 1)));
@@ -529,6 +734,9 @@ static __always_inline void reset_tail_ctx(struct scap_bpf_per_cpu_state *state,
 	state->tail_ctx.curoff = 0;
 	state->tail_ctx.len = 0;
 	state->tail_ctx.prev_res = 0;
+#ifdef CAPTURE_SOCKETCALL
+	state->tail_ctx.is_socketcall = false;
+#endif
 }
 
 static __always_inline void call_filler(void *ctx,
@@ -560,6 +768,13 @@ static __always_inline void call_filler(void *ctx,
 	ts = settings->boot_time + bpf_ktime_get_boot_ns();
 	reset_tail_ctx(state, evt_type, ts);
 
+#ifdef CAPTURE_SOCKETCALL
+	/* Handle and extract network event based on socketcall multiplexer */
+	if (evt_type == PPME_GENERIC_E || evt_type == PPME_GENERIC_X)
+		if (handle_socketcall(ctx, state, &evt_type, &drop_flags))
+			goto cleanup;
+#endif
+
 	/* drop_event can change state->tail_ctx.evt_type */
 	if (drop_event(stack_ctx, state, evt_type, settings, drop_flags))
 		goto cleanup;
@@ -576,6 +791,10 @@ static __always_inline void call_filler(void *ctx,
 		   filler_info->filler_id);
 
 cleanup:
+#ifdef CAPTURE_SOCKETCALL
+	if (state->tail_ctx.is_socketcall)
+		delete_socketcall_args();
+#endif
 	release_local_state(state);
 }
 

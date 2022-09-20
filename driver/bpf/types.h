@@ -251,6 +251,9 @@ struct tail_context {
 	unsigned long curoff;
 	unsigned long len;
 	int prev_res;
+#ifdef CAPTURE_SOCKETCALL
+	bool is_socketcall;
+#endif
 } __attribute__((packed));
 
 struct scap_bpf_per_cpu_state {

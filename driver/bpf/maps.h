@@ -99,6 +99,15 @@ struct bpf_map_def __bpf_section("maps") stash_map = {
 };
 #endif
 
+#ifdef CAPTURE_SOCKETCALL
+struct bpf_map_def __bpf_section("maps") socketcall_args_map = {
+	.type = BPF_MAP_TYPE_HASH,
+	.key_size = sizeof(u64),
+	.value_size = 6 * sizeof(unsigned long),
+	.max_entries = 65535,
+};
+#endif
+
 #endif // __KERNEL__
 
 #endif
