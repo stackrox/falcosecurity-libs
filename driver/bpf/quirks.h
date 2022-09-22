@@ -15,6 +15,8 @@ or GPL2.txt for full copies of the license.
 #include <linux/kconfig.h>
 #undef CONFIG_CC_HAS_ASM_INLINE
 
+#include "../feature_gates.h"
+
 // This define exists so that /collector/kernel-modules/build-kos can determine
 // that this version of sysdig supports the backported eBPF found in RHEL 7.6
 #define SUPPORTS_RHEL76_EBPF
@@ -23,6 +25,10 @@ or GPL2.txt for full copies of the license.
 
 #if RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7, 6)
 #error RHEL version must be >= 7.6
+#endif
+
+#if (defined(CONFIG_S390) && RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(8, 0))
+    #define BPF_SUPPORTS_RAW_TRACEPOINTS
 #endif
 
 #else /* RHEL_RELEASE_CODE */
@@ -48,7 +54,7 @@ or GPL2.txt for full copies of the license.
 
 #endif /* RHEL_RELEASE_CODE */
 
-#if CAPTURE_SCHED_PROC_FORK && !defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
+#if defined(CAPTURE_SCHED_PROC_FORK) && !defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
     #error The CAPTURE_SCHED_PROC_FORK support requires 'raw_tracepoints' so kernel versions greater or equal than '4.17'.
 #endif
 
