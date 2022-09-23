@@ -15,7 +15,7 @@ or GPL2.txt for full copies of the license.
 #include <linux/kconfig.h>
 #undef CONFIG_CC_HAS_ASM_INLINE
 
-include "../feature_gates.h"
+#include "../feature_gates.h"
 
 // This define exists so that /collector/kernel-modules/build-kos can determine
 // that this version of sysdig supports the backported eBPF found in RHEL 7.6
