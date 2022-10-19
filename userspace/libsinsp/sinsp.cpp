@@ -1510,7 +1510,7 @@ int32_t sinsp::next(OUT sinsp_evt **puevt)
 		if(!(m_isinternal_events_enabled && (cat & EC_INTERNAL)))
 		{
 			*puevt = evt;
-			return SCAP_TIMEOUT;
+			return SCAP_FILTERED_EVENT;
 		}
 	}
 
