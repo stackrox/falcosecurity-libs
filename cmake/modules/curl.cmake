@@ -20,9 +20,16 @@ else()
 		set(CURL_SSL_OPTION "--with-ssl")
 	else()
 		set(CURL_SSL_OPTION "--with-ssl=${OPENSSL_INSTALL_DIR}")
-		message(STATUS "Using bundled curl in '${CURL_BUNDLE_DIR}'")
-		message(STATUS "Using SSL for curl in '${CURL_SSL_OPTION}'")
+		message(STATUS "Using SSL for curl in '${OPENSSL_INSTALL_DIR}'")
 	endif()
+
+	if(NOT USE_BUNDLED_ZLIB)
+		set(CURL_ZLIB_OPTION "--with-zlib")
+	else()
+		set(CURL_ZLIB_OPTION "--with-zlib=${ZLIB_SRC}")
+		message(STATUS "Using zlib for curl in '${ZLIB_SRC}'")
+	endif()
+	message(STATUS "Using bundled curl in '${CURL_BUNDLE_DIR}'")
 
 	if(NOT TARGET curl)
 		ExternalProject_Add(
@@ -34,6 +41,7 @@ else()
 			CONFIGURE_COMMAND
 			./configure
 			${CURL_SSL_OPTION}
+			${CURL_ZLIB_OPTION}
 			--disable-shared
 			--enable-optimize
 			--disable-curldebug
