@@ -39,6 +39,13 @@ bool docker_linux::resolve(sinsp_threadinfo *tinfo, bool query_os_for_missing_in
 
 	if(!matches_runc_cgroups(tinfo, DOCKER_CGROUP_LAYOUT, container_id, cgroup))
 	{
+		g_logger.format(sinsp_logger::SEV_DEBUG,
+					 "docker_async: failed to match container_id - cgroups:");
+
+			for (const auto& c : tinfo->cgroups()) {
+				g_logger.format(sinsp_logger::SEV_DEBUG,
+					   "#### %s", c);
+			}
 		return false;
 	}
 
