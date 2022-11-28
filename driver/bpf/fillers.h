@@ -2998,12 +2998,13 @@ FILLER(sys_setns_e, true)
 
 FILLER(sys_unshare_e, true)
 {
-	unsigned long val;
-	u32 flags;
+	unsigned long val, v1, v2;
+	u32 flags = 0;
 	int res;
 
 	val = bpf_syscall_get_argument(data, 0);
-	flags = clone_flags_to_scap(val);
+	if (val > 1 || val < 0xffffffff - 1)
+		flags = clone_flags_to_scap(val & 0xffff);
 	res = bpf_val_to_ring(data, flags);
 
 	return res;
