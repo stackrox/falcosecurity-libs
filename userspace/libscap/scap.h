@@ -106,7 +106,7 @@ struct iovec;
 // 
 // This is the dimension we used before introducing the variable buffer size.
 //
-#define DEFAULT_DRIVER_BUFFER_BYTES_DIM 8 * 1024 * 1024
+#define DEFAULT_DRIVER_BUFFER_BYTES_DIM 16 * 1024 * 1024
 
 //
 // Value for proc_scan_timeout_ms field in scap_open_args, to specify
