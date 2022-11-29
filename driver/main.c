@@ -245,7 +245,7 @@ static const struct file_operations g_ppm_fops = {
 /*
  * GLOBALS
  */
-#define DEFAULT_BUFFER_BYTES_DIM 8 * 1024 * 1024;
+#define DEFAULT_BUFFER_BYTES_DIM 16 * 1024 * 1024;
 LIST_HEAD(g_consumer_list);
 static DEFINE_MUTEX(g_consumer_mutex);
 static u32 g_tracepoints_attached; // list of attached tracepoints; bitmask using ppm_tp.h enum
