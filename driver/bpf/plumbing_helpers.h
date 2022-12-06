@@ -584,6 +584,24 @@ static __always_inline int __bpf_read_socketcall_args(void *dest, void *src, int
 	return 0;
 }
 
+/* For socketcalls, arguments needs to be accessed early, i.e., before
+ * and filler are initialized.  Therefore, the bpf_syscall_get_argument*
+ * functions cannot be used.  Also, the context, 'ctx', can have a
+ * specific format.
+ */
+static __always_inline unsigned long socketcall_get_argument(void *ctx, int idx)
+{
+#ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
+	return bpf_syscall_get_argument_from_ctx(ctx, idx);
+#else
+	unsigned long arg = 0;
+	unsigned long *args = unstash_args();
+	if (args)
+		arg = bpf_syscall_get_argument_from_args(args, idx);
+	return arg;
+#endif
+}
+
 static __always_inline bool handle_socketcall(void *ctx,
 					      struct scap_bpf_per_cpu_state *state,
 					      enum ppm_event_type*evt_type,
@@ -598,7 +616,7 @@ static __always_inline bool handle_socketcall(void *ctx,
 	if (id != __NR_socketcall)
 		return false;
 
-	socketcall_id = bpf_syscall_get_argument_from_ctx(ctx, 0);
+	socketcall_id = socketcall_get_argument(ctx, 0);
 	tet = parse_socketcall(socketcall_id);
 	if (tet == PPME_GENERIC_E)
 		return false;
@@ -608,7 +626,7 @@ static __always_inline bool handle_socketcall(void *ctx,
 	else
 		*evt_type = tet + 1;	/* exit event */
 
-	scargs = bpf_syscall_get_argument_from_ctx(ctx, 1);
+	scargs = socketcall_get_argument(ctx, 1);
 	memset(args, 0, sizeof(args));
 	if (__bpf_read_socketcall_args(args, (void *)scargs, socketcall_id))
 		return true;	/* event will likely be dropped */
@@ -771,7 +789,7 @@ static __always_inline void call_filler(void *ctx,
 #ifdef CAPTURE_SOCKETCALL
 	/* Handle and extract network event based on socketcall multiplexer */
 	if (evt_type == PPME_GENERIC_E || evt_type == PPME_GENERIC_X)
-		if (handle_socketcall(ctx, state, &evt_type, &drop_flags))
+		if (handle_socketcall(stack_ctx, state, &evt_type, &drop_flags))
 			goto cleanup;
 #endif
 
