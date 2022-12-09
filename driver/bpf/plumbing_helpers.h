@@ -520,6 +520,27 @@ static __always_inline enum ppm_event_type parse_socketcall(int socketcall_id)
 	return PPME_GENERIC_E;
 }
 
+/* Filter socketcalls based on the collector custom probe */
+static __always_inline enum ppm_event_type parse_socketcall_collector(int socketcall_id)
+{
+	switch (socketcall_id) {
+	case SYS_SOCKET:
+		return PPME_SOCKET_SOCKET_E;
+	case SYS_CONNECT:
+		return PPME_SOCKET_CONNECT_E;
+	case SYS_ACCEPT:
+		return PPME_SOCKET_ACCEPT_5_E;
+	case SYS_SHUTDOWN:
+		return PPME_SOCKET_SHUTDOWN_E;
+	case SYS_ACCEPT4:
+		return PPME_SOCKET_ACCEPT4_5_E;
+	default:
+		return PPME_GENERIC_E;
+	}
+
+	return PPME_GENERIC_E;
+}
+
 static __always_inline int __bpf_read_socketcall_args(void *dest, void *src, int sc_id)
 {
 	/* BPF verifier:
@@ -617,9 +638,9 @@ static __always_inline bool handle_socketcall(void *ctx,
 		return false;
 
 	socketcall_id = socketcall_get_argument(ctx, 0);
-	tet = parse_socketcall(socketcall_id);
+	tet = parse_socketcall_collector(socketcall_id);
 	if (tet == PPME_GENERIC_E)
-		return false;
+		return true;	/* event will likey be dropped */
 
 	if (*evt_type == PPME_GENERIC_E)
 		*evt_type = tet;
