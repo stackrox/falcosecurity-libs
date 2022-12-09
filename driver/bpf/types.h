@@ -44,7 +44,11 @@ struct sys_exit_args {
 #else
 struct sys_exit_args {
 	__u64 pad;
+#ifdef USE_COLLECTOR_CUSTOM_PROBES
+	int id;
+#else
 	long id;
+#endif
 	long ret;
 };
 #endif
