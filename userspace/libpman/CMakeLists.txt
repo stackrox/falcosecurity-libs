@@ -43,7 +43,12 @@ if(USE_BUNDLED_LIBBPF)
     )
 endif()
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+
 add_library(pman ${PMAN_SOURCES})
+
+set_target_properties(pman PROPERTIES COMPILE_FLAGS "-fPIC")
 
 target_include_directories(pman
     PUBLIC
@@ -57,5 +62,6 @@ target_link_libraries(pman
     PUBLIC
     ${PMAN_LINK_LIBRARIES}
 )
+
 
 add_dependencies(pman ${PMAN_DEPENDENCIES})

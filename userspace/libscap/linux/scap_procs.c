@@ -1053,8 +1053,9 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	//
 	if(tinfo->pid == tinfo->tid)
 	{
+        uint64_t num = 0;
 		/* Begin StackRox Section */
-		if((res = scap_fd_scan_fd_dir(handle, dir_name, tinfo, sockets_by_ns, error)) != SCAP_SUCCESS)
+		if((res = scap_fd_scan_fd_dir(handle, dir_name, tinfo, sockets_by_ns, &num, error)) != SCAP_SUCCESS)
 		{
 			// Ensure tinfo is not free'd twice
 			if (procinfo && *procinfo == tinfo)

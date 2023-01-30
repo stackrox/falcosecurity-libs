@@ -6,3 +6,4 @@ if(USE_BUNDLED_ZLIB AND NOT MINIMAL_BUILD)
 endif()
 
 target_link_libraries(scap_engine_source_plugin scap_engine_noop)
+set_target_properties(scap_engine_source_plugin PROPERTIES COMPILE_FLAGS "-fPIC")

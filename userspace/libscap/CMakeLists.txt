@@ -32,6 +32,14 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
 		set(KBUILD_FLAGS "${FALCOSECURITY_LIBS_DEBUG_FLAGS}")
 	endif()
 
+    # do not remove this since when WITH_DRIVER is off
+	if(NOT DEFINED DRIVER_NAME)
+		set(DRIVER_NAME "scap")
+	endif()
+
+	string(REPLACE "-" "_" SCAP_KERNEL_MODULE_NAME "${DRIVER_NAME}")
+	add_definitions(-DSCAP_KERNEL_MODULE_NAME="${SCAP_KERNEL_MODULE_NAME}")
+
     if(NOT DEFINED PROBE_VERSION)
         set(PROBE_VERSION "${FALCOSECURITY_LIBS_VERSION}")
     endif()
@@ -108,6 +116,7 @@ target_link_libraries(scap
 endif()
 
 add_library(scap_error strerror.c)
+set_target_properties(scap_error PROPERTIES COMPILE_FLAGS "-fPIC")
 
 target_link_libraries(scap scap_error)
 
@@ -158,6 +167,7 @@ add_library(scap_event_schema
 if(USE_BUNDLED_ZLIB AND NOT MINIMAL_BUILD)
 	add_dependencies(scap_event_schema zlib)
 endif()
+set_target_properties(scap_event_schema PROPERTIES COMPILE_FLAGS "-fPIC")
 
 target_link_libraries(scap scap_event_schema)
 
@@ -178,6 +188,7 @@ if(USE_BUNDLED_ZLIB AND NOT MINIMAL_BUILD)
 	add_dependencies(scap_engine_util zlib)
 endif()
 
+set_target_properties(scap_engine_util PROPERTIES COMPILE_FLAGS "-fPIC")
 target_link_libraries(scap scap_engine_util)
 endif()
 

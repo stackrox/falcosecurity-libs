@@ -360,9 +360,9 @@ void sinsp_container_manager::notify_new_container(const sinsp_container_info& c
 	// In all other cases, containers will be stored after the proper
 	// PPME_CONTAINER_JSON_2_E event is received by the engine and processed.
 
-	sinsp_evt *evt = new sinsp_evt();
+	auto evt = std::make_shared<sinsp_evt>();
 
-	if(container_to_sinsp_event(container_to_json(container_info), cevt.get(), container_info.get_tinfo(m_inspector)))
+	if(container_to_sinsp_event(container_to_json(container_info), evt.get(), container_info.get_tinfo(m_inspector)))
 	{
 		g_logger.format(sinsp_logger::SEV_DEBUG,
 				"notify_new_container (%s): created CONTAINER_JSON event, queuing to inspector",
@@ -370,7 +370,7 @@ void sinsp_container_manager::notify_new_container(const sinsp_container_info& c
 
 		// Enqueue it onto the queue of pending container events for the inspector
 #ifndef _WIN32
-		m_inspector->m_pending_state_evts.push(cevt);
+		m_inspector->m_pending_state_evts.push(std::move(evt));
 #endif
 	}
 	else

@@ -9,3 +9,4 @@ if(USE_BUNDLED_ZLIB AND NOT MINIMAL_BUILD)
 endif()
 
 target_link_libraries(scap_engine_savefile scap_engine_noop ${ZLIB_LIB})
+set_target_properties(scap_engine_savefile PROPERTIES COMPILE_FLAGS "-fPIC")

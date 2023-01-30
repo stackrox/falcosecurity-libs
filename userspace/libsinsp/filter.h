@@ -178,5 +178,3 @@ class SINSP_PUBLIC sinsp_filter_check_iface {
 };
 
 // End StackRox
-
-#endif // HAS_FILTERING

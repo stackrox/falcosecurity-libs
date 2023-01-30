@@ -583,21 +583,6 @@ sinsp_threadinfo::cgroups_t& sinsp_threadinfo::cgroups() const
 	return empty;
 }
 
-std::string sinsp_threadinfo::get_comm() const
-{
-	return m_comm;
-}
-
-std::string sinsp_threadinfo::get_exe() const
-{
-	return m_exe;
-}
-
-std::string sinsp_threadinfo::get_exepath() const
-{
-	return m_exepath;
-}
-
 void sinsp_threadinfo::set_args(const char* args, size_t len)
 {
 	m_args.clear();
@@ -665,7 +650,7 @@ bool sinsp_threadinfo::set_env_from_proc() {
 		getline(environment, env, '\0');
 		if (!env.empty())
 		{
-			m_env.emplace_back(env);
+			m_env.push_back(env);
 		}
 	}
 
@@ -761,7 +746,7 @@ void sinsp_threadinfo::set_cgroups(const char* cgroups, size_t len)
 		tmp_cgroups->push_back(std::make_pair(subsys, cgroup));
 		offset += subsys_length + 1 + cgroup.length() + 1;
 		if (subsys == "perf_event" || subsys == "cpu" || subsys == "cpuset" || subsys == "memory") {
-			m_cgroups.emplace_back(std::move(subsys), std::move(cgroup));
+			tmp_cgroups->emplace_back(std::move(subsys), std::move(cgroup));
 		}
 	}
 

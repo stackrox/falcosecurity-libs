@@ -281,52 +281,52 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc, scap_open_args *oargs)
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
 		return NULL;
 	}
-
-	//
-	// Map the ring buffer.
-	//
-	if(udig_alloc_ring(
-#if CYGWING_AGENT || _WIN32
-		&(handle->m_win_buf_handle),
-#else
-		&(handle->m_devs[0].m_fd),
-#endif
-		(uint8_t**)&handle->m_devs[0].m_buffer,
-		&handle->m_devs[0].m_buffer_size,
-		error) != SCAP_SUCCESS)
-	{
-		scap_close(handle);
-		*rc = SCAP_FAILURE;
-		return NULL;
-	}
-
-	// Set close-on-exec for the fd
-#ifndef _WIN32
-	if(fcntl(handle->m_devs[0].m_fd, F_SETFD, FD_CLOEXEC) == -1) {
-		snprintf(error, SCAP_LASTERR_SIZE, "Can not set close-on-exec flag for fd for device %s (%s)", filename, scap_strerror(handle, errno));
-		scap_close(handle);
-		*rc = SCAP_FAILURE;
-		return NULL;
-	}
-#endif
-
-	//
-	// Map the ppm_ring_buffer_info that contains the buffer pointers
-	//
-	if(udig_alloc_ring_descriptors(
-#if CYGWING_AGENT || _WIN32
-		&(handle->m_win_descs_handle),
-#else
-		&(handle->m_devs[0].m_bufinfo_fd),
-#endif
-		&handle->m_devs[0].m_bufinfo,
-		&handle->m_devs[0].m_bufstatus,
-		error) != SCAP_SUCCESS)
-	{
-		scap_close(handle);
-		*rc = SCAP_FAILURE;
-		return NULL;
-	}
+//
+//	//
+//	// Map the ring buffer.
+//	//
+//	if(udig_alloc_ring(
+//#if CYGWING_AGENT || _WIN32
+//		&(handle->m_win_buf_handle),
+//#else
+//		&(handle->m_devs[0].m_fd),
+//#endif
+//		(uint8_t**)&handle->m_devs[0].m_buffer,
+//		&handle->m_devs[0].m_buffer_size,
+//		error) != SCAP_SUCCESS)
+//	{
+//		scap_close(handle);
+//		*rc = SCAP_FAILURE;
+//		return NULL;
+//	}
+//
+//	// Set close-on-exec for the fd
+//#ifndef _WIN32
+//	if(fcntl(handle->m_devs[0].m_fd, F_SETFD, FD_CLOEXEC) == -1) {
+//		snprintf(error, SCAP_LASTERR_SIZE, "Can not set close-on-exec flag for fd for device %s (%s)", filename, scap_strerror(handle, errno));
+//		scap_close(handle);
+//		*rc = SCAP_FAILURE;
+//		return NULL;
+//	}
+//#endif
+//
+//	//
+//	// Map the ppm_ring_buffer_info that contains the buffer pointers
+//	//
+//	if(udig_alloc_ring_descriptors(
+//#if CYGWING_AGENT || _WIN32
+//		&(handle->m_win_descs_handle),
+//#else
+//		&(handle->m_devs[0].m_bufinfo_fd),
+//#endif
+//		&handle->m_devs[0].m_bufinfo,
+//		&handle->m_devs[0].m_bufstatus,
+//		error) != SCAP_SUCCESS)
+//	{
+//		scap_close(handle);
+//		*rc = SCAP_FAILURE;
+//		return NULL;
+//	}
 
 	//
 	// Additional initializations
@@ -1610,17 +1610,17 @@ int32_t scap_get_boot_time(char* last_err, uint64_t *boot_time)
 int scap_ioctl(scap_t* handle, int devnum, unsigned long request, void* arg) {
 	int ioctl_ret = 0;
 
-	if (devnum >= handle->m_ndevs) {
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed, invalid device number %d", devnum);
-		ASSERT(false);
-		return SCAP_FAILURE;
-	}
-
-	ioctl_ret = ioctl(handle->m_devs[devnum].m_fd, request, arg);
-	if (ioctl_ret != 0) {
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed due to ioctl error (%s)", strerror(errno));
-		return SCAP_FAILURE;
-	}
+//	if (devnum >= handle->m_ndevs) {
+//		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed, invalid device number %d", devnum);
+//		ASSERT(false);
+//		return SCAP_FAILURE;
+//	}
+//
+//	ioctl_ret = ioctl(handle->m_devs[devnum].m_fd, request, arg);
+//	if (ioctl_ret != 0) {
+//		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_ioctl failed due to ioctl error (%s)", strerror(errno));
+//		return SCAP_FAILURE;
+//	}
 
 	return SCAP_SUCCESS;
 }

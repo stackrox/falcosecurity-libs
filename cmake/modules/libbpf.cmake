@@ -7,7 +7,7 @@ if(LIBBPF_INCLUDE)
     # we already have libbpf
 elseif(NOT USE_BUNDLED_LIBBPF)
     find_path(LIBBPF_INCLUDE bpf/libbpf.h)
-    find_library(LIBBPF_LIB NAMES bpf)
+    find_library(LIBBPF_LIB NAMES libbpf.a bpf)
     if(LIBBPF_INCLUDE AND LIBBPF_LIB)
         message(STATUS "Found libbpf: include: ${LIBBPF_INCLUDE}, lib: ${LIBBPF_LIB}")
     else()
