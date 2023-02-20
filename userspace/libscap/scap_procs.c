@@ -21,10 +21,7 @@ limitations under the License.
 #include <string.h>
 
 #include "scap.h"
-#include "../../driver/ppm_ringbuffer.h"
 #include "scap-int.h"
-#include "scap_engines.h"
-#include "engine/kmod/kmod.h"
 
 int32_t scap_getpid_global(scap_t* handle, int64_t* pid)
 {
@@ -41,17 +38,17 @@ int32_t scap_getpid_global(scap_t* handle, int64_t* pid)
 //
 // Delete a process entry
 //
-void scap_proc_delete(scap_t* handle, scap_threadinfo* proc)
+void scap_proc_delete(struct scap_proclist* proclist, scap_threadinfo* proc)
 {
 	//
 	// First, free the fd table for this process descriptor
 	//
-	scap_fd_free_proc_fd_table(handle, proc);
+	scap_fd_free_proc_fd_table(proc);
 
 	//
 	// Second, remove the process descriptor from the table
 	//
-	HASH_DEL(handle->m_proclist.m_proclist, proc);
+	HASH_DEL(proclist->m_proclist, proc);
 
 	//
 	// Third, free the memory
@@ -62,14 +59,14 @@ void scap_proc_delete(scap_t* handle, scap_threadinfo* proc)
 //
 // Free the process table
 //
-void scap_proc_free_table(scap_t* handle)
+void scap_proc_free_table(struct scap_proclist* proclist)
 {
 	struct scap_threadinfo* tinfo;
 	struct scap_threadinfo* ttinfo;
 
-	HASH_ITER(hh, handle->m_proclist.m_proclist, tinfo, ttinfo)
+	HASH_ITER(hh, proclist->m_proclist, tinfo, ttinfo)
 	{
-		scap_proc_delete(handle, tinfo);
+		scap_proc_delete(proclist, tinfo);
 	}
 }
 
@@ -87,7 +84,7 @@ struct scap_threadinfo *scap_proc_alloc(scap_t *handle)
 
 void scap_proc_free(scap_t* handle, struct scap_threadinfo* proc)
 {
-	scap_fd_free_proc_fd_table(handle, proc);
+	scap_fd_free_proc_fd_table(proc);
 	free(proc);
 }
 
@@ -123,66 +120,7 @@ int32_t scap_fd_add(scap_t *handle, scap_threadinfo* tinfo, uint64_t fd, scap_fd
 	}
 }
 
-int32_t scap_update_suppressed(scap_t *handle,
-			       const char *comm,
-			       uint64_t tid, uint64_t ptid,
-			       bool *suppressed)
-{
-	uint32_t i;
-	scap_tid *stid;
-
-	*suppressed = false;
-
-	HASH_FIND_INT64(handle->m_suppressed_tids, &ptid, stid);
-
-	if(stid != NULL)
-	{
-		*suppressed = true;
-	}
-	else
-	{
-		for(i=0; i < handle->m_num_suppressed_comms; i++)
-		{
-			if(strcmp(handle->m_suppressed_comms[i], comm) == 0)
-			{
-				*suppressed = true;
-				break;
-			}
-		}
-	}
-
-	// Also check to see if the tid is already in the set of
-	// suppressed tids.
-
-	HASH_FIND_INT64(handle->m_suppressed_tids, &tid, stid);
-
-	if(*suppressed && stid == NULL)
-	{
-		stid = (scap_tid *) malloc(sizeof(scap_tid));
-		stid->tid = tid;
-		int32_t uth_status = SCAP_SUCCESS;
-
-		HASH_ADD_INT64(handle->m_suppressed_tids, tid, stid);
-
-		if(uth_status != SCAP_SUCCESS)
-		{
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "can't add tid to suppressed hash table");
-			free(stid);
-			return SCAP_FAILURE;
-		}
-		*suppressed = true;
-	}
-	else if (!*suppressed && stid != NULL)
-	{
-		HASH_DEL(handle->m_suppressed_tids, stid);
-		free(stid);
-		*suppressed = false;
-	}
-
-	return SCAP_SUCCESS;
-}
-
-int32_t scap_check_suppressed(scap_t *handle, scap_evt *pevent, bool *suppressed)
+int32_t scap_check_suppressed(struct scap_suppress* suppress, scap_evt *pevent, bool *suppressed, char *error)
 {
 	uint16_t *lens;
 	char *valptr;
@@ -212,7 +150,7 @@ int32_t scap_check_suppressed(scap_t *handle, scap_evt *pevent, bool *suppressed
 
 		if(pevent->nparams < 14)
 		{
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not find process comm in event argument list");
+			snprintf(error, SCAP_LASTERR_SIZE, "Could not find process comm in event argument list");
 			return SCAP_FAILURE;
 		}
 
@@ -231,13 +169,13 @@ int32_t scap_check_suppressed(scap_t *handle, scap_evt *pevent, bool *suppressed
 
 		if(ptid == NULL)
 		{
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not find ptid in event argument list");
+			snprintf(error, SCAP_LASTERR_SIZE, "Could not find ptid in event argument list");
 			return SCAP_FAILURE;
 		}
 
 		comm = valptr;
 
-		if((res = scap_update_suppressed(handle,
+		if((res = scap_update_suppressed(suppress,
 						 comm,
 						 pevent->tid, *ptid,
 						 suppressed)) != SCAP_SUCCESS)
@@ -250,14 +188,14 @@ int32_t scap_check_suppressed(scap_t *handle, scap_evt *pevent, bool *suppressed
 
 	default:
 
-		HASH_FIND_INT64(handle->m_suppressed_tids, &(pevent->tid), stid);
+		HASH_FIND_INT64(suppress->m_suppressed_tids, &(pevent->tid), stid);
 
 		// When threads exit they are always removed and no longer suppressed.
 		if(pevent->type == PPME_PROCEXIT_1_E)
 		{
 			if(stid != NULL)
 			{
-				HASH_DEL(handle->m_suppressed_tids, stid);
+				HASH_DEL(suppress->m_suppressed_tids, stid);
 				free(stid);
 				*suppressed = true;
 			}
@@ -292,7 +230,7 @@ int32_t scap_fd_scan_vtable(scap_t *handle, const scap_threadinfo *src_tinfo, sc
 
 	for (i = 0; i < n_fdinfos; i++)
 	{
-		res = scap_fd_allocate_fdinfo(handle, &fdi, fdinfos[i].fd, fdinfos[i].type);
+		res = scap_fd_allocate_fdinfo(&fdi, fdinfos[i].fd, fdinfos[i].type);
 		if (res != SCAP_SUCCESS)
 		{
 			snprintf(error, SCAP_LASTERR_SIZE, "can't allocate scap fd handle for file fd %" PRIu64, fdinfos[i].fd);
@@ -302,7 +240,7 @@ int32_t scap_fd_scan_vtable(scap_t *handle, const scap_threadinfo *src_tinfo, sc
 		// copy the contents
 		*fdi = fdinfos[i];
 
-		res = scap_add_fd_to_proc_table(handle, dst_tinfo, fdi, error);
+		res = scap_add_fd_to_proc_table(&handle->m_proclist, dst_tinfo, fdi, error);
 		if (res != SCAP_SUCCESS)
 		{
 			scap_fd_free_fdinfo(&fdi);

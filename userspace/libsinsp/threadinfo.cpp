@@ -21,6 +21,7 @@ limitations under the License.
 #endif
 #include <stdio.h>
 #include <algorithm>
+#include "strlcpy.h"
 #include "sinsp.h"
 #include "sinsp_int.h"
 #include "protodecoder.h"
@@ -75,6 +76,7 @@ void sinsp_threadinfo::init()
 	m_pfminor = 0;
 	m_vtid = -1;
 	m_vpid = -1;
+	m_pidns_init_start_ts = 0;
 	m_main_thread.reset();
 	m_lastevent_fd = 0;
 	m_last_latency_entertime = 0;
@@ -89,6 +91,11 @@ void sinsp_threadinfo::init()
 	m_cap_inheritable = 0;
 	m_cap_permitted = 0;
 	m_cap_effective = 0;
+	m_exe_ino = 0;
+	m_exe_ino_ctime = 0;
+	m_exe_ino_mtime = 0;
+	m_exe_ino_ctime_duration_clone_ts = 0;
+	m_exe_ino_ctime_duration_pidns_start = 0;
 
 	memset(&m_user, 0, sizeof(scap_userinfo));
 	memset(&m_group, 0, sizeof(scap_groupinfo));
@@ -400,7 +407,8 @@ void sinsp_threadinfo::init(scap_threadinfo* pi)
 	m_exe = pi->exe;
 	m_exepath = pi->exepath;
 	m_exe_writable = pi->exe_writable;
-
+	m_exe_upper_layer = pi->exe_upper_layer;
+	
 	set_args(pi->args, pi->args_len);
 	if(is_main_thread())
 	{
@@ -417,6 +425,12 @@ void sinsp_threadinfo::init(scap_threadinfo* pi)
 	m_cap_effective = pi->cap_effective;
 	m_cap_inheritable = pi->cap_inheritable;
 
+	m_exe_ino = pi->exe_ino;
+	m_exe_ino_ctime = pi->exe_ino_ctime;
+	m_exe_ino_mtime = pi->exe_ino_mtime;
+	m_exe_ino_ctime_duration_clone_ts = pi->exe_ino_ctime_duration_clone_ts;
+	m_exe_ino_ctime_duration_pidns_start = pi->exe_ino_ctime_duration_pidns_start;
+
 	m_vmsize_kb = pi->vmsize_kb;
 	m_vmrss_kb = pi->vmrss_kb;
 	m_vmswap_kb = pi->vmswap_kb;
@@ -425,6 +439,7 @@ void sinsp_threadinfo::init(scap_threadinfo* pi)
 	m_nchilds = 0;
 	m_vtid = pi->vtid;
 	m_vpid = pi->vpid;
+	m_pidns_init_start_ts = pi->pidns_init_start_ts;
 	m_clone_ts = pi->clone_ts;
 	m_tty = pi->tty;
 	m_category = CAT_NONE;
@@ -506,7 +521,7 @@ void sinsp_threadinfo::set_user(uint32_t uid)
 	if (!user)
 	{
 		// this can fail if import_user is disabled
-		user = m_inspector->m_usergroup_manager.add_user(m_container_id, uid, m_group.gid, NULL, NULL, NULL, m_inspector->is_live());
+		user = m_inspector->m_usergroup_manager.add_user(m_container_id, m_pid, uid, m_group.gid, NULL, NULL, NULL, m_inspector->is_live());
 	}
 
 	if (user)
@@ -529,7 +544,7 @@ void sinsp_threadinfo::set_group(uint32_t gid)
 	if (!group)
 	{
 		// this can fail if import_user is disabled
-		group = m_inspector->m_usergroup_manager.add_group(m_container_id, gid, NULL, m_inspector->is_live());
+		group = m_inspector->m_usergroup_manager.add_group(m_container_id, m_pid, gid, NULL, m_inspector->is_live());
 	}
 
 	if (group)
@@ -739,6 +754,7 @@ void sinsp_threadinfo::set_cgroups(const char* cgroups, size_t len)
 			subsys = "blkio";
 		}
 
+		tmp_cgroups->push_back(std::make_pair(subsys, cgroup));
 		offset += subsys_length + 1 + cgroup.length() + 1;
 		if (subsys == "perf_event" || subsys == "cpu" || subsys == "cpuset" || subsys == "memory") {
 			tmp_cgroups->emplace_back(std::move(subsys), std::move(cgroup));
@@ -1073,11 +1089,6 @@ bool sinsp_threadinfo::is_health_probe()
 	        m_category == sinsp_threadinfo::CAT_READINESS_PROBE);
 }
 
-void sinsp_threadinfo::reset_fd_cache()
-{
-	m_fdtable.reset_cache();
-}
-
 string sinsp_threadinfo::get_path_for_dir_fd(int64_t dir_fd)
 {
 	sinsp_fdinfo_t* dir_fdinfo = get_fd(dir_fd);
@@ -1362,7 +1373,7 @@ void sinsp_thread_manager::increment_mainthread_childcount(sinsp_threadinfo* thr
 		//
 		ASSERT(threadinfo->m_pid != threadinfo->m_tid);
 
-		sinsp_threadinfo* main_thread = m_inspector->get_thread_ref(threadinfo->m_pid, create_if_needed, true).get();
+		sinsp_threadinfo* main_thread = m_inspector->get_thread_ref(threadinfo->m_pid, true, true).get();
 		if(main_thread)
 		{
 			++main_thread->m_nchilds;
@@ -1536,22 +1547,13 @@ void sinsp_thread_manager::fix_sockets_coming_from_proc()
 
 void sinsp_thread_manager::clear_thread_pointers(sinsp_threadinfo& tinfo)
 {
-	tinfo.m_main_thread.reset();
+    tinfo.m_main_thread.reset();
 
-	/*
-	sinsp_fdtable* fdt = tinfo.get_fd_table();
+    sinsp_fdtable* fdt = tinfo.get_fd_table();
 	if(fdt != NULL)
 	{
 		fdt->reset_cache();
 	}
-	*/
-
-	/*
-	 * get_fd_table can end up creating main thread if not present where as goal
-	 * here is just to reset fd cache for called thread. Main thread's fd cache
-	 * will be reset when this function is called for main thread.
-	 */
-	tinfo.reset_fd_cache();
 }
 
 /*

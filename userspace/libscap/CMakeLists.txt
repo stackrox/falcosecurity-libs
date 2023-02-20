@@ -13,20 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../../common")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../common")
 
 option(USE_BUNDLED_DEPS "Enable bundled dependencies instead of using the system ones" ON)
 
 option(BUILD_LIBSCAP_MODERN_BPF "Enable modern bpf probe" OFF)
-
-if(NOT MSVC)
-	if(CMAKE_SYSTEM_NAME MATCHES "Linux")
-		add_definitions(-DHAS_CAPTURE)
-	endif()
-else() # MSVC
-	# todo(leogr): this should be removed - double check
-	add_definitions(-DHAS_CAPTURE)
-endif()
 
 include(ExternalProject)
 
@@ -72,17 +63,15 @@ list(APPEND targetfiles
 	scap_iflist.c
 	scap_savefile.c
 	scap_procs.c
-	scap_userlist.c)
+	scap_userlist.c
+	scap_suppress.c)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}) # temporary
     include_directories(${PROJECT_BINARY_DIR}/driver/src)
 endif()
 
-if(CYGWIN OR WIN32)
-	list(APPEND targetfiles
-		windows_hal.c)
-endif()
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -94,19 +83,16 @@ set_target_properties(scap PROPERTIES COMPILE_FLAGS "-fPIC")
 if (CMAKE_SYSTEM_NAME MATCHES "SunOS")
 	target_link_libraries(scap
 		socket nsl)
-elseif (WIN32)
-	target_link_libraries(scap
-		Ws2_32.lib)
-elseif (CYGWIN)
-	target_link_libraries(scap
-		/lib/w32api/libpsapi.a
-		${WIN_HAL_LIB}/dragent_win_hal.lib)
 endif()
 
 if(NOT MINIMAL_BUILD)
 target_link_libraries(scap
 	"${ZLIB_LIB}")
 endif()
+
+add_library(scap_error strerror.c)
+
+target_link_libraries(scap scap_error)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     option(BUILD_LIBSCAP_EXAMPLES "Build libscap examples" ON)
@@ -165,6 +151,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
 	target_link_libraries(scap_event_schema driver_event_schema)
 endif()
 
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
 add_library(scap_engine_util
 	scap_engine_util.c
 	ringbuffer/devset.c
@@ -175,15 +162,18 @@ if(USE_BUNDLED_ZLIB AND NOT MINIMAL_BUILD)
 endif()
 
 target_link_libraries(scap scap_engine_util)
+endif()
 
 add_definitions(-DHAS_ENGINE_NOOP)
 add_subdirectory(engine/noop)
 # don't link the noop engine to libscap directly,
 # it's a helper library for other engines (it's completely useless on its own)
 
-add_definitions(-DHAS_ENGINE_NODRIVER)
-add_subdirectory(engine/nodriver)
-target_link_libraries(scap scap_engine_nodriver)
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+	add_definitions(-DHAS_ENGINE_NODRIVER)
+	add_subdirectory(engine/nodriver)
+	target_link_libraries(scap scap_engine_nodriver)
+endif()
 
 add_definitions(-DHAS_ENGINE_SAVEFILE)
 add_subdirectory(engine/savefile)
@@ -193,11 +183,11 @@ add_definitions(-DHAS_ENGINE_SOURCE_PLUGIN)
 add_subdirectory(engine/source_plugin)
 target_link_libraries(scap scap_engine_source_plugin)
 
-add_definitions(-DHAS_ENGINE_UDIG)
-add_subdirectory(engine/udig)
-target_link_libraries(scap scap_engine_udig)
-
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+	add_definitions(-DHAS_ENGINE_UDIG)
+	add_subdirectory(engine/udig)
+	target_link_libraries(scap scap_engine_udig)
+
 	if (NOT MINIMAL_BUILD OR BUILD_LIBSCAP_MODERN_BPF)
 		include(libelf)
 	endif()

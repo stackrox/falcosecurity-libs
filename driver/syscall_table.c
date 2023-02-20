@@ -27,15 +27,11 @@ or GPL2.txt for full copies of the license.
 #endif
 #else /* __KERNEL__ */
 
-#ifdef WDIG
-#include <syscall.h>
-#else /* WDIG */
 #ifdef UDIG
 #include <sys/syscall.h>
 #else  /* UDIG */
 #include <linux/unistd.h>
 #endif /* UDIG */
-#endif /* WDIG */
 #ifdef __mips__
 #define SYSCALL_TABLE_ID0 __NR_Linux
 #else /* __mips__ */
@@ -68,6 +64,7 @@ or GPL2.txt for full copies of the license.
 
 /*
  * SYSCALL TABLE
+ * FIXME: kmod only supports SYSCALL_TABLE_ID0
  */
 const struct syscall_evt_pair g_syscall_table[SYSCALL_TABLE_SIZE] = {
 #ifdef __NR_open

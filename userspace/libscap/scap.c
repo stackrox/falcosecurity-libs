@@ -27,15 +27,10 @@ limitations under the License.
 #endif // _WIN32
 
 #include "scap.h"
-#include "../common/strlcpy.h"
+#include "strlcpy.h"
 #include "../../driver/ppm_ringbuffer.h"
 #include "scap-int.h"
 #include "scap_engine_util.h"
-
-#if defined(_WIN32) || defined(CYGWING_AGENT)
-#define DRAGENT_WIN_HAL_C_ONLY
-#include "windows_hal.h"
-#endif
 
 #include "scap_engines.h"
 
@@ -49,52 +44,20 @@ const char* scap_getlasterr(scap_t* handle)
 	return handle ? handle->m_lasterr : "null scap handle";
 }
 
-static int32_t copy_comms(scap_t *handle, const char **suppressed_comms)
-{
-	if(suppressed_comms)
-	{
-		uint32_t i;
-		const char *comm;
-		for(i = 0, comm = suppressed_comms[i]; comm && i < SCAP_MAX_SUPPRESSED_COMMS; i++, comm = suppressed_comms[i])
-		{
-			int32_t res;
-			if((res = scap_suppress_events_comm(handle, comm)) != SCAP_SUCCESS)
-			{
-				return res;
-			}
-		}
-	}
-
-	return SCAP_SUCCESS;
-}
-
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs)
-{
-	snprintf(error, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
-	*rc = SCAP_NOT_SUPPORTED;
-	return NULL;
-}
-#endif
-
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
-scap_t* scap_open_udig_int(char *error, int32_t *rc,
-			   proc_entry_callback proc_callback,
-			   void* proc_callback_context,
-			   bool import_users,
-			   const char **suppressed_comms)
-{
-	snprintf(error, SCAP_LASTERR_SIZE, "udig capture not supported on %s", PLATFORM_NAME);
-	*rc = SCAP_NOT_SUPPORTED;
-	return NULL;
-}
-#else
-
-#ifndef _WIN32
-scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs)
+#if defined(HAS_ENGINE_KMOD) || defined(HAS_ENGINE_BPF) || defined(HAS_ENGINE_MODERN_BPF)
+scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs, const struct scap_vtable* vtable)
 {
 	char filename[SCAP_MAX_PATH_SIZE] = {0};
 	scap_t* handle = NULL;
+
+	//
+	// Get boot_time
+	//
+	uint64_t boot_time = 0;
+	if((*rc = scap_get_boot_time(error, &boot_time)) != SCAP_SUCCESS)
+	{
+		return NULL;
+	}
 
 	//
 	// Allocate the handle
@@ -111,34 +74,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs)
 	// Preliminary initializations
 	//
 	handle->m_mode = SCAP_MODE_LIVE;
-	if (false)
-	{
-
-	}
-#ifdef HAS_ENGINE_BPF
-	else if(strcmp(oargs->engine_name, BPF_ENGINE) == 0)
-	{
-		handle->m_vtable = &scap_bpf_engine;
-	}
-#endif
-#ifdef HAS_ENGINE_KMOD
-	else if(strcmp(oargs->engine_name, KMOD_ENGINE) == 0)
-	{
-		handle->m_vtable = &scap_kmod_engine;
-	}
-#endif
-#ifdef HAS_ENGINE_MODERN_BPF
-	else if(strcmp(oargs->engine_name, MODERN_BPF_ENGINE) == 0)
-	{
-		handle->m_vtable = &scap_modern_bpf_engine;
-	}
-#endif /* HAS_ENGINE_MODERN_BPF */
-	else
-	{
-		snprintf(error, SCAP_LASTERR_SIZE, "libscap: unknown engine '%s' called `scap_open_live_int()`", oargs->engine_name);
-		*rc = SCAP_FAILURE;
-		return NULL;
-	}
+	handle->m_vtable = vtable;
 
 	handle->m_engine.m_handle = handle->m_vtable->alloc_handle(handle, handle->m_lasterr);
 	if(!handle->m_engine.m_handle)
@@ -156,19 +92,16 @@ scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs)
 	//
 	// Extract machine information
 	//
+
 	handle->m_machine_info.num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	handle->m_machine_info.memory_size_bytes = (uint64_t)sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE);
 	gethostname(handle->m_machine_info.hostname, sizeof(handle->m_machine_info.hostname) / sizeof(handle->m_machine_info.hostname[0]));
-	handle->m_machine_info.reserved1 = 0;
+	handle->m_machine_info.boot_ts_epoch = boot_time;
 	handle->m_machine_info.reserved2 = 0;
 	handle->m_machine_info.reserved3 = 0;
 	handle->m_machine_info.reserved4 = 0;
 	handle->m_driver_procinfo = NULL;
 	handle->m_fd_lookup_limit = 0;
-
-#ifdef CYGWING_AGENT
-	handle->m_whh = NULL;
-#endif
 
 	//
 	// Create the interface list
@@ -197,14 +130,7 @@ scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs)
 		handle->m_userlist = NULL;
 	}
 
-	handle->refresh_proc_table_when_saving = true;
-
-	handle->m_suppressed_comms = NULL;
-	handle->m_num_suppressed_comms = 0;
-	handle->m_suppressed_tids = NULL;
-	handle->m_num_suppressed_evts = 0;
-
-	if ((*rc = copy_comms(handle, oargs->suppressed_comms)) != SCAP_SUCCESS)
+	if ((*rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
@@ -243,30 +169,24 @@ scap_t* scap_open_live_int(char *error, int32_t *rc, scap_open_args* oargs)
 		snprintf(error, SCAP_LASTERR_SIZE, "scap_open_live_int() error creating the process list: %s. Make sure you have root credentials.", proc_scan_err);
 		return NULL;
 	}
-
-	//
-	// Now that /proc parsing has been done, start the capture
-	//
-	if((*rc = scap_start_capture(handle)) != SCAP_SUCCESS)
-	{
-		snprintf(error, SCAP_LASTERR_SIZE, "%s", handle->m_lasterr);
-		scap_close(handle);
-		return NULL;
-	}
-
 	return handle;
 }
+#endif // HAS_LIVE_CAPTURE
 
-#endif // _WIN32
-
-scap_t* scap_open_udig_int(char *error, int32_t *rc,
-			   proc_entry_callback proc_callback,
-			   void* proc_callback_context,
-			   bool import_users,
-			   const char **suppressed_comms)
+#ifdef HAS_ENGINE_UDIG
+scap_t* scap_open_udig_int(char *error, int32_t *rc, scap_open_args *oargs)
 {
 	char filename[SCAP_MAX_PATH_SIZE];
 	scap_t* handle = NULL;
+
+	//
+	// Get boot_time
+	//
+	uint64_t boot_time = 0;
+	if((*rc = scap_get_boot_time(error, &boot_time)) != SCAP_SUCCESS)
+	{
+		return NULL;
+	}
 
 	//
 	// Allocate the handle
@@ -293,9 +213,7 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 		return NULL;
 	}
 
-	// TODO: we don't have open_args here. thankfully the udig init method
-	//       doesn't need them
-	*rc = handle->m_vtable->init(handle, NULL);
+	*rc = handle->m_vtable->init(handle, oargs);
 	if(*rc != SCAP_SUCCESS)
 	{
 		scap_close(handle);
@@ -304,21 +222,18 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 	}
 
 	handle->m_proclist.m_main_handle = handle;
-	handle->m_proclist.m_proc_callback = proc_callback;
-	handle->m_proclist.m_proc_callback_context = proc_callback_context;
+	handle->m_proclist.m_proc_callback = oargs->proc_callback;
+	handle->m_proclist.m_proc_callback_context = oargs->proc_callback_context;
 	handle->m_proclist.m_proclist = NULL;
 
 	//
 	// Extract machine information
 	//
-#ifdef _WIN32
-	scap_get_machine_info_windows(&handle->m_machine_info.num_cpus, &handle->m_machine_info.memory_size_bytes);
-#else
+
 	handle->m_machine_info.num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	handle->m_machine_info.memory_size_bytes = (uint64_t)sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE);
-#endif
 	gethostname(handle->m_machine_info.hostname, sizeof(handle->m_machine_info.hostname) / sizeof(handle->m_machine_info.hostname[0]));
-	handle->m_machine_info.reserved1 = 0;
+	handle->m_machine_info.boot_ts_epoch = boot_time;
 	handle->m_machine_info.reserved2 = 0;
 	handle->m_machine_info.reserved3 = 0;
 	handle->m_machine_info.reserved4 = 0;
@@ -338,7 +253,7 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 	//
 	// Create the user list
 	//
-	if(import_users)
+	if(oargs->import_users)
 	{
 		if((*rc = scap_create_userlist(handle)) != SCAP_SUCCESS)
 		{
@@ -352,23 +267,7 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 		handle->m_userlist = NULL;
 	}
 
-	handle->refresh_proc_table_when_saving = true;
-
-	handle->m_suppressed_comms = NULL;
-	handle->m_num_suppressed_comms = 0;
-	handle->m_suppressed_tids = NULL;
-	handle->m_num_suppressed_evts = 0;
-
-#ifdef _WIN32
-	handle->m_whh = scap_windows_hal_open(error);
-	if(handle->m_whh == NULL)
-	{
-		scap_close(handle);
-		return NULL;
-	}
-#endif
-
-	if ((*rc = copy_comms(handle, suppressed_comms)) != SCAP_SUCCESS)
+	if ((*rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
@@ -404,7 +303,7 @@ scap_t* scap_open_udig_int(char *error, int32_t *rc,
 
 	return handle;
 }
-#endif // !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
+#endif // HAS_ENGINE_UDIG
 
 #ifdef HAS_ENGINE_TEST_INPUT
 scap_t* scap_open_test_input_int(char *error, int32_t *rc, scap_open_args *oargs)
@@ -444,19 +343,12 @@ scap_t* scap_open_test_input_int(char *error, int32_t *rc, scap_open_args *oargs
 	//
 	handle->m_mode = SCAP_MODE_LIVE;
 
-	handle->refresh_proc_table_when_saving = true;
-
-	handle->m_suppressed_comms = NULL;
-	handle->m_num_suppressed_comms = 0;
-	handle->m_suppressed_tids = NULL;
-	handle->m_num_suppressed_evts = 0;
-
 	handle->m_proclist.m_main_handle = handle;
 	handle->m_proclist.m_proc_callback = oargs->proc_callback;
 	handle->m_proclist.m_proc_callback_context = oargs->proc_callback_context;
 	handle->m_proclist.m_proclist = NULL;
 
-	if ((*rc = copy_comms(handle, oargs->suppressed_comms)) != SCAP_SUCCESS)
+	if ((*rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
@@ -464,12 +356,6 @@ scap_t* scap_open_test_input_int(char *error, int32_t *rc, scap_open_args *oargs
 	}
 
 	if ((*rc = scap_proc_scan_vtable(error, handle)) != SCAP_SUCCESS)
-	{
-		scap_close(handle);
-		return NULL;
-	}
-
-	if(handle->m_vtable->start_capture(handle->m_engine) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		return NULL;
@@ -525,19 +411,12 @@ scap_t* scap_open_gvisor_int(char *error, int32_t *rc, scap_open_args *oargs)
 
 	// XXX - interface list initialization and user list initalization goes here if necessary
 
-	handle->refresh_proc_table_when_saving = true;
-
-	handle->m_suppressed_comms = NULL;
-	handle->m_num_suppressed_comms = 0;
-	handle->m_suppressed_tids = NULL;
-	handle->m_num_suppressed_evts = 0;
-
 	handle->m_proclist.m_main_handle = handle;
 	handle->m_proclist.m_proc_callback = oargs->proc_callback;
 	handle->m_proclist.m_proc_callback_context = oargs->proc_callback_context;
 	handle->m_proclist.m_proclist = NULL;
 
-	if ((*rc = copy_comms(handle, oargs->suppressed_comms)) != SCAP_SUCCESS)
+	if ((*rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
@@ -546,13 +425,6 @@ scap_t* scap_open_gvisor_int(char *error, int32_t *rc, scap_open_args *oargs)
 
 	if ((*rc = scap_proc_scan_vtable(error, handle)) != SCAP_SUCCESS)
 	{
-		scap_close(handle);
-		return NULL;
-	}
-
-	if(handle->m_vtable->start_capture(handle->m_engine) != SCAP_SUCCESS)
-	{
-		snprintf(error, SCAP_LASTERR_SIZE, "error while starting capture: %s", handle->m_lasterr);
 		scap_close(handle);
 		return NULL;
 	}
@@ -567,7 +439,7 @@ scap_t* scap_open_gvisor_int(char *error, int32_t *rc, scap_open_args *oargs)
 }
 #endif // HAS_ENGINE_GVISOR
 
-
+#ifdef HAS_ENGINE_SAVEFILE
 scap_t* scap_open_offline_int(scap_open_args* oargs, int* rc, char* error)
 {
 	scap_t* handle = NULL;
@@ -602,13 +474,7 @@ scap_t* scap_open_offline_int(scap_open_args* oargs, int* rc, char* error)
 	handle->m_userlist = NULL;
 	handle->m_machine_info.num_cpus = (uint32_t)-1;
 	handle->m_driver_procinfo = NULL;
-	handle->refresh_proc_table_when_saving = true;
 	handle->m_fd_lookup_limit = 0;
-#if CYGWING_AGENT || _WIN32
-	handle->m_whh = NULL;
-#endif
-	handle->m_suppressed_comms = NULL;
-	handle->m_suppressed_tids = NULL;
 
 	handle->m_proclist.m_main_handle = handle;
 	handle->m_proclist.m_proc_callback = oargs->proc_callback;
@@ -622,10 +488,7 @@ scap_t* scap_open_offline_int(scap_open_args* oargs, int* rc, char* error)
 		return NULL;
 	}
 
-	handle->m_num_suppressed_comms = 0;
-	handle->m_num_suppressed_evts = 0;
-
-	if ((*rc = copy_comms(handle, oargs->suppressed_comms)) != SCAP_SUCCESS)
+	if ((*rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{
 		scap_close(handle);
 		snprintf(error, SCAP_LASTERR_SIZE, "error copying suppressed comms");
@@ -634,19 +497,25 @@ scap_t* scap_open_offline_int(scap_open_args* oargs, int* rc, char* error)
 
 	return handle;
 }
+#endif
 
+#ifdef HAS_ENGINE_NODRIVER
 scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
 			       proc_entry_callback proc_callback,
 			       void* proc_callback_context,
 			       bool import_users)
 {
-#if !defined(HAS_CAPTURE)
-	snprintf(error, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
-	*rc = SCAP_NOT_SUPPORTED;
-	return NULL;
-#else
 	char filename[SCAP_MAX_PATH_SIZE];
 	scap_t* handle = NULL;
+
+	//
+	// Get boot_time
+	//
+	uint64_t boot_time = 0;
+	if((*rc = scap_get_boot_time(error, &boot_time)) != SCAP_SUCCESS)
+	{
+		return NULL;
+	}
 
 	//
 	// Allocate the handle
@@ -681,33 +550,16 @@ scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
 	//
 	// Extract machine information
 	//
-#ifdef _WIN32
-	handle->m_machine_info.num_cpus = 0;
-	handle->m_machine_info.memory_size_bytes = 0;
-#else
+
 	handle->m_machine_info.num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	handle->m_machine_info.memory_size_bytes = (uint64_t)sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE);
-#endif
 	gethostname(handle->m_machine_info.hostname, sizeof(handle->m_machine_info.hostname) / sizeof(handle->m_machine_info.hostname[0]));
-	handle->m_machine_info.reserved1 = 0;
+	handle->m_machine_info.boot_ts_epoch = boot_time;
 	handle->m_machine_info.reserved2 = 0;
 	handle->m_machine_info.reserved3 = 0;
 	handle->m_machine_info.reserved4 = 0;
 	handle->m_driver_procinfo = NULL;
 	handle->m_fd_lookup_limit = SCAP_NODRIVER_MAX_FD_LOOKUP; // fd lookup is limited here because is very expensive
-
-	//
-	// If this is part of the windows agent, open the windows HAL
-	//
-#ifdef CYGWING_AGENT
-	handle->m_whh = wh_open(error);
-	if(handle->m_whh == NULL)
-	{
-		scap_close(handle);
-		*rc = SCAP_FAILURE;
-		return NULL;
-	}
-#endif
 
 	//
 	// Create the interface list
@@ -736,8 +588,6 @@ scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
 		handle->m_userlist = NULL;
 	}
 
-	handle->refresh_proc_table_when_saving = true;
-
 	//
 	// Create the process list
 	//
@@ -752,9 +602,10 @@ scap_t* scap_open_nodriver_int(char *error, int32_t *rc,
 	}
 
 	return handle;
-#endif // HAS_CAPTURE
 }
+#endif // HAS_ENGINE_NODRIVER
 
+#ifdef HAS_ENGINE_SOURCE_PLUGIN
 scap_t* scap_open_plugin_int(char *error, int32_t *rc, scap_open_args* oargs)
 {
 	scap_t* handle = NULL;
@@ -800,13 +651,12 @@ scap_t* scap_open_plugin_int(char *error, int32_t *rc, scap_open_args* oargs)
 	handle->m_machine_info.memory_size_bytes = (uint64_t)sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE);
 #endif
 	gethostname(handle->m_machine_info.hostname, sizeof(handle->m_machine_info.hostname) / sizeof(handle->m_machine_info.hostname[0]));
-	handle->m_machine_info.reserved1 = 0;
+	handle->m_machine_info.boot_ts_epoch = 0; // plugin does not need boot_ts_epoch
 	handle->m_machine_info.reserved2 = 0;
 	handle->m_machine_info.reserved3 = 0;
 	handle->m_machine_info.reserved4 = 0;
 	handle->m_driver_procinfo = NULL;
 	handle->m_fd_lookup_limit = SCAP_NODRIVER_MAX_FD_LOOKUP; // fd lookup is limited here because is very expensive
-	handle->refresh_proc_table_when_saving = true;
 
 	if((*rc = handle->m_vtable->init(handle, oargs)) != SCAP_SUCCESS)
 	{
@@ -817,58 +667,71 @@ scap_t* scap_open_plugin_int(char *error, int32_t *rc, scap_open_args* oargs)
 
 	return handle;
 }
+#endif
 
 scap_t* scap_open(scap_open_args* oargs, char *error, int32_t *rc)
 {
-
-#ifdef CYGWING_AGENT
-	if(oargs->mode == SCAP_MODE_LIVE)
-	{
-		snprintf(error,	SCAP_LASTERR_SIZE, "libscap: live mode currently not supported on Windows.");
-		*rc = SCAP_NOT_SUPPORTED;
-		return NULL;
-	}
-#endif
 	const char* engine_name = oargs->engine_name;
 	/* At the end of the `v-table` work we can use just one function
 	 * with an internal switch that selects the right vtable! For the moment
 	 * let's keep different functions.
 	 */
+#ifdef HAS_ENGINE_SAVEFILE
 	if(strcmp(engine_name, SAVEFILE_ENGINE) == 0)
 	{
 		return scap_open_offline_int(oargs, rc, error);
 	}
-	else if(strcmp(engine_name, UDIG_ENGINE) == 0)
+#endif
+#ifdef HAS_ENGINE_UDIG
+	if(strcmp(engine_name, UDIG_ENGINE) == 0)
 	{
-		return scap_open_udig_int(error, rc, oargs->proc_callback,
-								oargs->proc_callback_context,
-								oargs->import_users,
-								oargs->suppressed_comms);
+		return scap_open_udig_int(error, rc, oargs);
 	}
-	else if(strcmp(engine_name, GVISOR_ENGINE) == 0)
+#endif
+#ifdef HAS_ENGINE_GVISOR
+	if(strcmp(engine_name, GVISOR_ENGINE) == 0)
 	{
 		return scap_open_gvisor_int(error, rc, oargs);
 	}
-	else if(strcmp(engine_name, TEST_INPUT_ENGINE) == 0)
+#endif
+#ifdef HAS_ENGINE_TEST_INPUT
+	if(strcmp(engine_name, TEST_INPUT_ENGINE) == 0)
 	{
 		return scap_open_test_input_int(error, rc, oargs);
 	}
-	else if(strcmp(engine_name, KMOD_ENGINE) == 0 ||
-			strcmp(engine_name, BPF_ENGINE) == 0 ||
-			strcmp(engine_name, MODERN_BPF_ENGINE) == 0)
+#endif
+#ifdef HAS_ENGINE_KMOD
+	if(strcmp(engine_name, KMOD_ENGINE) == 0)
 	{
-		return scap_open_live_int(error, rc, oargs);
+		return scap_open_live_int(error, rc, oargs, &scap_kmod_engine);
 	}
-	else if(strcmp(engine_name, NODRIVER_ENGINE) == 0)
+#endif
+#ifdef HAS_ENGINE_BPF
+	if( strcmp(engine_name, BPF_ENGINE) == 0)
+	{
+		return scap_open_live_int(error, rc, oargs, &scap_bpf_engine);
+	}
+#endif
+#ifdef HAS_ENGINE_MODERN_BPF
+	if(strcmp(engine_name, MODERN_BPF_ENGINE) == 0)
+	{
+		return scap_open_live_int(error, rc, oargs, &scap_modern_bpf_engine);
+	}
+#endif
+#ifdef HAS_ENGINE_NODRIVER
+	if(strcmp(engine_name, NODRIVER_ENGINE) == 0)
 	{
 		return scap_open_nodriver_int(error, rc, oargs->proc_callback,
 					      oargs->proc_callback_context,
 					      oargs->import_users);
 	}
-	else if(strcmp(engine_name, SOURCE_PLUGIN_ENGINE) == 0)
+#endif
+#ifdef HAS_ENGINE_SOURCE_PLUGIN
+	if(strcmp(engine_name, SOURCE_PLUGIN_ENGINE) == 0)
 	{
 		return scap_open_plugin_int(error, rc, oargs);
 	}
+#endif
 
 	snprintf(error, SCAP_LASTERR_SIZE, "incorrect engine '%s'", engine_name);
 	*rc = SCAP_FAILURE;
@@ -880,7 +743,7 @@ static inline void scap_deinit_state(scap_t* handle)
 	// Free the process table
 	if(handle->m_proclist.m_proclist != NULL)
 	{
-		scap_proc_free_table(handle);
+		scap_proc_free_table(&handle->m_proclist);
 		handle->m_proclist.m_proclist = NULL;
 	}
 
@@ -928,40 +791,15 @@ uint32_t scap_restart_capture(scap_t* handle)
 
 void scap_close(scap_t* handle)
 {
-#if CYGWING_AGENT || _WIN32
-	if(handle->m_whh != NULL)
-	{
-		scap_windows_hal_close(handle->m_whh);
-	}
-#endif
 	scap_deinit_state(handle);
-
-	if(handle->m_suppressed_comms)
-	{
-		uint32_t i;
-		for(i=0; i < handle->m_num_suppressed_comms; i++)
-		{
-			free(handle->m_suppressed_comms[i]);
-		}
-		free(handle->m_suppressed_comms);
-		handle->m_suppressed_comms = NULL;
-	}
-
-	if(handle->m_suppressed_tids)
-	{
-		struct scap_tid *tid;
-		struct scap_tid *ttid;
-		HASH_ITER(hh, handle->m_suppressed_tids, tid, ttid)
-		{
-			HASH_DEL(handle->m_suppressed_tids, tid);
-			free(tid);
-		}
-
-		handle->m_suppressed_tids = NULL;
-	}
+	scap_suppress_close(&handle->m_suppress);
 
 	if(handle->m_vtable)
 	{
+		/* The capture should be stopped before
+		 * closing the engine, here we only enforce it.
+		 */
+		handle->m_vtable->stop_capture(handle->m_engine);
 		handle->m_vtable->close(handle->m_engine);
 		handle->m_vtable->free_handle(handle->m_engine);
 	}
@@ -1002,16 +840,12 @@ uint32_t scap_get_ndevs(scap_t* handle)
 	return 1;
 }
 
-#if defined(HAS_CAPTURE) && !defined(CYGWING_AGENT)
-
 int32_t scap_readbuf(scap_t* handle, uint32_t cpuid, OUT char** buf, OUT uint32_t* len)
 {
 	// engines do not even necessarily have a concept of a buffer
 	// that you read events from
 	return SCAP_NOT_SUPPORTED;
 }
-
-#endif // HAS_CAPTURE
 
 uint64_t scap_max_buf_used(scap_t* handle)
 {
@@ -1041,14 +875,14 @@ int32_t scap_next(scap_t* handle, OUT scap_evt** pevent, OUT uint16_t* pcpuid)
 
 		// Check to see if the event should be suppressed due
 		// to coming from a supressed tid
-		if((res = scap_check_suppressed(handle, *pevent, &suppressed)) != SCAP_SUCCESS)
+		if((res = scap_check_suppressed(&handle->m_suppress, *pevent, &suppressed, handle->m_lasterr)) != SCAP_SUCCESS)
 		{
 			return res;
 		}
 
 		if(suppressed)
 		{
-			handle->m_num_suppressed_evts++;
+			handle->m_suppress.m_num_suppressed_evts++;
 			return SCAP_FILTERED_EVENT;
 		}
 		else
@@ -1092,8 +926,8 @@ int32_t scap_get_stats(scap_t* handle, OUT scap_stats* stats)
 	stats->n_drops_pf = 0;
 	stats->n_drops_bug = 0;
 	stats->n_preemptions = 0;
-	stats->n_suppressed = handle->m_num_suppressed_evts;
-	stats->n_tids_suppressed = HASH_COUNT(handle->m_suppressed_tids);
+	stats->n_suppressed = handle->m_suppress.m_num_suppressed_evts;
+	stats->n_tids_suppressed = HASH_COUNT(handle->m_suppress.m_suppressed_tids);
 
 	if(handle->m_vtable)
 	{
@@ -1164,7 +998,7 @@ int scap_get_events_from_ppm_sc(IN uint32_t ppm_sc_array[PPM_SC_MAX], OUT uint32
 		{
 			continue;
 		}
-		
+
 		/* If we arrive here we want to know the events associated with this ppm_code. */
 		for(int syscall_nr = 0; syscall_nr < SYSCALL_TABLE_SIZE; syscall_nr++)
 		{
@@ -1218,7 +1052,7 @@ int scap_get_modifies_state_tracepoints(OUT uint32_t tp_array[TP_VAL_MAX])
 	tp_array[SYS_EXIT] = 1;
 	tp_array[SCHED_PROC_EXIT] = 1;
 	tp_array[SCHED_SWITCH] = 1;
-	/* With `aarch64` and `s390x` we need also this, 
+	/* With `aarch64` and `s390x` we need also this,
 	 * in `x86` they are not considered at all.
 	 */
 	tp_array[SCHED_PROC_FORK] = 1;
@@ -1250,14 +1084,9 @@ int32_t scap_stop_capture(scap_t* handle)
 		return handle->m_vtable->stop_capture(handle->m_engine);
 	}
 
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
-	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "cannot stop offline live captures");
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	ASSERT(false);
 	return SCAP_FAILURE;
-#endif // HAS_CAPTURE
 }
 
 //
@@ -1270,14 +1099,9 @@ int32_t scap_start_capture(scap_t* handle)
 		return handle->m_vtable->start_capture(handle->m_engine);
 	}
 
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
-	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "cannot start offline live captures");
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	ASSERT(false);
 	return SCAP_FAILURE;
-#endif // HAS_CAPTURE
 }
 
 int32_t scap_enable_tracers_capture(scap_t* handle)
@@ -1286,14 +1110,10 @@ int32_t scap_enable_tracers_capture(scap_t* handle)
 	{
 		return handle->m_vtable->configure(handle->m_engine, SCAP_TRACERS_CAPTURE, 1, 0);
 	}
-#if defined(HAS_CAPTURE) && ! defined(CYGWING_AGENT) && ! defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_enable_tracers_capture not supported on this scap mode");
+
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	ASSERT(false);
 	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_enable_tracers_capture not supported on %s", PLATFORM_NAME);
-	return SCAP_FAILURE;
-#endif
 }
 
 int32_t scap_stop_dropping_mode(scap_t* handle)
@@ -1302,14 +1122,10 @@ int32_t scap_stop_dropping_mode(scap_t* handle)
 	{
 		return handle->m_vtable->configure(handle->m_engine, SCAP_SAMPLING_RATIO, 1, 0);
 	}
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_stop_dropping_mode not supported on %s", PLATFORM_NAME);
-	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_stop_dropping_mode not supported on this scap mode");
+
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	ASSERT(false);
 	return SCAP_FAILURE;
-#endif
 }
 
 int32_t scap_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio)
@@ -1318,14 +1134,10 @@ int32_t scap_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio)
 	{
 		return handle->m_vtable->configure(handle->m_engine, SCAP_SAMPLING_RATIO, sampling_ratio, 1);
 	}
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
-	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_start_dropping_mode not supported on this scap mode");
+
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	ASSERT(false);
 	return SCAP_FAILURE;
-#endif
 }
 
 //
@@ -1369,13 +1181,8 @@ int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen)
 		return handle->m_vtable->configure(handle->m_engine, SCAP_SNAPLEN, snaplen, 0);
 	}
 
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "setting snaplen not supported on this scap mode");
-	return SCAP_FAILURE;
-#endif
 }
 
 int64_t scap_get_readfile_offset(scap_t* handle)
@@ -1391,7 +1198,7 @@ int64_t scap_get_readfile_offset(scap_t* handle)
 	}
 }
 
-static int32_t scap_handle_eventmask(scap_t* handle, uint32_t op, uint32_t ppm_sc)
+static int32_t scap_handle_ppm_sc_mask(scap_t* handle, uint32_t op, uint32_t ppm_sc)
 {
 	if(handle == NULL)
 	{
@@ -1400,11 +1207,11 @@ static int32_t scap_handle_eventmask(scap_t* handle, uint32_t op, uint32_t ppm_s
 
 	switch(op)
 	{
-	case SCAP_EVENTMASK_SET:
-	case SCAP_EVENTMASK_UNSET:
-	case SCAP_EVENTMASK_ZERO:
+	case SCAP_PPM_SC_MASK_SET:
+	case SCAP_PPM_SC_MASK_UNSET:
+	case SCAP_PPM_SC_MASK_ZERO:
 		break;
-	
+
 	default:
 		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "%s(%d) internal error", __FUNCTION__, op);
 		ASSERT(false);
@@ -1423,21 +1230,17 @@ static int32_t scap_handle_eventmask(scap_t* handle, uint32_t op, uint32_t ppm_s
 	{
 		return handle->m_vtable->configure(handle->m_engine, SCAP_EVENTMASK, op, ppm_sc);
 	}
-#if !defined(HAS_CAPTURE) || defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "eventmask not supported on %s", PLATFORM_NAME);
+
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "manipulating eventmasks not supported on this scap mode");
-	return SCAP_FAILURE;
-#endif // HAS_CAPTURE
 }
 
-int32_t scap_clear_eventmask(scap_t* handle) {
-	return(scap_handle_eventmask(handle, SCAP_EVENTMASK_ZERO, 0));
+int32_t scap_clear_ppm_sc_mask(scap_t* handle) {
+	return(scap_handle_ppm_sc_mask(handle, SCAP_PPM_SC_MASK_ZERO, 0));
 }
 
-int32_t scap_set_eventmask(scap_t* handle, uint32_t ppm_sc, bool enabled) {
-	return(scap_handle_eventmask(handle, enabled ? SCAP_EVENTMASK_SET : SCAP_EVENTMASK_UNSET, ppm_sc));
+int32_t scap_set_ppm_sc(scap_t* handle, uint32_t ppm_sc, bool enabled) {
+	return(scap_handle_ppm_sc_mask(handle, enabled ? SCAP_PPM_SC_MASK_SET : SCAP_PPM_SC_MASK_UNSET, ppm_sc));
 }
 
 static int32_t scap_handle_tpmask(scap_t* handle, uint32_t op, uint32_t tp)
@@ -1462,22 +1265,18 @@ static int32_t scap_handle_tpmask(scap_t* handle, uint32_t op, uint32_t tp)
 		return SCAP_FAILURE;
 	}
 
-	if(handle->m_vtable)
-	{
-		return handle->m_vtable->configure(handle->m_engine, SCAP_TPMASK, op, tp);
-	}
-#if !defined(HAS_CAPTURE) || defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "tpmask not supported on %s", PLATFORM_NAME);
-	return SCAP_FAILURE;
-#else
 	if (handle == NULL)
 	{
 		return SCAP_FAILURE;
 	}
 
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "manipulating tpmask not supported on this scap mode");
+	if(handle->m_vtable)
+	{
+		return handle->m_vtable->configure(handle->m_engine, SCAP_TPMASK, op, tp);
+	}
+
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	return SCAP_FAILURE;
-#endif // HAS_CAPTURE
 }
 
 int32_t scap_set_tpmask(scap_t* handle, uint32_t tp, bool enabled) {
@@ -1503,13 +1302,8 @@ int32_t scap_enable_dynamic_snaplen(scap_t* handle)
 		return handle->m_vtable->configure(handle->m_engine, SCAP_DYNAMIC_SNAPLEN, 1, 0);
 	}
 
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "setting snaplen not supported on this scap mode");
-	return SCAP_FAILURE;
-#endif
 }
 
 int32_t scap_disable_dynamic_snaplen(scap_t* handle)
@@ -1519,13 +1313,8 @@ int32_t scap_disable_dynamic_snaplen(scap_t* handle)
 		return handle->m_vtable->configure(handle->m_engine, SCAP_DYNAMIC_SNAPLEN, 0, 0);
 	}
 
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "setting snaplen not supported on this scap mode");
-	return SCAP_FAILURE;
-#endif // HAS_CAPTURE
 }
 
 const char* scap_get_host_root()
@@ -1574,23 +1363,19 @@ bool scap_alloc_proclist_info(struct ppm_proclist_info **proclist_p, uint32_t n_
 
 struct ppm_proclist_info* scap_get_threadlist(scap_t* handle)
 {
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
-	return NULL;
-#else
-	int res = handle->m_vtable->get_threadlist(handle->m_engine, &handle->m_driver_procinfo, handle->m_lasterr);
-	if(res != SCAP_SUCCESS)
+	if(handle->m_vtable)
 	{
-		return NULL;
+		int res = handle->m_vtable->get_threadlist(handle->m_engine, &handle->m_driver_procinfo, handle->m_lasterr);
+		if(res != SCAP_SUCCESS)
+		{
+			return NULL;
+		}
+
+		return handle->m_driver_procinfo;
 	}
 
-	return handle->m_driver_procinfo;
-#endif	// HAS_CAPTURE
-}
-
-void scap_set_refresh_proc_table_when_saving(scap_t* handle, bool refresh)
-{
-	handle->refresh_proc_table_when_saving = refresh;
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
+	return NULL;
 }
 
 uint64_t scap_ftell(scap_t *handle)
@@ -1620,21 +1405,9 @@ int32_t scap_get_n_tracepoint_hit(scap_t* handle, long* ret)
 		return handle->m_vtable->get_n_tracepoint_hit(handle->m_engine, ret);
 	}
 
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "getting n_tracepoint_hit not supported on this scap mode");
-	return SCAP_FAILURE;
-#endif
 }
-
-#ifdef CYGWING_AGENT
-wh_t* scap_get_wmi_handle(scap_t* handle)
-{
-	return handle->m_whh;
-}
-#endif
 
 bool scap_check_current_engine(scap_t *handle, const char* engine_name)
 {
@@ -1647,36 +1420,12 @@ bool scap_check_current_engine(scap_t *handle, const char* engine_name)
 
 int32_t scap_suppress_events_comm(scap_t *handle, const char *comm)
 {
-	// If the comm is already present in the list, do nothing
-	uint32_t i;
-	for(i=0; i<handle->m_num_suppressed_comms; i++)
-	{
-		if(strcmp(handle->m_suppressed_comms[i], comm) == 0)
-		{
-			return SCAP_SUCCESS;
-		}
-	}
-
-	if(handle->m_num_suppressed_comms >= SCAP_MAX_SUPPRESSED_COMMS)
-	{
-		return SCAP_FAILURE;
-	}
-
-	handle->m_num_suppressed_comms++;
-	handle->m_suppressed_comms = (char **) realloc(handle->m_suppressed_comms,
-						       handle->m_num_suppressed_comms * sizeof(char *));
-
-	handle->m_suppressed_comms[handle->m_num_suppressed_comms-1] = strdup(comm);
-
-	return SCAP_SUCCESS;
+	return scap_suppress_events_comm_impl(&handle->m_suppress, comm);
 }
 
 bool scap_check_suppressed_tid(scap_t *handle, int64_t tid)
 {
-	scap_tid *stid;
-	HASH_FIND_INT64(handle->m_suppressed_tids, &tid, stid);
-
-	return (stid != NULL);
+	return scap_check_suppressed_tid_impl(&handle->m_suppress, tid);
 }
 
 int32_t scap_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, uint16_t range_end)
@@ -1686,13 +1435,8 @@ int32_t scap_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, ui
 		return handle->m_vtable->configure(handle->m_engine, SCAP_FULLCAPTURE_PORT_RANGE, range_start, range_end);
 	}
 
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "live capture not supported on %s", PLATFORM_NAME);
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "scap_set_fullcapture_port_range not supported on this scap mode");
-	return SCAP_FAILURE;
-#endif
 }
 
 int32_t scap_set_statsd_port(scap_t* const handle, const uint16_t port)
@@ -1702,17 +1446,8 @@ int32_t scap_set_statsd_port(scap_t* const handle, const uint16_t port)
 		return handle->m_vtable->configure(handle->m_engine, SCAP_STATSD_PORT, port, 0);
 	}
 
-#if !defined(HAS_CAPTURE) || defined(CYGWING_AGENT) || defined(_WIN32)
-	snprintf(handle->m_lasterr,
-	         SCAP_LASTERR_SIZE,
-	         "scap_set_statsd_port not supported on %s", PLATFORM_NAME);
+	snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "operation not supported");
 	return SCAP_FAILURE;
-#else
-	snprintf(handle->m_lasterr,
-		 SCAP_LASTERR_SIZE,
-		 "scap_set_statsd_port not supported on this scap mode");
-	return SCAP_FAILURE;
-#endif
 }
 
 bool scap_apply_semver_check(uint32_t current_major, uint32_t current_minor, uint32_t current_patch,
@@ -1764,6 +1499,21 @@ int32_t scap_get_boot_time(char* last_err, uint64_t *boot_time)
 	struct timespec tv_now = {0};
 	uint64_t now = 0;
 	uint64_t uptime = 0;
+	char proc_dir[PPM_MAX_PATH_SIZE];
+	struct stat targetstat = {0};
+
+	/* More reliable way to get boot time */
+	snprintf(proc_dir, sizeof(proc_dir), "%s/proc/1/", scap_get_host_root());
+	if (stat(proc_dir, &targetstat) == 0)
+	{
+		/* This approach is constant between agent re-boots */
+		*boot_time = targetstat.st_ctim.tv_sec * (uint64_t) SECOND_TO_NS + targetstat.st_ctim.tv_nsec;
+		return SCAP_SUCCESS;
+	}
+
+	/*
+	 * Fall-back method
+	 */
 
 	/* Get the actual time */
 	if(clock_gettime(CLOCK_REALTIME, &tv_now))

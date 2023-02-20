@@ -21,6 +21,7 @@ extern "C"
 #include <libpman.h>
 #include <ppm_events_public.h>
 #include <feature_gates.h>
+#include <ppm_tp.h>
 }
 
 struct param
@@ -168,7 +169,7 @@ public:
 	 *
 	 * @param cpu_id CPU from which we extracted the event.
 	 */
-	struct ppm_evt_hdr* get_event_from_ringbuffer(int16_t* cpu_id);
+	struct ppm_evt_hdr* get_event_from_ringbuffer(uint16_t* cpu_id);
 
 	/**
 	 * @brief Parse information from the event that we have extracted from the buffer:
@@ -536,6 +537,7 @@ private:
 	struct ppm_evt_hdr* m_event_header;	  /* header of the event. */
 	uint32_t m_event_len;			  /* total event length. */
 	uint32_t m_current_param;		  /* current param that we are analyzing in a single assert method. */
+	std::vector<uint8_t> m_tp_set;		  /* Set of tracepoints that must be enabled for the specific test. */
 
 	/**
 	 * @brief Performs two main actions:

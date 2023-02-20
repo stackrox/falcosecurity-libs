@@ -22,6 +22,8 @@ limitations under the License.
 
 /* For every event here we have the name of the corresponding bpf program. */
 static const char* event_prog_names[PPM_EVENT_MAX] = {
+	[PPME_GENERIC_E] = "generic_e",
+	[PPME_GENERIC_X] = "generic_x",
 	[PPME_SYSCALL_MKDIR_2_E] = "mkdir_e",
 	[PPME_SYSCALL_MKDIR_2_X] = "mkdir_x",
 	[PPME_SYSCALL_OPEN_E] = "open_e",
@@ -196,5 +198,10 @@ static const char* extra_event_prog_names[TAIL_EXTRA_EVENT_PROG_MAX] = {
 #endif
 #ifdef CAPTURE_SCHED_PROC_FORK
 	[T1_SCHED_PROC_FORK] = "t1_sched_p_fork",
+	[T2_SCHED_PROC_FORK] = "t2_sched_p_fork",
 #endif
+	[T2_CLONE_X] = "t2_clone_x",
+	[T2_CLONE3_X] = "t2_clone3_x",
+	[T2_FORK_X] = "t2_fork_x",
+	[T2_VFORK_X] = "t2_vfork_x",
 };

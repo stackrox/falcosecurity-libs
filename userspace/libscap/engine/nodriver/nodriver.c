@@ -18,11 +18,13 @@ limitations under the License.
 #include <stdio.h>
 #include <stdlib.h>
 
+#define SCAP_HANDLE_T struct nodriver_engine
+
 #include "nodriver.h"
 #include "noop.h"
 
 #include "scap.h"
-#include "../common/strlcpy.h"
+#include "strlcpy.h"
 #include "gettimeofday.h"
 #include "sleep.h"
 

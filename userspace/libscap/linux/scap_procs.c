@@ -31,14 +31,12 @@ limitations under the License.
 #include "unixid.h"
 
 #include "scap.h"
-#include "../../driver/ppm_ringbuffer.h"
 #include "scap-int.h"
-#include "scap_engines.h"
-#include "engine/kmod/kmod.h"
+#include "scap_linux_int.h"
 #include "strerror.h"
 
 
-int32_t scap_proc_fill_cwd(scap_t *handle, char* procdirname, struct scap_threadinfo* tinfo)
+int32_t scap_proc_fill_cwd(char* error, char* procdirname, struct scap_threadinfo* tinfo)
 {
 	int target_res;
 	char filename[SCAP_MAX_PATH_SIZE];
@@ -48,16 +46,14 @@ int32_t scap_proc_fill_cwd(scap_t *handle, char* procdirname, struct scap_thread
 	target_res = readlink(filename, tinfo->cwd, sizeof(tinfo->cwd) - 1);
 	if(target_res <= 0)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "readlink %s failed (%s)",
-			 filename, scap_strerror(handle, errno));
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "readlink %s failed", filename);
 	}
 
 	tinfo->cwd[target_res] = '\0';
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_proc_fill_info_from_stats(scap_t *handle, char* procdirname, struct scap_threadinfo* tinfo)
+int32_t scap_proc_fill_info_from_stats(char* error, char* procdirname, struct scap_threadinfo* tinfo)
 {
 	char filename[SCAP_MAX_PATH_SIZE];
 	uint32_t pidinfo_nfound = 0;
@@ -103,9 +99,7 @@ int32_t scap_proc_fill_info_from_stats(scap_t *handle, char* procdirname, struct
 	if(f == NULL)
 	{
 		ASSERT(false);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "open status file %s failed (%s)",
-			 filename, scap_strerror(handle, errno));
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "open status file %s failed", filename);
 	}
 
 	while(fgets(line, sizeof(line), f) != NULL)
@@ -296,9 +290,7 @@ int32_t scap_proc_fill_info_from_stats(scap_t *handle, char* procdirname, struct
 	if(f == NULL)
 	{
 		ASSERT(false);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "read stat file %s failed (%s)",
-			 filename, scap_strerror(handle, errno));
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "read stat file %s failed", filename);
 	}
 
 	size_t ssres = fread(line, 1, sizeof(line) - 1, f);
@@ -306,9 +298,7 @@ int32_t scap_proc_fill_info_from_stats(scap_t *handle, char* procdirname, struct
 	{
 		ASSERT(false);
 		fclose(f);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not read from stat file %s (%s)",
-			 filename, scap_strerror(handle, errno));
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "Could not read from stat file %s", filename);
 	}
 	line[ssres] = 0;
 
@@ -317,9 +307,7 @@ int32_t scap_proc_fill_info_from_stats(scap_t *handle, char* procdirname, struct
 	{
 		ASSERT(false);
 		fclose(f);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not find closing bracket in stat file %s",
-			 filename);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "Could not find closing bracket in stat file %s", filename);
 	}
 
 	//
@@ -339,9 +327,7 @@ int32_t scap_proc_fill_info_from_stats(scap_t *handle, char* procdirname, struct
 	{
 		ASSERT(false);
 		fclose(f);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not read expected fields from stat file %s",
-			 filename);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "Could not read expected fields from stat file %s", filename);
 	}
 
 	tinfo->pfmajor = pfmajor;
@@ -365,7 +351,7 @@ int32_t scap_proc_fill_info_from_stats(scap_t *handle, char* procdirname, struct
 // use prlimit to extract the RLIMIT_NOFILE for the tid. On systems where prlimit
 // is not supported, just return -1
 //
-static int32_t scap_proc_fill_flimit(scap_t *handle, uint64_t tid, struct scap_threadinfo* tinfo)
+static int32_t scap_proc_fill_flimit(uint64_t tid, struct scap_threadinfo* tinfo)
 #ifdef SYS_prlimit64
 {
 	struct rlimit rl;
@@ -388,7 +374,7 @@ static int32_t scap_proc_fill_flimit(scap_t *handle, uint64_t tid, struct scap_t
 }
 #endif
 
-int32_t scap_proc_fill_cgroups(scap_t *handle, struct scap_threadinfo* tinfo, const char* procdirname)
+int32_t scap_proc_fill_cgroups_pidns_start_ts(char* error, int cgroup_version, struct scap_threadinfo* tinfo, const char* procdirname)
 {
 	char filename[SCAP_MAX_PATH_SIZE];
 	char line[SCAP_MAX_CGROUPS_SIZE];
@@ -405,9 +391,7 @@ int32_t scap_proc_fill_cgroups(scap_t *handle, struct scap_threadinfo* tinfo, co
 		}
 
 		ASSERT(false);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "open cgroup file %s failed (%s)",
-			 filename, scap_strerror(handle, errno));
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "open cgroup file %s failed", filename);
 	}
 
 	while(fgets(line, sizeof(line), f) != NULL)
@@ -419,6 +403,8 @@ int32_t scap_proc_fill_cgroups(scap_t *handle, struct scap_threadinfo* tinfo, co
 		// Default subsys list for cgroups v2 unified hierarchy.
 		// These are the ones we actually use in cri container engine.
 		char default_subsys_list[] = "cpu,memory,cpuset";
+		char cgroup_sys_fs_dir[PPM_MAX_PATH_SIZE];
+		struct stat targetstat = {0};
 
 		// id
 		token = strtok_r(line, ":", &scratch);
@@ -426,9 +412,7 @@ int32_t scap_proc_fill_cgroups(scap_t *handle, struct scap_threadinfo* tinfo, co
 		{
 			ASSERT(false);
 			fclose(f);
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Did not find id in cgroup file %s",
-				 filename);
-			return SCAP_FAILURE;
+			return scap_errprintf(error, 0, "Did not find id in cgroup file %s", filename);
 		}
 
 		// subsys
@@ -437,9 +421,38 @@ int32_t scap_proc_fill_cgroups(scap_t *handle, struct scap_threadinfo* tinfo, co
 		{
 			ASSERT(false);
 			fclose(f);
-			snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Did not find subsys in cgroup file %s",
-				 filename);
-			return SCAP_FAILURE;
+			return scap_errprintf(error, 0, "Did not find subsys in cgroup file %s", filename);
+		}
+
+		//
+		// Approx pid namespace start ts through cgroup file creation ts only when vpid != pid
+		// Works for container and non container pid namespaces
+		// Modifying content of files below cgroup_sys_fs_dir does not change ctime of dir
+		//
+
+		if (tinfo->pid != tinfo->vpid)
+		{
+			snprintf(cgroup_sys_fs_dir, sizeof(cgroup_sys_fs_dir), "%s/sys/fs/cgroup%s", scap_get_host_root(), subsys_list);
+			size_t cgroup_sys_fs_dir_len = strlen(cgroup_sys_fs_dir);
+			if(cgroup_sys_fs_dir[cgroup_sys_fs_dir_len - 1] == '\n')
+			{
+				cgroup_sys_fs_dir[cgroup_sys_fs_dir_len - 1] = '/'; // replace \n with /
+			} else if (cgroup_sys_fs_dir[cgroup_sys_fs_dir_len - 1] != '/' && cgroup_sys_fs_dir_len < PPM_MAX_PATH_SIZE - 1)
+			{
+				cgroup_sys_fs_dir[cgroup_sys_fs_dir_len] = '/';
+			}
+
+			if (stat(cgroup_sys_fs_dir, &targetstat) == 0)
+			{
+				tinfo->pidns_init_start_ts = targetstat.st_ctim.tv_sec * (uint64_t) 1000000000 + targetstat.st_ctim.tv_nsec;
+			}
+		} else
+		{
+			snprintf(cgroup_sys_fs_dir, sizeof(cgroup_sys_fs_dir), "%s/proc/1/", scap_get_host_root());
+			if (stat(cgroup_sys_fs_dir, &targetstat) == 0)
+			{
+				tinfo->pidns_init_start_ts = targetstat.st_ctim.tv_sec * (uint64_t) 1000000000 + targetstat.st_ctim.tv_nsec;
+			}
 		}
 
 		// Hack to detect empty fields, because strtok does not support it
@@ -471,7 +484,7 @@ int32_t scap_proc_fill_cgroups(scap_t *handle, struct scap_threadinfo* tinfo, co
 			//
 			// -> for cgroup2: id is always 0 and subsys list is always empty (single unified hierarchy)
 			// -> for cgroup1: skip subsys empty because it means controller is not mounted on any hierarchy
-			if (handle->m_cgroup_version == 2 && strcmp(token, "0") == 0)
+			if (cgroup_version == 2 && strcmp(token, "0") == 0)
 			{
 				cgroup = subsys_list;
 				subsys_list = default_subsys_list; // force-set a default subsys list
@@ -495,9 +508,7 @@ int32_t scap_proc_fill_cgroups(scap_t *handle, struct scap_threadinfo* tinfo, co
 			{
 				ASSERT(false);
 				fclose(f);
-				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Did not find cgroup in cgroup file %s",
-					 filename);
-				return SCAP_FAILURE;
+				return scap_errprintf(error, 0, "Did not find cgroup in cgroup file %s", filename);
 			}
 		}
 
@@ -542,23 +553,23 @@ static int32_t scap_get_vpid(scap_t* handle, int64_t pid, int64_t *vpid)
 	return SCAP_FAILURE;
 }
 
-int32_t scap_proc_fill_root(scap_t *handle, struct scap_threadinfo* tinfo, const char* procdirname)
+int32_t scap_proc_fill_root(char* error, struct scap_threadinfo* tinfo, const char* procdirname)
 {
 	char root_path[SCAP_MAX_PATH_SIZE];
 	snprintf(root_path, sizeof(root_path), "%sroot", procdirname);
-	if ( readlink(root_path, tinfo->root, sizeof(tinfo->root)) > 0)
+	ssize_t r = readlink(root_path, tinfo->root, sizeof(tinfo->root) - 1);
+	if (r > 0)
 	{
+		tinfo->root[r] = '\0';
 		return SCAP_SUCCESS;
 	}
 	else
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "readlink %s failed (%s)",
-			 root_path, scap_strerror(handle, errno));
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "readlink %s failed", root_path);
 	}
 }
 
-int32_t scap_proc_fill_loginuid(scap_t *handle, struct scap_threadinfo* tinfo, const char* procdirname)
+int32_t scap_proc_fill_loginuid(char* error, struct scap_threadinfo* tinfo, const char* procdirname)
 {
 	uint32_t loginuid;
 	char loginuid_path[SCAP_MAX_PATH_SIZE];
@@ -567,18 +578,17 @@ int32_t scap_proc_fill_loginuid(scap_t *handle, struct scap_threadinfo* tinfo, c
 	FILE* f = fopen(loginuid_path, "r");
 	if(f == NULL)
 	{
-		ASSERT(false);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Open loginuid file %s failed (%s)",
-			 loginuid_path, scap_strerror(handle, errno));
-		return SCAP_FAILURE;
+		// If Linux kernel is built with CONFIG_AUDIT=n, loginuid management
+		// (and associated /proc file) is not implemented.
+		// Record default loginuid value of -1 in this case.
+		tinfo->loginuid = (uint32_t)-1;
+		return SCAP_SUCCESS;
 	}
 	if (fgets(line, sizeof(line), f) == NULL)
 	{
 		ASSERT(false);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not read loginuid from %s (%s)",
-			 loginuid_path, scap_strerror(handle, errno));
 		fclose(f);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "Could not read loginuid from %s", loginuid_path);
 	}
 
 	fclose(f);
@@ -591,13 +601,26 @@ int32_t scap_proc_fill_loginuid(scap_t *handle, struct scap_threadinfo* tinfo, c
 	else
 	{
 		ASSERT(false);
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not read loginuid from %s",
-			 loginuid_path);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "Could not read loginuid from %s", loginuid_path);
 	}
 }
 
-int32_t scap_proc_fill_exe_writable(scap_t* handle, struct scap_threadinfo* tinfo,  uint32_t uid, uint32_t gid, const char *procdirname, const char *exetarget)
+int32_t scap_proc_fill_exe_ino_ctime_mtime(char* error, struct scap_threadinfo* tinfo, const char *procdirname, const char *exetarget)
+{
+	struct stat targetstat = {0};
+
+	// extract ino field from executable path if it exists
+	if(stat(exetarget, &targetstat) == 0)
+	{
+		tinfo->exe_ino = targetstat.st_ino;
+		tinfo->exe_ino_ctime = targetstat.st_ctim.tv_sec * (uint64_t) 1000000000 + targetstat.st_ctim.tv_nsec;
+		tinfo->exe_ino_mtime = targetstat.st_mtim.tv_sec * (uint64_t) 1000000000 + targetstat.st_mtim.tv_nsec;
+	}
+
+	return SCAP_SUCCESS;
+}
+
+int32_t scap_proc_fill_exe_writable(char* error, struct scap_threadinfo* tinfo,  uint32_t uid, uint32_t gid, const char *procdirname, const char *exetarget)
 {
 	char proc_exe_path[SCAP_MAX_PATH_SIZE];
 	struct stat targetstat;
@@ -639,21 +662,51 @@ int32_t scap_proc_fill_exe_writable(scap_t* handle, struct scap_threadinfo* tinf
 		}
 	}
 
-	if(thread_seteuid(orig_uid) < 0)
+	int ret;
+	if((ret = thread_seteuid(orig_uid)) < 0)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not restore original euid from %d to %d",
+		return scap_errprintf(error, -ret, "Could not restore original euid from %d to %d",
 			uid, orig_uid);
-		return SCAP_FAILURE;
 	}
 
-	if(thread_setegid(orig_gid) < 0)
+	if((ret = thread_setegid(orig_gid)) < 0)
 	{
-		snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "Could not restore original egid from %d to %d",
+		return scap_errprintf(error, -ret, "Could not restore original egid from %d to %d",
 			gid, orig_gid);
-		return SCAP_FAILURE;
 	}
 
 	return SCAP_SUCCESS;
+}
+
+
+static int scap_get_cgroup_version(const char* procdirname)
+{
+	char dir_name[256];
+	int cgroup_version = -1;
+	FILE* f;
+	char line[SCAP_MAX_ENV_SIZE];
+
+	snprintf(dir_name, sizeof(dir_name), "%s/filesystems", procdirname);
+	f = fopen(dir_name, "r");
+	if (f)
+	{
+		while(fgets(line, sizeof(line), f) != NULL)
+		{
+			// NOTE: we do not support mixing cgroups v1 v2 controllers.
+			// Neither docker nor podman support this: https://github.com/docker/for-linux/issues/1256
+			if (strstr(line, "cgroup2"))
+			{
+				return 2;
+			}
+			if (strstr(line, "cgroup"))
+			{
+				cgroup_version = 1;
+			}
+		}
+		fclose(f);
+	}
+
+	return cgroup_version;
 }
 
 //
@@ -678,30 +731,11 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 
 	if (handle->m_cgroup_version == 0)
 	{
-		snprintf(dir_name, sizeof(dir_name), "%s/filesystems", procdirname);
-		f = fopen(dir_name, "r");
-		if (f)
-		{
-			while(fgets(line, sizeof(line), f) != NULL)
-			{
-				// NOTE: we do not support mixing cgroups v1 v2 controllers.
-				// Neither docker nor podman support this: https://github.com/docker/for-linux/issues/1256
-				if (strstr(line, "cgroup2"))
-				{
-					handle->m_cgroup_version = 2;
-					break;
-				}
-				if (strstr(line, "cgroup"))
-				{
-					handle->m_cgroup_version = 1;
-				}
-			}
-			fclose(f);
-		} else
+		handle->m_cgroup_version = scap_get_cgroup_version(procdirname);
+		if(handle->m_cgroup_version < 1)
 		{
 			ASSERT(false);
-			snprintf(error, SCAP_LASTERR_SIZE, "failed to fetch cgroup version information");
-			return SCAP_FAILURE;
+			return scap_errprintf(error, errno, "failed to fetch cgroup version information");
 		}
 	}
 
@@ -754,8 +788,7 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	if((tinfo = scap_proc_alloc(handle)) == NULL)
 	{
 		// Error message saved in handle->m_lasterr
-		snprintf(error, SCAP_LASTERR_SIZE, "can't allocate procinfo struct: %s", handle->m_lasterr);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "can't allocate procinfo struct: %s", handle->m_lasterr);
 	}
 
 	tinfo->tid = tid;
@@ -775,9 +808,8 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	f = fopen(filename, "r");
 	if(f == NULL)
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't open %s (error %s)", filename, scap_strerror(handle, errno));
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "can't open %s", filename);
 	}
 	else
 	{
@@ -785,11 +817,9 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 
 		if(fgets(line, SCAP_MAX_PATH_SIZE, f) == NULL)
 		{
-			snprintf(error, SCAP_LASTERR_SIZE, "can't read from %s (%s)",
-				 filename, scap_strerror(handle, errno));
 			fclose(f);
 			free(tinfo);
-			return SCAP_FAILURE;
+			return scap_errprintf(error, errno, "can't read from %s", filename);
 		}
 
 		line[SCAP_MAX_PATH_SIZE - 1] = 0;
@@ -798,11 +828,10 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	}
 
 	bool suppressed;
-	if ((res = scap_update_suppressed(handle, tinfo->comm, tid, 0, &suppressed)) != SCAP_SUCCESS)
+	if ((res = scap_update_suppressed(&handle->m_suppress, tinfo->comm, tid, 0, &suppressed)) != SCAP_SUCCESS)
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't update set of suppressed tids (%s)", handle->m_lasterr);
 		free(tinfo);
-		return res;
+		return scap_errprintf(error, 0, "can't update set of suppressed tids");
 	}
 
 	if (suppressed && !procinfo)
@@ -819,10 +848,8 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	f = fopen(filename, "r");
 	if(f == NULL)
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't open cmdline file %s (%s)",
-			 filename, scap_strerror(handle, errno));
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "can't open cmdline file %s", filename);
 	}
 	else
 	{
@@ -863,10 +890,8 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	f = fopen(filename, "r");
 	if(f == NULL)
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't open environ file %s (%s)",
-			 filename, scap_strerror(handle, errno));
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "can't open environ file %s", filename);
 	}
 	else
 	{
@@ -894,42 +919,38 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	//
 	// set the current working directory of the process
 	//
-	if(SCAP_FAILURE == scap_proc_fill_cwd(handle, dir_name, tinfo))
+	if(SCAP_FAILURE == scap_proc_fill_cwd(handle->m_lasterr, dir_name, tinfo))
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't fill cwd for %s (%s)",
-			 dir_name, handle->m_lasterr);
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "can't fill cwd for %s (%s)",
+			 dir_name, handle->m_lasterr);
 	}
 
 	//
 	// extract the user id and ppid from /proc/pid/status
 	//
-	if(SCAP_FAILURE == scap_proc_fill_info_from_stats(handle, dir_name, tinfo))
+	if(SCAP_FAILURE == scap_proc_fill_info_from_stats(handle->m_lasterr, dir_name, tinfo))
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't fill uid and pid for %s (%s)",
-			 dir_name, handle->m_lasterr);
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "can't fill uid and pid for %s (%s)",
+			 dir_name, handle->m_lasterr);
 	}
 
 	//
 	// Set the file limit
 	//
-	if(SCAP_FAILURE == scap_proc_fill_flimit(handle, tinfo->tid, tinfo))
+	if(SCAP_FAILURE == scap_proc_fill_flimit(tinfo->tid, tinfo))
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't fill flimit for %s (%s)",
-			 dir_name, handle->m_lasterr);
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "can't fill flimit for %s (%s)",
+			 dir_name, handle->m_lasterr);
 	}
 
-	if(scap_proc_fill_cgroups(handle, tinfo, dir_name) == SCAP_FAILURE)
+	if(scap_proc_fill_cgroups_pidns_start_ts(handle->m_lasterr, handle->m_cgroup_version, tinfo, dir_name) == SCAP_FAILURE)
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't fill cgroups for %s (%s)",
-			 dir_name, handle->m_lasterr);
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "can't fill cgroups for %s (%s)",
+			 dir_name, handle->m_lasterr);
 	}
 
 	// These values should be read already from /status file, leave these
@@ -947,23 +968,21 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	//
 	// set the current root of the process
 	//
-	if(SCAP_FAILURE == scap_proc_fill_root(handle, tinfo, dir_name))
+	if(SCAP_FAILURE == scap_proc_fill_root(handle->m_lasterr, tinfo, dir_name))
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't fill root for %s (%s)",
-			 dir_name, handle->m_lasterr);
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "can't fill root for %s (%s)",
+			 dir_name, handle->m_lasterr);
 	}
 
 	//
 	// set the loginuid
 	//
-	if(SCAP_FAILURE == scap_proc_fill_loginuid(handle, tinfo, dir_name))
+	if(SCAP_FAILURE == scap_proc_fill_loginuid(handle->m_lasterr, tinfo, dir_name))
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't fill loginuid for %s (%s)",
-			 dir_name, handle->m_lasterr);
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "can't fill loginuid for %s (%s)",
+			 dir_name, handle->m_lasterr);
 	}
 
 	if(stat(dir_name, &dirstat) == 0)
@@ -985,12 +1004,18 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 		tinfo->flags = PPM_CL_CLONE_THREAD | PPM_CL_CLONE_FILES;
 	}
 
-	if(SCAP_FAILURE == scap_proc_fill_exe_writable(handle, tinfo, tinfo->uid, tinfo->gid, dir_name, target_name))
+	if(SCAP_FAILURE == scap_proc_fill_exe_ino_ctime_mtime(handle->m_lasterr, tinfo, dir_name, target_name))
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "can't fill exe writable access for %s (%s)",
-			 dir_name, handle->m_lasterr);
 		free(tinfo);
-		return SCAP_FAILURE;
+		return scap_errprintf(error, 0, "can't fill exe writable access for %s (%s)",
+			 dir_name, handle->m_lasterr);
+	}
+
+	if(SCAP_FAILURE == scap_proc_fill_exe_writable(handle->m_lasterr, tinfo, tinfo->uid, tinfo->gid, dir_name, target_name))
+	{
+		free(tinfo);
+		return scap_errprintf(error, 0, "can't fill exe writable access for %s (%s)",
+			 dir_name, handle->m_lasterr);
 	}
 
 	//
@@ -1007,9 +1032,8 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 			HASH_ADD_INT64(handle->m_proclist.m_proclist, tid, tinfo);
 			if(uth_status != SCAP_SUCCESS)
 			{
-				snprintf(error, SCAP_LASTERR_SIZE, "process table allocation error (2)");
 				free(tinfo);
-				return SCAP_FAILURE;
+				return scap_errprintf(error, 0, "process table allocation error (2)");
 			}
 		}
 		else
@@ -1030,7 +1054,7 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	//
 	if(tinfo->pid == tinfo->tid)
 	{
-		/* Begin StackRox Section */
+        /* Begin StackRox Section */
 		if((res = scap_fd_scan_fd_dir(handle, dir_name, tinfo, sockets_by_ns, error)) != SCAP_SUCCESS)
 		{
 			// Ensure tinfo is not free'd twice
@@ -1040,7 +1064,6 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 			// If res != SCAP_SUCCESS, free thread data for consistency with other locations
 			// in this function where the return value != SCAP_SUCCESS.
 			scap_proc_free(handle, tinfo);
-			free_tinfo = false; // Already free'd by scap_proc_free
 		}
 		/* End StackRox Section */
 	}
@@ -1071,12 +1094,12 @@ int32_t scap_proc_read_thread(scap_t* handle, char* procdirname, uint64_t tid, s
 	res = scap_proc_add_from_proc(handle, tid, procdirname, &sockets_by_ns, pi, add_error);
 	if(res != SCAP_SUCCESS)
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "cannot add proc tid = %"PRIu64", dirname = %s, error=%s", tid, procdirname, add_error);
+		scap_errprintf(error, 0, "cannot add proc tid = %"PRIu64", dirname = %s, error=%s", tid, procdirname, add_error);
 	}
 
 	if(sockets_by_ns != NULL && sockets_by_ns != (void*)-1)
 	{
-		scap_fd_free_ns_sockets_list(handle, &sockets_by_ns);
+		scap_fd_free_ns_sockets_list(&sockets_by_ns);
 	}
 
 	return res;
@@ -1100,8 +1123,7 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 
 	if(dir_p == NULL)
 	{
-		snprintf(error, SCAP_LASTERR_SIZE, "error opening the %s directory (%s)",
-			 procdirname, scap_strerror(handle, errno));
+		scap_errprintf(error, errno, "error opening the %s directory", procdirname);
 		return SCAP_NOTFOUND;
 	}
 
@@ -1134,8 +1156,7 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 		if(tinfo != NULL)
 		{
 			ASSERT(false);
-			snprintf(error, SCAP_LASTERR_SIZE, "duplicate process %"PRIu64, tid);
-			res = SCAP_FAILURE;
+			res = scap_errprintf(error, 0, "duplicate process %"PRIu64, tid);
 			break;
 		}
 
@@ -1153,7 +1174,6 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 			// we should drop this thread/process completely.
 			// We will fill the gap later, when the first event
 			// for that process arrives.
-			//
 			//
 			/* Begin StackRox Section */
 			// Log error and continue when proc scrape fails
@@ -1185,7 +1205,7 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 	closedir(dir_p);
 	if(sockets_by_ns != NULL && sockets_by_ns != (void*)-1)
 	{
-		scap_fd_free_ns_sockets_list(handle, &sockets_by_ns);
+		scap_fd_free_ns_sockets_list(&sockets_by_ns);
 	}
 	return res;
 }
@@ -1206,11 +1226,8 @@ int32_t scap_os_getpid_global(struct scap_engine_handle engine, int64_t *pid, ch
 	FILE* f = fopen(filename, "r");
 	if(f == NULL)
 	{
-		char buf[SCAP_LASTERR_SIZE];
 		ASSERT(false);
-		snprintf(error, SCAP_LASTERR_SIZE, "can not open status file %s (%s)",
-			 filename, scap_strerror_r(buf, errno));
-		return SCAP_FAILURE;
+		return scap_errprintf(error, errno, "can not open status file %s", filename);
 	}
 
 	while(fgets(line, sizeof(line), f) != NULL)
@@ -1223,9 +1240,7 @@ int32_t scap_os_getpid_global(struct scap_engine_handle engine, int64_t *pid, ch
 	}
 
 	fclose(f);
-	snprintf(error, SCAP_LASTERR_SIZE, "could not find tgid in status file %s",
-		 filename);
-	return SCAP_FAILURE;
+	return scap_errprintf(error, 0, "could not find tgid in status file %s", filename);
 }
 
 struct scap_threadinfo* scap_proc_get(scap_t* handle, int64_t tid, bool scan_sockets)
@@ -1245,7 +1260,7 @@ struct scap_threadinfo* scap_proc_get(scap_t* handle, int64_t tid, bool scan_soc
 	if(scap_proc_read_thread(handle, filename, tid, &tinfo, handle->m_lasterr, scan_sockets) != SCAP_SUCCESS)
 	{
 		free(tinfo);
-		/* Begin StackRox Section */
+        /* Begin StackRox Section */
 		// TODO ROX-6096 proc scrape error count statistics
 		/* End StackRox Section */
 		return NULL;
@@ -1321,7 +1336,7 @@ void scap_refresh_proc_table(scap_t* handle)
 {
 	if(handle->m_proclist.m_proclist)
 	{
-		scap_proc_free_table(handle);
+		scap_proc_free_table(&handle->m_proclist);
 		handle->m_proclist.m_proclist = NULL;
 	}
 	scap_proc_scan_proc_table(handle);
@@ -1350,7 +1365,7 @@ int32_t scap_procfs_get_threadlist(struct scap_engine_handle engine, struct ppm_
 	dir_p = opendir(procdirname);
 	if(dir_p == NULL)
 	{
-		snprintf(lasterr, SCAP_LASTERR_SIZE, "error opening the %s directory", procdirname);
+		scap_errprintf(lasterr, errno, "error opening the %s directory", procdirname);
 		goto error;
 	}
 
@@ -1370,7 +1385,7 @@ int32_t scap_procfs_get_threadlist(struct scap_engine_handle engine, struct ppm_
 		taskdir_p = opendir(tasksdirname);
 		if(taskdir_p == NULL)
 		{
-			snprintf(lasterr, SCAP_LASTERR_SIZE, "error opening the %s directory", tasksdirname);
+			scap_errprintf(lasterr, errno, "error opening the %s directory", tasksdirname);
 			continue;
 		}
 

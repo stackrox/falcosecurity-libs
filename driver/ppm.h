@@ -47,12 +47,9 @@ typedef u64 nanoseconds;
 struct ppm_ring_buffer_context {
 	bool cpu_online;
 	bool open;
-	bool capture_enabled;
 	struct ppm_ring_buffer_info *info;
 	char *buffer;
-#ifndef WDIG
 	nanoseconds last_print_time;
-#endif
 	u32 nevents;
 #ifndef UDIG
 	atomic_t preempt_count;
@@ -62,6 +59,7 @@ struct ppm_ring_buffer_context {
 
 #ifndef UDIG
 struct ppm_consumer_t {
+	unsigned int id; // numeric id for the consumer (ie: registration index)
 	struct task_struct *consumer_id;
 	/* Begin StackRox Section */
 	struct pid_namespace *excluded_pid_ns;
@@ -84,17 +82,16 @@ struct ppm_consumer_t {
 	uint16_t fullcapture_port_range_end;
 	uint16_t statsd_port;
 	unsigned long buffer_bytes_dim; /* Every consumer will have its per-CPU buffer dim in bytes. */
-	DECLARE_BITMAP(events_mask, PPM_EVENT_MAX);
+	DECLARE_BITMAP(syscalls_mask, SYSCALL_TABLE_SIZE);
+	u32 tracepoints_attached;
 };
+
+typedef struct ppm_consumer_t ppm_consumer_t;
 #endif // UDIG
 
 #define STR_STORAGE_SIZE PAGE_SIZE
 
-#ifdef WDIG
-typedef uint64_t syscall_arg_t;
-#else
 typedef unsigned long syscall_arg_t;
-#endif
 
 /*
  * Global functions

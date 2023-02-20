@@ -21,10 +21,12 @@ limitations under the License.
 #include <unordered_map>
 #include <string>
 #include "container_info.h"
+#include "procfs_utils.h"
 #include "scap.h"
 
 class sinsp;
 class sinsp_evt;
+namespace libsinsp { namespace procfs_utils { class ns_helper; }}
 
 /*
  * Basic idea:
@@ -60,6 +62,7 @@ class sinsp_usergroup_manager
 {
 public:
 	explicit sinsp_usergroup_manager(sinsp* inspector);
+	~sinsp_usergroup_manager();
 
 	// Do not call subscribe_container_mgr() in capture mode, because
 	// events shall not be sent as they will be loaded from capture file.
@@ -114,12 +117,14 @@ public:
 	*/
 	scap_groupinfo* get_group(const std::string &container_id, uint32_t gid);
 
-	scap_userinfo *add_user(const std::string &container_id, uint32_t uid, uint32_t gid, const char *name, const char *home, const char *shell, bool notify = false);
-	scap_groupinfo *add_group(const std::string &container_id, uint32_t gid, const char *name, bool notify = false);
+	// Note: pid is an unused parameter when container_id is an empty string
+	// ie: it is only used when adding users/groups from containers.
+	scap_userinfo *add_user(const std::string &container_id, int64_t pid, uint32_t uid, uint32_t gid, const char *name, const char *home, const char *shell, bool notify = false);
+	scap_groupinfo *add_group(const std::string &container_id, int64_t pid, uint32_t gid, const char *name, bool notify = false);
+
 	bool rm_user(const std::string &container_id, uint32_t uid, bool notify = false);
 	bool rm_group(const std::string &container_id, uint32_t gid, bool notify = false);
 
-	void load_from_container(const std::string &container_id, const std::string &overlayfs_root);
 	bool clear_host_users_groups();
 
 	//
@@ -127,11 +132,13 @@ public:
 	//
 	bool m_import_users;
 
-#if defined(HAVE_PWD_H) || defined(HAVE_GRP_H)
-	static std::string s_host_root;
-#endif
-
 private:
+	scap_userinfo *add_host_user(uint32_t uid, uint32_t gid, const char *name, const char *home, const char *shell, bool notify);
+	scap_userinfo *add_container_user(const std::string &container_id, int64_t pid, uint32_t uid, bool notify);
+
+	scap_groupinfo *add_host_group(uint32_t gid, const char *name, bool notify);
+	scap_groupinfo *add_container_group(const std::string &container_id, int64_t pid, uint32_t gid, bool notify);
+
 	bool user_to_sinsp_event(const scap_userinfo *user, sinsp_evt* evt, const std::string &container_id, uint16_t ev_type);
 	bool group_to_sinsp_event(const scap_groupinfo *group, sinsp_evt* evt, const std::string &container_id, uint16_t ev_type);
 
@@ -140,10 +147,32 @@ private:
 	void notify_user_changed(const scap_userinfo *user, const std::string &container_id, bool added = true);
 	void notify_group_changed(const scap_groupinfo *group, const std::string &container_id, bool added = true);
 
-	std::unordered_map<std::string, std::unordered_map<uint32_t, scap_userinfo>> m_userlist;
-	std::unordered_map<std::string, std::unordered_map<uint32_t, scap_groupinfo>> m_grouplist;
+	using userinfo_map = std::unordered_map<uint32_t, scap_userinfo>;
+	using groupinfo_map = std::unordered_map<uint32_t, scap_groupinfo>;
+
+	scap_userinfo *userinfo_map_insert(
+		userinfo_map &map,
+		uint32_t uid,
+		uint32_t gid,
+		const char *name,
+		const char *home,
+		const char *shell);
+	scap_groupinfo *groupinfo_map_insert(
+		groupinfo_map &map,
+		uint32_t gid,
+		const char *name);
+
+	std::unordered_map<std::string, userinfo_map> m_userlist;
+	std::unordered_map<std::string, groupinfo_map> m_grouplist;
 	uint64_t m_last_flush_time_ns;
 	sinsp *m_inspector;
+
+	// User and group used as a fallback when m_import_users is disabled
+	scap_userinfo m_fallback_user;
+	scap_groupinfo m_fallback_grp;
+
+	const std::string &m_host_root;
+	libsinsp::procfs_utils::ns_helper *m_ns_helper;
 };
 
 #endif // FALCOSECURITY_LIBS_USER_H

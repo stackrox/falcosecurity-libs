@@ -201,7 +201,7 @@ int BPF_PROG(t1_vfork_x,
 
 	/* Parameter 18: gid (type: PT_UINT32) */
 	u32 egid = 0;
-	extract__euid(task, &egid);
+	extract__egid(task, &egid);
 	auxmap__store_u32_param(auxmap, egid);
 
 	/* Parameter 19: vtid (type: PT_PID) */
@@ -211,6 +211,33 @@ int BPF_PROG(t1_vfork_x,
 	/* Parameter 20: vpid (type: PT_PID) */
 	pid_t vpid = extract__task_xid_vnr(task, PIDTYPE_TGID);
 	auxmap__store_s64_param(auxmap, (s64)vpid);
+
+	/*=============================== COLLECT PARAMETERS  ===========================*/
+
+	/* We have to split here the bpf program, otherwise, it is too large
+	 * for the verifier (limit 1000000 instructions).
+	 */
+	bpf_tail_call(ctx, &extra_event_prog_tail_table, T2_VFORK_X);
+	return 0;
+}
+
+SEC("tp_btf/sys_exit")
+int BPF_PROG(t2_vfork_x,
+	     struct pt_regs *regs,
+	     long ret)
+{
+	struct auxiliary_map *auxmap = auxmap__get();
+	if(!auxmap)
+	{
+		return 0;
+	}
+
+	/*=============================== COLLECT PARAMETERS  ===========================*/
+
+	struct task_struct *task = get_current_task();
+
+	/* Parameter 21: pid_namespace init task start_time monotonic time in ns (type: PT_UINT64) */
+	auxmap__store_u64_param(auxmap, extract__task_pidns_start_time(task, PIDTYPE_TGID, ret));
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 

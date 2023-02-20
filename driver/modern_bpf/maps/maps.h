@@ -25,10 +25,16 @@
  */
 
 /**
- * @brief Take as input the `ppm_event_type` enum and return the number
+ * @brief Take as input the `ppm_event_type` enum and returns the number
  * of parameters for that event.
  */
 __weak const volatile uint8_t g_event_params_table[PPM_EVENT_MAX];
+
+/**
+ * @brief Take as input the `syscall_id` and returns the PPM_SC_CODE
+ * associated with the syscall.
+ */
+__weak const volatile uint16_t g_ppm_sc_table[SYSCALL_TABLE_SIZE];
 
 /**
  * @brief Actual probe API version
@@ -133,7 +139,7 @@ struct
 
 /**
  * @brief For every CPU on the system we have a counter
- * map where we store the number of events correcty pushed
+ * map where we store the number of events correctly pushed
  * and the number of events dropped.
  */
 struct
@@ -148,9 +154,7 @@ struct
 /*=============================== RINGBUF MAP ===============================*/
 
 /**
- * @brief We will have a ringbuf map for every CPU on the system.
- * The dimension of the single ringbuf and the number of
- * ringbuf maps are set in userspace.
+ * @brief We use this map to let the verifier understand the content of our array of maps (`ringbuf_maps`)
  */
 struct ringbuf_map
 {
@@ -158,8 +162,9 @@ struct ringbuf_map
 };
 
 /**
- * @brief This array of maps will contain a ringbuf map for every CPU
- * on the system.
+ * @brief This array of maps will contain a variable number of ring buffers
+ * according to the user-provided configuration. It could also contain only
+ * one buffer shared between all CPUs. 
  */
 struct
 {

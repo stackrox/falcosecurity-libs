@@ -21,11 +21,6 @@ static __always_inline u64 maps__get_boot_time()
 	return g_settings.boot_time;
 }
 
-static __always_inline bool maps__get_capture_flag()
-{
-	return g_settings.capture_enabled;
-}
-
 static __always_inline uint32_t maps__get_snaplen()
 {
 	return g_settings.snaplen;
@@ -54,6 +49,15 @@ static __always_inline u8 maps__get_event_num_params(u32 event_id)
 }
 
 /*=============================== EVENT NUM PARAMS TABLE ===========================*/
+
+/*=============================== PPM_SC TABLE ===========================*/
+
+static __always_inline u16 maps__get_ppm_sc(u16 syscall_id)
+{
+	return g_ppm_sc_table[syscall_id & (SYSCALL_TABLE_SIZE - 1)];
+}
+
+/*=============================== PPM_SC TABLE ===========================*/
 
 /*=============================== AUXILIARY MAPS ===========================*/
 

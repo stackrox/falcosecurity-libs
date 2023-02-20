@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 include_directories(./)
-include_directories(../../common)
+include_directories(../common)
 include_directories(${LIBSCAP_INCLUDE_DIR})
 include_directories(../async)
 include_directories(./include)
@@ -27,9 +27,6 @@ if(NOT MSVC)
 	endif()
 	add_definitions(-DHAVE_PWD_H)
 	add_definitions(-DHAVE_GRP_H)
-else() # MSVC
-	# todo(leogr): this should be removed - double check
-	add_definitions(-DHAS_CAPTURE)
 endif()
 
 if(NOT DEFINED CHISEL_TOOL_LIBRARY_NAME)
@@ -126,6 +123,10 @@ set(SINSP_SOURCES
 	sinsp_ppm_sc.cpp
 	sinsp_tp.cpp)
 
+if(NOT WIN32)
+	list(APPEND SINSP_SOURCES procfs_utils.cpp)
+endif()
+
 if(WITH_CHISEL)
 	list(APPEND SINSP_SOURCES
 		../chisel/chisel_api.cpp
@@ -169,11 +170,7 @@ if(NOT MINIMAL_BUILD)
 		sinsp_curl.cpp
 		container_engine/docker/async_source.cpp
 		container_engine/docker/base.cpp)
-	if(WIN32)
-	list(APPEND SINSP_SOURCES
-		container_engine/docker/connection_win.cpp
-		container_engine/docker/docker_win.cpp)
-	else()
+	if(NOT WIN32)
 	list(APPEND SINSP_SOURCES
 		container_engine/docker/docker_linux.cpp
 		container_engine/docker/connection_linux.cpp

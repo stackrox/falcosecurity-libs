@@ -107,7 +107,7 @@ void parse_CLI_options(sinsp& inspector, int argc, char** argv)
 	int op;
 	int long_index = 0;
 	while((op = getopt_long(argc, argv,
-				"hf:jae:b:d:s:o:",
+				"hf:jab:mks:d:o:",
 				long_options, &long_index)) != -1)
 	{
 		switch(op)
@@ -189,7 +189,7 @@ void open_engine(sinsp& inspector)
 	}
 	else if(!engine_string.compare(MODERN_BPF_ENGINE))
 	{
-		inspector.open_modern_bpf(buffer_bytes_dim, ppm_sc, tp_set);
+		inspector.open_modern_bpf(buffer_bytes_dim, DEFAULT_CPU_FOR_EACH_BUFFER, true, ppm_sc, tp_set);
 	}
 	else
 	{
@@ -294,10 +294,12 @@ int main(int argc, char** argv)
 		}
 	}
 
+	inspector.start_capture();
 	while(!g_interrupted)
 	{
 		dump(inspector);
 	}
+	inspector.stop_capture();
 
 	// Cleanup JSON formatters
 	delete default_formatter;

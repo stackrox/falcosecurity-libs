@@ -1,3 +1,5 @@
+
+#include "strlcpy.h"
 #include "event_class.h"
 #include <time.h>
 
@@ -86,71 +88,64 @@ event_test::~event_test()
 	 * Cleaning phase.
 	 */
 
-	/* 1 - disable the capture of all events. */
-	pman_disable_capture();
+	/*
+	 * NOTE: we always expect disable_capture to be manually called,
+	 * just like enable_capture is.
+	 */
 
-	/* 2 - clean all the ring_buffers until they are empty. */
+	/* 1 - clean all the ring_buffers until they are empty. */
 	clear_ring_buffers();
 
-	/* 3 - clean all interesting syscalls. */
+	/* 2 - clean all interesting syscalls. */
 	mark_all_64bit_syscalls_as_uninteresting();
-
-	/* 4 - detach all generic tracepoints attached to the kernel
-	 * apart from syscall dispatchers.
-	 */
-	pman_detach_sched_proc_exit();
-	pman_detach_sched_switch();
-#ifdef CAPTURE_SCHED_PROC_EXEC
-	pman_detach_sched_proc_exec();
-#endif
-#ifdef CAPTURE_SCHED_PROC_FORK
-	pman_detach_sched_proc_fork();
-#endif
 }
 
 /* This constructor must be used with generic tracepoints
  * that must attach a dedicated BPF program into the kernel.
  */
-event_test::event_test(ppm_event_type event_type)
+event_test::event_test(ppm_event_type event_type):
+	m_tp_set(TP_VAL_MAX, 0)
 {
 	m_current_param = 0;
 	m_event_type = event_type;
-	switch(event_type)
+
+	switch(m_event_type)
 	{
 	case PPME_PROCEXIT_1_E:
-		pman_attach_sched_proc_exit();
+		m_tp_set[SCHED_PROC_EXIT] = 1;
 		break;
-
 	case PPME_SCHEDSWITCH_6_E:
-		pman_attach_sched_switch();
+		m_tp_set[SCHED_SWITCH] = 1;
 		break;
-
 	case PPME_SYSCALL_EXECVE_19_X:
 #ifdef CAPTURE_SCHED_PROC_EXEC
-		pman_attach_sched_proc_exec();
+		m_tp_set[SCHED_PROC_EXEC] = 1;
 #endif
 		break;
-
 	case PPME_SYSCALL_CLONE_20_X:
 #ifdef CAPTURE_SCHED_PROC_FORK
-		pman_attach_sched_proc_fork();
+		m_tp_set[SCHED_PROC_FORK] = 1;
 #endif
 		break;
 
 	default:
 		std::cout << " Unable to find the correct BPF program to attach" << std::endl;
+		break;
 	}
 }
 
 /* This constructor must be used with syscalls events */
-event_test::event_test(int syscall_id, int event_direction)
+event_test::event_test(int syscall_id, int event_direction):
+	m_tp_set(TP_VAL_MAX, 0)
 {
 	if(event_direction == ENTER_EVENT)
 	{
+		m_tp_set[SYS_ENTER] = 1;
 		m_event_type = g_syscall_table[syscall_id].enter_event_type;
 	}
 	else
 	{
+		m_tp_set[SYS_EXIT] = 1;
 		m_event_type = g_syscall_table[syscall_id].exit_event_type;
 	}
 
@@ -163,9 +158,14 @@ event_test::event_test(int syscall_id, int event_direction)
 /* This constructor must be used with syscalls events when you
  * want to enable all syscalls.
  */
-event_test::event_test()
+event_test::event_test():
+	m_tp_set(TP_VAL_MAX, 0)
 {
 	m_current_param = 0;
+
+	/* Enable only syscall tracepoints */
+	m_tp_set[SYS_ENTER] = 1;
+	m_tp_set[SYS_EXIT] = 1;
 
 	for(int sys_num = 0; sys_num < SYSCALL_TABLE_SIZE; sys_num++)
 	{
@@ -185,7 +185,8 @@ void event_test::mark_all_64bit_syscalls_as_uninteresting()
 
 void event_test::enable_capture()
 {
-	pman_enable_capture();
+	pman_enable_capture((bool*)m_tp_set.data());
+	clear_ring_buffers();
 }
 
 void event_test::disable_capture()
@@ -195,7 +196,7 @@ void event_test::disable_capture()
 
 void event_test::clear_ring_buffers()
 {
-	int16_t cpu_id = 0;
+	uint16_t cpu_id = 0;
 	while(get_event_from_ringbuffer(&cpu_id) != NULL)
 	{
 	};
@@ -206,7 +207,7 @@ bool event_test::are_all_ringbuffers_full(unsigned long threshold)
 	return pman_are_all_ringbuffers_full(threshold);
 }
 
-struct ppm_evt_hdr* event_test::get_event_from_ringbuffer(int16_t* cpu_id)
+struct ppm_evt_hdr* event_test::get_event_from_ringbuffer(uint16_t* cpu_id)
 {
 	m_event_header = NULL;
 	uint16_t attempts = 0;
@@ -214,7 +215,7 @@ struct ppm_evt_hdr* event_test::get_event_from_ringbuffer(int16_t* cpu_id)
 	/* Try 2 times just to be sure that all the buffers are empty. */
 	while(attempts <= 1)
 	{
-		pman_consume_first_from_buffers((void**)&m_event_header, cpu_id);
+		pman_consume_one_from_buffers((void**)&m_event_header, cpu_id);
 		if(m_event_header != NULL)
 		{
 			return m_event_header;
@@ -309,10 +310,7 @@ void event_test::client_fill_sockaddr_un(struct sockaddr_un* sockaddr, const cha
 	memset(sockaddr, 0, sizeof(*sockaddr));
 	sockaddr->sun_family = AF_UNIX;
 
-	if(strncpy(sockaddr->sun_path, unix_path, MAX_SUN_PATH) == NULL)
-	{
-		FAIL() << "'strncpy (client)' must not fail." << std::endl;
-	}
+	strlcpy(sockaddr->sun_path, unix_path, MAX_SUN_PATH);
 }
 
 void event_test::server_fill_sockaddr_un(struct sockaddr_un* sockaddr, const char* unix_path)
@@ -320,10 +318,7 @@ void event_test::server_fill_sockaddr_un(struct sockaddr_un* sockaddr, const cha
 	memset(sockaddr, 0, sizeof(*sockaddr));
 	sockaddr->sun_family = AF_UNIX;
 
-	if(strncpy(sockaddr->sun_path, unix_path, MAX_SUN_PATH) == NULL)
-	{
-		FAIL() << "'strncpy (server)' must not fail." << std::endl;
-	}
+	strlcpy(sockaddr->sun_path, unix_path, MAX_SUN_PATH);
 }
 
 void event_test::connect_ipv4_client_to_server(int32_t* client_socket, struct sockaddr_in* client_sockaddr, int32_t* server_socket, struct sockaddr_in* server_sockaddr)
@@ -535,16 +530,11 @@ void event_test::assert_cgroup_param(int param_num)
 
 	for(int index = 0; index < CGROUP_NUMBER; index++)
 	{
-		/* 'strcpy()' takes also the '\0'. */
-		strcpy(cgroup_string, m_event_params[m_current_param].valptr + total_len);
-		/* 'strlen()' does not include the terminating null byte '\0'. */
+		strlcpy(cgroup_string, m_event_params[m_current_param].valptr + total_len, MAX_CGROUP_STRING_LEN);
 		total_len += strlen(cgroup_string) + 1;
+
 		prefix_len = strlen(cgroup_prefix_array[index]);
-		strncpy(cgroup_prefix, cgroup_string, prefix_len);
-		/* add the NULL terminator.
-		 * Pay attention to buffer overflow if you change the `MAX_CGROUP_PREFIX_LEN`.
-		 */
-		cgroup_prefix[prefix_len] = '\0';
+		strlcpy(cgroup_prefix, cgroup_string, prefix_len + 1);
 		ASSERT_STREQ(cgroup_prefix, cgroup_prefix_array[index]) << VALUE_NOT_CORRECT << m_current_param;
 	}
 	assert_param_len(total_len);
@@ -617,17 +607,17 @@ void event_test::assert_tuple_inet_param(int param_num, uint8_t desired_family, 
 	/* Assert src ipv4. */
 	assert_ipv4_string(desired_src_ipv4, 1, SOURCE);
 
-	/* Assert dest ipv4. */
-	assert_ipv4_string(desired_dest_ipv4, 5, DEST);
-
 	/* Assert src port. */
-	assert_port_string(desired_src_port, 9, SOURCE);
+	assert_port_string(desired_src_port, 5, SOURCE);
+
+	/* Assert dest ipv4. */
+	assert_ipv4_string(desired_dest_ipv4, 7, DEST);
 
 	/* Assert dest port. */
 	assert_port_string(desired_dest_port, 11, DEST);
 
-	/* Assert (family + ipv4_src + ipv4_dest + port_src + port_dest) */
-	assert_param_len(FAMILY_SIZE + IPV4_SIZE + IPV4_SIZE + PORT_SIZE + PORT_SIZE);
+	/* Assert (family + ipv4_src + port_src + ipv4_dest + port_dest) */
+	assert_param_len(FAMILY_SIZE + IPV4_SIZE + PORT_SIZE + IPV4_SIZE + PORT_SIZE);
 }
 
 void event_test::assert_tuple_inet6_param(int param_num, uint8_t desired_family, const char* desired_src_ipv6, const char* desired_dest_ipv6,
@@ -641,17 +631,17 @@ void event_test::assert_tuple_inet6_param(int param_num, uint8_t desired_family,
 	/* Assert src ipv6. */
 	assert_ipv6_string(desired_src_ipv6, 1, SOURCE);
 
-	/* Assert dest ipv6. */
-	assert_ipv6_string(desired_dest_ipv6, 17, DEST);
-
 	/* Assert src port. */
-	assert_port_string(desired_src_port, 33, SOURCE);
+	assert_port_string(desired_src_port, 17, SOURCE);
+
+	/* Assert dest ipv6. */
+	assert_ipv6_string(desired_dest_ipv6, 19, DEST);
 
 	/* Assert dest port. */
 	assert_port_string(desired_dest_port, 35, DEST);
 
-	/* Assert (family + ipv6_src + ipv6_dest + port_src + port_dest)*/
-	assert_param_len(FAMILY_SIZE + IPV6_SIZE + IPV6_SIZE + PORT_SIZE + PORT_SIZE);
+	/* Assert (family + ipv6_src + port_src + ipv6_dest + port_dest)*/
+	assert_param_len(FAMILY_SIZE + IPV6_SIZE + PORT_SIZE + IPV6_SIZE + PORT_SIZE);
 }
 
 void event_test::assert_tuple_unix_param(int param_num, uint8_t desired_family, const char* desired_path)
@@ -829,7 +819,7 @@ void event_test::assert_unix_path(const char* desired_path, int starting_index)
 
 void event_test::assert_event_in_buffers(pid_t pid_to_search, int event_to_search, bool presence)
 {
-	int16_t cpu_id = 0;
+	uint16_t cpu_id = 0;
 	pid_t pid = 0;
 	uint16_t evt_type = 0;
 

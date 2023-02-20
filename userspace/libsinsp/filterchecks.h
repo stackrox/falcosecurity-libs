@@ -24,6 +24,7 @@ limitations under the License.
 #include "k8s.h"
 #include "mesos.h"
 #endif
+#include "sinsp.h"
 
 #include "gen_filter.h"
 
@@ -387,6 +388,13 @@ public:
 		TYPE_CMDNARGS = 53,
 		TYPE_CMDLENARGS = 54,
 		TYPE_PVPID = 55,
+		TYPE_IS_EXE_UPPER_LAYER = 56,
+		TYPE_EXE_INO = 57,
+		TYPE_EXE_INO_CTIME = 58,
+		TYPE_EXE_INO_MTIME = 59,
+		TYPE_EXE_INO_CTIME_DURATION_CLONE_TS = 60,
+		TYPE_EXE_INO_CTIME_DURATION_PIDNS_START = 61,
+		TYPE_PIDNS_INIT_START_TS = 62,
 	};
 
 	sinsp_filter_check_thread();
@@ -801,6 +809,8 @@ public:
 		TYPE_CONTAINER_HEALTHCHECK,
 		TYPE_CONTAINER_LIVENESS_PROBE,
 		TYPE_CONTAINER_READINESS_PROBE,
+		TYPE_CONTAINER_START_TS,
+		TYPE_CONTAINER_DURATION,
 	};
 
 	sinsp_filter_check_container();
@@ -816,6 +826,7 @@ private:
 	uint32_t m_u32val;
 	int32_t m_argid;
 	string m_argstr;
+	int64_t m_s64val;
 };
 
 //

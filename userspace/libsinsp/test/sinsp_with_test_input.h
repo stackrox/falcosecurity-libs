@@ -23,7 +23,7 @@ limitations under the License.
 #include "scap.h"
 #include "sinsp.h"
 #include "filterchecks.h"
-#include "../../common/strlcpy.h"
+#include "strlcpy.h"
 #include "test_utils.h"
 
 class sinsp_with_test_input : public ::testing::Test {
@@ -130,9 +130,10 @@ protected:
 		event->ts = ts;
 		event->tid = tid;
 
+		uint64_t evtoffset = m_events.size() - m_test_data->event_count;
 		m_events.push_back(event);
-		m_test_data->events = m_events.data();
-		m_test_data->event_count = m_events.size();
+		m_test_data->events = m_events.data() + evtoffset;
+		m_test_data->event_count = m_events.size() - evtoffset;
 		m_last_recorded_timestamp = ts;
 
 		return event;

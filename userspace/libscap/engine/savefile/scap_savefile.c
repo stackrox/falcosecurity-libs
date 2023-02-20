@@ -29,12 +29,15 @@ struct iovec {
 };
 #endif
 
+#define SCAP_HANDLE_T struct savefile_engine
 #include "savefile.h"
 #include "scap.h"
 #include "scap-int.h"
 #include "scap_savefile.h"
 #include "scap_reader.h"
 #include "../noop/noop.h"
+
+#include "strlcpy.h"
 
 //
 // Read the section header block
@@ -2182,7 +2185,7 @@ static int32_t scap_savefile_restart_capture(scap_t* handle)
 	{
 		char error[SCAP_LASTERR_SIZE];
 		snprintf(error, SCAP_LASTERR_SIZE, "could not restart capture: %s", scap_getlasterr(handle));
-		strncpy(handle->m_lasterr, error, SCAP_LASTERR_SIZE);
+		strlcpy(handle->m_lasterr, error, SCAP_LASTERR_SIZE);
 	}
 	return res;
 }

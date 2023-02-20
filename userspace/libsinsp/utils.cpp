@@ -39,6 +39,7 @@ limitations under the License.
 #include <algorithm>
 #include <functional>
 #include <errno.h>
+#include <sys/stat.h>
 
 #include "sinsp.h"
 #include "sinsp_int.h"
@@ -49,6 +50,7 @@ limitations under the License.
 #include "filterchecks.h"
 #include "protodecoder.h"
 #include "uri.h"
+#include "strlcpy.h"
 #if !defined(_WIN32) && !defined(MINIMAL_BUILD)
 #include "curl/curl.h"
 #endif
@@ -757,7 +759,7 @@ bool sinsp_utils::concatenate_paths(char* target,
 {
 	if(targetlen < (len1 + len2 + 1))
 	{
-		strcpy(target, "/PATH_TOO_LONG");
+		strlcpy(target, "/PATH_TOO_LONG", targetlen);
 		return false;
 	}
 

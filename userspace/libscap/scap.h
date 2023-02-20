@@ -17,6 +17,8 @@ limitations under the License.
 
 #pragma once
 
+#include "scap_const.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -64,7 +66,6 @@ struct iovec;
 #include "../../driver/ppm_events_public.h"
 #ifdef _WIN32
 #include <time.h>
-#define MAP_FAILED (void*)-1
 #endif
 
 #include "plugin_info.h"
@@ -98,28 +99,8 @@ struct iovec;
 // call `scap_get_driver_api_version()` and/or `scap_get_driver_schema_version()`
 // and handle the result
 //
-#define SCAP_MINIMUM_DRIVER_API_VERSION PPM_API_VERSION(2, 0, 0)
+#define SCAP_MINIMUM_DRIVER_API_VERSION PPM_API_VERSION(3, 0, 0)
 #define SCAP_MINIMUM_DRIVER_SCHEMA_VERSION PPM_API_VERSION(2, 0, 0)
-
-//
-// Return types
-//
-#define SCAP_SUCCESS 0
-#define SCAP_FAILURE 1
-#define SCAP_TIMEOUT -1
-#define SCAP_ILLEGAL_INPUT 3
-#define SCAP_NOTFOUND 4
-#define SCAP_INPUT_TOO_SMALL 5
-#define SCAP_EOF 6
-#define SCAP_UNEXPECTED_BLOCK 7
-#define SCAP_VERSION_MISMATCH 8
-#define SCAP_NOT_SUPPORTED 9
-#define SCAP_FILTERED_EVENT 10
-
-//
-// Last error string size for `scap_open...` methods.
-//
-#define SCAP_LASTERR_SIZE 256
 
 // 
 // This is the dimension we used before introducing the variable buffer size.
@@ -276,6 +257,7 @@ typedef struct scap_threadinfo
 	char exe[SCAP_MAX_PATH_SIZE+1]; ///< argv[0] (e.g. "sshd: user@pts/4")
 	char exepath[SCAP_MAX_PATH_SIZE+1]; ///< full executable path
 	bool exe_writable; ///< true if the original executable is writable by the same user that spawned it.
+	bool exe_upper_layer; //< True if the original executable belongs to upper layer in overlayfs
 	char args[SCAP_MAX_ARGS_SIZE+1]; ///< Command line arguments (e.g. "-d1")
 	uint16_t args_len; ///< Command line arguments length
 	char env[SCAP_MAX_ENV_SIZE+1]; ///< Environment
@@ -288,20 +270,26 @@ typedef struct scap_threadinfo
 	uint64_t cap_permitted; ///< permitted capabilities
 	uint64_t cap_effective; ///< effective capabilities
 	uint64_t cap_inheritable; ///< inheritable capabilities
+	uint64_t exe_ino; ///< executable inode ino
+	uint64_t exe_ino_ctime; ///< executable inode ctime (last status change time)
+	uint64_t exe_ino_mtime; ///< executable inode mtime (last modification time)
+	uint64_t exe_ino_ctime_duration_clone_ts; ///< duration in ns between executable inode ctime (last status change time) and clone_ts
+	uint64_t exe_ino_ctime_duration_pidns_start; ///< duration in ns between pidns start ts and executable inode ctime (last status change time) if pidns start predates ctime
 	uint32_t vmsize_kb; ///< total virtual memory (as kb)
 	uint32_t vmrss_kb; ///< resident non-swapped memory (as kb)
 	uint32_t vmswap_kb; ///< swapped memory (as kb)
 	uint64_t pfmajor; ///< number of major page faults since start
 	uint64_t pfminor; ///< number of minor page faults since start
-	int64_t vtid;
-	int64_t vpid;
+	int64_t vtid;  ///< The virtual id of this thread.
+	int64_t vpid; ///< The virtual id of the process containing this thread. In single thread threads, this is equal to vtid.
+	uint64_t pidns_init_start_ts; ///<The pid_namespace init task start_time ts.
 	char cgroups[SCAP_MAX_CGROUPS_SIZE];
 	uint16_t cgroups_len;
 	char root[SCAP_MAX_PATH_SIZE+1];
 	int filtered_out; ///< nonzero if this entry should not be saved to file
 	scap_fdinfo* fdlist; ///< The fd table for this process
-	uint64_t clone_ts;
-	int32_t tty;
+	uint64_t clone_ts; ///< When the clone that started this process happened.
+	int32_t tty; ///< Number of controlling terminal
     int32_t loginuid; ///< loginuid (auid)
 
 	UT_hash_handle hh; ///< makes this structure hashable
@@ -337,7 +325,7 @@ typedef struct _scap_machine_info
 	uint64_t memory_size_bytes; ///< Physical memory size
 	uint64_t max_pid; ///< Highest PID number on this machine
 	char hostname[128]; ///< The machine hostname
-	uint64_t reserved1; ///< reserved for future use
+	uint64_t boot_ts_epoch; ///< Host boot ts in nanoseconds (epoch)
 	uint64_t reserved2; ///< reserved for future use
 	uint64_t reserved3; ///< reserved for future use
 	uint64_t reserved4; ///< reserved for future use
@@ -551,32 +539,6 @@ typedef struct scap_const_sized_buffer scap_const_sized_buffer;
 
 #define IN
 #define OUT
-
-//
-// udig stuff
-//
-#define UDIG_RING_SM_FNAME "udig_buf"
-#define UDIG_RING_DESCS_SM_FNAME "udig_descs"
-#define UDIG_RING_SIZE (8 * 1024 * 1024)
-
-struct udig_ring_buffer_status {
-	volatile uint64_t m_buffer_lock;
-	volatile int m_initialized;
-	volatile int m_capturing_pid;
-	volatile int m_stopped;
-	volatile struct timespec m_last_print_time;
-	struct udig_consumer_t m_consumer;
-};
-
-typedef struct ppm_ring_buffer_info ppm_ring_buffer_info;
-
-int32_t udig_alloc_ring(void* ring_id, uint8_t** ring, unsigned long *ringsize, char *error);
-int32_t udig_alloc_ring_descriptors(void* ring_descs_id,
-	struct ppm_ring_buffer_info** ring_info,
-	struct udig_ring_buffer_status** ring_status,
-	char *error);
-void udig_free_ring(uint8_t* addr, uint32_t size);
-void udig_free_ring_descriptors(uint8_t* addr);
 
 ///////////////////////////////////////////////////////////////////////////////
 // API functions
@@ -957,31 +919,33 @@ const scap_machine_info* scap_get_machine_info(scap_t* handle);
 int32_t scap_set_snaplen(scap_t* handle, uint32_t snaplen);
 
 /*!
-  \brief Clear the event mask: no events will be passed
+  \brief Clear the syscall mask: no syscalls events will be passed pushed to userspace.
 
   \param handle Handle to the capture instance.
 
   \note This function can only be called for live captures.
 */
-int32_t scap_clear_eventmask(scap_t* handle);
+int32_t scap_clear_ppm_sc_mask(scap_t* handle);
 
 /*!
-  \brief Set the ppm_sc into the eventmask so that
-  users can receive the related syscalls. Useful for offloading
+  \brief (Un)Set the ppm_sc bit in the syscall mask so that
+  users can (drop)receive the related syscall. Useful for offloading
   operations such as evt.type=open
 
   \param handle Handle to the capture instance.
   \param ppm_sc id (example PPM_SC_EXECVE)
+  \param enabled whether to enable or disable the syscall
   \note This function can only be called for live captures.
 */
-int32_t scap_set_eventmask(scap_t* handle, uint32_t ppm_sc, bool enabled);
+int32_t scap_set_ppm_sc(scap_t* handle, uint32_t ppm_sc, bool enabled);
 
 /*!
-  \brief Set the tp into the tpmask so that
-  users can attach the related tracepoint.
+  \brief (Un)Set the tp into the tracepoint mask so that
+  users can (detach)attach the requested tracepoint.
 
   \param handle Handle to the capture instance.
   \param tp id (example SYS_ENTER)
+  \param enabled whether to enable or disable the tracepoint
   \note This function can only be called for live captures.
 */
 int32_t scap_set_tpmask(scap_t* handle, uint32_t tp, bool enabled);
@@ -1093,11 +1057,9 @@ int32_t scap_stop_dropping_mode(scap_t* handle);
 int32_t scap_start_dropping_mode(scap_t* handle, uint32_t sampling_ratio);
 int32_t scap_enable_dynamic_snaplen(scap_t* handle);
 int32_t scap_disable_dynamic_snaplen(scap_t* handle);
-void scap_proc_free_table(scap_t* handle);
 void scap_free_device_table(scap_t* handle);
 void scap_refresh_iflist(scap_t* handle);
 void scap_refresh_proc_table(scap_t* handle);
-void scap_set_refresh_proc_table_when_saving(scap_t* handle, bool refresh);
 uint64_t scap_ftell(scap_t *handle);
 void scap_fseek(scap_t *handle, uint64_t off);
 int32_t scap_enable_tracers_capture(scap_t* handle);
@@ -1129,10 +1091,6 @@ int32_t scap_write_proclist_entry_bufs(scap_t *handle, scap_dumper_t *d, struct 
 				       const char *root);
 
 int32_t scap_get_n_tracepoint_hit(scap_t* handle, long* ret);
-#ifdef CYGWING_AGENT
-typedef struct wh_t wh_t;
-wh_t* scap_get_wmi_handle(scap_t* handle);
-#endif
 int32_t scap_set_fullcapture_port_range(scap_t* handle, uint16_t range_start, uint16_t range_end);
 
 /**
@@ -1144,6 +1102,34 @@ int32_t scap_set_statsd_port(scap_t* handle, uint16_t port);
 /* Begin StackRox Section */
 int32_t scap_ioctl(scap_t* handle, int devnum, unsigned long request, void* arg);
 /* End StackRox Section */
+
+/**
+ * Is `driver_api_version` compatible with `required_api_version`?
+ */
+bool scap_is_api_compatible(unsigned long driver_api_version, unsigned long required_api_version);
+
+/**
+ * Apply the `semver` checks on current and required versions.
+ */  
+bool scap_apply_semver_check(uint32_t current_major, uint32_t current_minor, uint32_t current_patch,
+							uint32_t required_major, uint32_t required_minor, uint32_t required_patch);
+
+/**
+ * Get API version supported by the driver
+ */
+uint64_t scap_get_driver_api_version(scap_t* handle);
+
+/**
+ * Get schema version supported by the driver
+ */
+uint64_t scap_get_driver_schema_version(scap_t* handle);
+
+/**
+ * This helper returns the system boot time computed as the actual time - the uptime of the system since the boot.
+ * We need to use this helper in drivers like BPF, because in BPF we are not able to obtain the current system time
+ * since Epoch, so we need to compute it as `time_from_the_boot(bpf_ktime_get_boot_ns) + boot_time`.
+ */
+int32_t scap_get_boot_time(char* last_err, uint64_t *boot_time);
 
 /**
  * Is `driver_api_version` compatible with `required_api_version`?

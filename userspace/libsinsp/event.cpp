@@ -24,12 +24,14 @@ limitations under the License.
 #include <unistd.h>
 #else
 #define NOMINMAX
+#define localtime_r(a, b) (localtime_s(b, a) == 0 ? b : NULL)
 #endif
 
 #include <limits>
 
 #include "sinsp.h"
 #include "sinsp_int.h"
+#include "strlcpy.h"
 
 #include "scap.h"
 
@@ -238,7 +240,7 @@ uint32_t binary_buffer_to_hex_string(char *dst, char *src, uint32_t dstlen, uint
 	for(j = 0; j < srclen; j += 8 * sizeof(uint16_t))
 	{
 		k = 0;
-		k += sprintf(row + k, "\n\t0x%.4x:", j);
+		k += snprintf(row + k, sizeof(row) - k, "\n\t0x%.4x:", j);
 
 		ptr = &src[j];
 		num_chunks = 0;
@@ -246,15 +248,22 @@ uint32_t binary_buffer_to_hex_string(char *dst, char *src, uint32_t dstlen, uint
 		{
 			uint16_t chunk = htons(*(uint16_t*)ptr);
 
+			int ret;
 			if(ptr == src + srclen - 1)
 			{
-				k += sprintf(row + k, " %.2x", *(((uint8_t*)&chunk) + 1));
+				ret = snprintf(row + k, sizeof(row) - k, " %.2x", *(((uint8_t*)&chunk) + 1));
 			}
 			else
 			{
-				k += sprintf(row + k, " %.4x", chunk);
+				ret = snprintf(row + k, sizeof(row) - k, " %.4x", chunk);
+			}
+			if (ret < 0 || ret >= sizeof(row) - k)
+			{
+				dst[0] = 0;
+				return 0;
 			}
 
+			k += ret;
 			num_chunks++;
 			ptr += sizeof(uint16_t);
 		}
@@ -295,7 +304,7 @@ uint32_t binary_buffer_to_hex_string(char *dst, char *src, uint32_t dstlen, uint
 			truncated = true;
 			break;
 		}
-		strcpy(dst + l, row);
+		strlcpy(dst + l, row, dstlen - l);
 		l += row_len;
 	}
 
@@ -1402,10 +1411,19 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 		}
 	}
 	case PT_ABSTIME:
-		//
-		// XXX not implemented yet
-		//
-		ASSERT(false);
+		{
+			ASSERT(payload_len == sizeof(uint64_t));
+			uint64_t val = *(uint64_t *)payload;
+			time_t sec = val / 1000000000ULL;
+			unsigned long nsec = val % 1000000000ULL;
+			struct tm tm;
+			localtime_r(&sec, &tm);
+			strftime(&m_paramstr_storage[0],
+				m_paramstr_storage.size(),
+				"%Y-%m-%d %H:%M:%S.XXXXXXXXX %z", &tm);
+			snprintf(&m_paramstr_storage[20], 9, "%09ld", nsec);
+			break;
+		}
 	case PT_DYN:
 		ASSERT(false);
 		snprintf(&m_paramstr_storage[0],
@@ -2190,10 +2208,19 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 			break;
 		}
 	case PT_ABSTIME:
-		//
-		// XXX not implemented yet
-		//
-		ASSERT(false);
+		{
+			ASSERT(payload_len == sizeof(uint64_t));
+			uint64_t val = *(uint64_t *)payload;
+			time_t sec = val / 1000000000ULL;
+			unsigned long nsec = val % 1000000000ULL;
+			struct tm tm;
+			localtime_r(&sec, &tm);
+			strftime(&m_paramstr_storage[0],
+				m_paramstr_storage.size(),
+				"%Y-%m-%d %H:%M:%S.XXXXXXXXX %z", &tm);
+			snprintf(&m_paramstr_storage[20], 9, "%09ld", nsec);
+			break;
+		}
 	case PT_DYN:
 		ASSERT(false);
 		snprintf(&m_paramstr_storage[0],
@@ -2205,6 +2232,11 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 		uint32_t val = *(uint32_t *)payload;
 		if (val < std::numeric_limits<uint32_t>::max())
 		{
+			// Note: we want to resolve user given the uid
+			// from the event.
+			// Eg: for setuid() the requested uid is not
+			// the threadinfo one yet;
+			// therefore we cannot directly use tinfo->m_user here.
 			snprintf(&m_paramstr_storage[0],
 					 m_paramstr_storage.size(),
 					 "%d", val);
@@ -2242,6 +2274,11 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 		uint32_t val = *(uint32_t *)payload;
 		if (val < std::numeric_limits<uint32_t>::max())
 		{
+			// Note: we want to resolve group given the gid
+			// from the event.
+			// Eg: for setgid() the requested gid is not
+			// the threadinfo one yet;
+			// therefore we cannot directly use tinfo->m_group here.
 			snprintf(&m_paramstr_storage[0],
 					 m_paramstr_storage.size(),
 					 "%d", val);

@@ -42,7 +42,6 @@ limitations under the License.
 #pragma once
 
 #include "capture_stats_source.h"
-#include "container_engine/wmi_handle_source.h"
 
 #ifdef _WIN32
 #pragma warning(disable: 4251 4200 4221 4190)
@@ -203,7 +202,7 @@ public:
   - event retrieval
   - setting capture filters
 */
-class SINSP_PUBLIC sinsp : public capture_stats_source, public wmi_handle_source
+class SINSP_PUBLIC sinsp : public capture_stats_source
 {
 public:
 	typedef std::shared_ptr<sinsp> ptr;
@@ -226,7 +225,11 @@ public:
 	virtual void open_savefile(const std::string &filename, int fd = 0);
 	virtual void open_plugin(const std::string &plugin_name, const std::string &plugin_open_params);
 	virtual void open_gvisor(const std::string &config_path, const std::string &root_path);
-	virtual void open_modern_bpf(unsigned long driver_buffer_bytes_dim = DEFAULT_DRIVER_BUFFER_BYTES_DIM, const std::unordered_set<uint32_t> &ppm_sc_of_interest = {}, const std::unordered_set<uint32_t> &tp_of_interest = {});
+	/*[EXPERIMENTAL] This API could change between releases, we are trying to find the right configuration to deploy the modern bpf probe:
+	 * `cpus_for_each_buffer` and `online_only` are the 2 experimental params. The first one allows associating more than one CPU to a single ring buffer.
+	 * The last one allows allocating ring buffers only for online CPUs and not for all system-available CPUs.
+	 */
+	virtual void open_modern_bpf(unsigned long driver_buffer_bytes_dim = DEFAULT_DRIVER_BUFFER_BYTES_DIM, uint16_t cpus_for_each_buffer = DEFAULT_CPU_FOR_EACH_BUFFER, bool online_only = true, const std::unordered_set<uint32_t> &ppm_sc_of_interest = {}, const std::unordered_set<uint32_t> &tp_of_interest = {});
 	virtual void open_test_input(scap_test_input_data *data);
 
 	scap_open_args factory_open_args(const char* engine_name, scap_mode_t scap_mode);
@@ -1104,12 +1107,6 @@ public:
 #if defined(HAS_CAPTURE) && !defined(_WIN32)
 	static std::shared_ptr<std::string> lookup_cgroup_dir(const std::string& subsys);
 #endif
-#if defined(CYGWING_AGENT)
-	wh_t* get_wmi_handle() override
-	{
-		return scap_get_wmi_handle(m_h);
-	}
-#endif
 
 	// Add comm to the list of comms for which the inspector
 	// should not return events.
@@ -1149,6 +1146,9 @@ public:
 	const sinsp_plugin_manager* get_plugin_manager();
 
 	uint64_t get_lastevent_ts() const { return m_lastevent_ts; }
+
+	const std::string& get_host_root() const { return m_host_root; }
+	void set_host_root(const std::string& s) { m_host_root = s; }
 
 VISIBILITY_PROTECTED
 	bool add_thread(std::shared_ptr<sinsp_threadinfo> ptinfo);
@@ -1274,6 +1274,8 @@ private:
 	scap_test_input_data *m_test_input_data = nullptr;
 
 	sinsp_network_interfaces* m_network_interfaces;
+
+	std::string m_host_root;
 
 public:
 	sinsp_thread_manager* m_thread_manager;

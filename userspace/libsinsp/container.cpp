@@ -21,9 +21,7 @@ limitations under the License.
 #ifdef HAS_CAPTURE
 #include "container_engine/cri.h"
 #endif // HAS_CAPTURE
-#ifdef _WIN32
-#include "container_engine/docker/docker_win.h"
-#else
+#ifndef _WIN32
 #include "container_engine/docker/docker_linux.h"
 #include "container_engine/docker/podman.h"
 #endif
@@ -372,7 +370,7 @@ void sinsp_container_manager::notify_new_container(const sinsp_container_info& c
 
 		// Enqueue it onto the queue of pending container events for the inspector
 #ifndef _WIN32
-		m_inspector->m_pending_state_evts.push(std::move(cevt));
+		m_inspector->m_pending_state_evts.push(cevt);
 #endif
 	}
 	else
@@ -573,13 +571,6 @@ void sinsp_container_manager::create_engines()
 		return;
 	}
 #ifndef MINIMAL_BUILD
-#ifdef CYGWING_AGENT
-	{
-		auto docker_engine = std::make_shared<container_engine::docker_win>(*this, m_inspector /*wmi source*/);
-		m_container_engines.push_back(docker_engine);
-		m_container_engine_by_type[CT_DOCKER] = docker_engine;
-	}
-#else
 #ifndef _WIN32
 	{
 		auto podman_engine = std::make_shared<container_engine::podman>(*this);
@@ -628,7 +619,6 @@ void sinsp_container_manager::create_engines()
 		m_container_engine_by_type[CT_BPM] = bpm_engine;
 	}
 #endif // _WIN32
-#endif // CYGWING_AGENT
 #endif // MINIMAL_BUILD
 }
 

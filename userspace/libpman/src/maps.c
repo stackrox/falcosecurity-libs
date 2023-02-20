@@ -40,6 +40,14 @@ static void fill_event_params_table()
 	}
 }
 
+static void fill_ppm_sc_table()
+{
+	for(int j = 0; j < SYSCALL_TABLE_SIZE; ++j)
+	{
+		g_state.skel->rodata->g_ppm_sc_table[j] = (uint16_t)g_syscall_table[j].ppm_sc;
+	}
+}
+
 #ifdef TEST_HELPERS
 uint8_t pman_get_event_params(int event_type)
 {
@@ -98,7 +106,7 @@ static int add_bpf_program_to_tail_table(int tail_table_fd, const char* bpf_prog
 	bpf_prog = bpf_object__find_program_by_name(g_state.skel->obj, bpf_prog_name);
 	if(!bpf_prog)
 	{
-		sprintf(error_message, "unable to find BPF program '%s'", bpf_prog_name);
+		snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unable to find BPF program '%s'", bpf_prog_name);
 		pman_print_error((const char*)error_message);
 		goto clean_add_program_to_tail_table;
 	}
@@ -106,14 +114,14 @@ static int add_bpf_program_to_tail_table(int tail_table_fd, const char* bpf_prog
 	bpf_prog_fd = bpf_program__fd(bpf_prog);
 	if(bpf_prog_fd <= 0)
 	{
-		sprintf(error_message, "unable to get the fd for BPF program '%s'", bpf_prog_name);
+		snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unable to get the fd for BPF program '%s'", bpf_prog_name);
 		pman_print_error((const char*)error_message);
 		goto clean_add_program_to_tail_table;
 	}
 
 	if(bpf_map_update_elem(tail_table_fd, &key, &bpf_prog_fd, BPF_ANY))
 	{
-		sprintf(error_message, "unable to update the tail table with BPF program '%s'", bpf_prog_name);
+		snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unable to update the tail table with BPF program '%s'", bpf_prog_name);
 		pman_print_error((const char*)error_message);
 		goto clean_add_program_to_tail_table;
 	}
@@ -154,26 +162,43 @@ int pman_fill_syscalls_tail_table()
 		enter_event_type = g_syscall_table[syscall_id].enter_event_type;
 		exit_event_type = g_syscall_table[syscall_id].exit_event_type;
 
-		/* Check if we have a corresponding bpf program for these events.
-		 * If we have no associated programs the tail call will fail for
-		 * these entries.
+		/* If the syscall is generic, the exit_event would be `0`, so
+		 * `PPME_GENERIC_E` but for the exit_event we want `PPME_GENERIC_X`
+		 * that is `1`, so we patch it on the fly, otherwise the exit_event
+		 * will be associated with the wrong bpf program, `generic_e` instead
+		 * of `generic_x`.
+		 */
+		if(exit_event_type == PPME_GENERIC_E)
+		{
+			exit_event_type = PPME_GENERIC_X;
+		}
+
+		/* At the end of the work, we should always have a corresponding bpf program for every event.
+		 * Until we miss some syscalls, this is not true so we manage these cases as generic events.
+		 * We need to remove this workaround when all syscalls will be implemented.
 		 */
 		enter_prog_name = event_prog_names[enter_event_type];
 		exit_prog_name = event_prog_names[exit_event_type];
 
-		if(enter_prog_name &&
-		   add_bpf_program_to_tail_table(syscall_enter_tail_table_fd, enter_prog_name, syscall_id))
+		if(!enter_prog_name)
+		{
+			enter_prog_name = event_prog_names[PPME_GENERIC_E];
+		}
+
+		if(!exit_prog_name)
+		{
+			exit_prog_name = event_prog_names[PPME_GENERIC_X];
+		}
+
+		if(add_bpf_program_to_tail_table(syscall_enter_tail_table_fd, enter_prog_name, syscall_id))
 		{
 			goto clean_fill_syscalls_tail_table;
 		}
 
-		if(exit_prog_name &&
-		   add_bpf_program_to_tail_table(syscall_exit_tail_table_fd, exit_prog_name, syscall_id))
+		if(add_bpf_program_to_tail_table(syscall_exit_tail_table_fd, exit_prog_name, syscall_id))
 		{
 			goto clean_fill_syscalls_tail_table;
 		}
-
-		/// TODO: for all not managed cases we can think of a generic bpf program like in the current probe.
 	}
 	return 0;
 
@@ -219,7 +244,8 @@ int pman_fill_extra_event_prog_tail_table()
 
 static int size_auxiliary_maps()
 {
-	if(bpf_map__set_max_entries(g_state.skel->maps.auxiliary_maps, g_state.n_cpus))
+	/* We always allocate auxiliary maps from all the CPUs, even if some of them are not online. */
+	if(bpf_map__set_max_entries(g_state.skel->maps.auxiliary_maps, g_state.n_possible_cpus))
 	{
 		pman_print_error("unable to set max entries for 'auxiliary_maps'");
 		return errno;
@@ -229,7 +255,8 @@ static int size_auxiliary_maps()
 
 static int size_counter_maps()
 {
-	if(bpf_map__set_max_entries(g_state.skel->maps.counter_maps, g_state.n_cpus))
+	/* We always allocate counter maps from all the CPUs, even if some of them are not online. */
+	if(bpf_map__set_max_entries(g_state.skel->maps.counter_maps, g_state.n_possible_cpus))
 	{
 		pman_print_error(" unable to set max entries for 'counter_maps'");
 		return errno;
@@ -248,6 +275,7 @@ int pman_prepare_maps_before_loading()
 
 	/* Read-only global variables must be set before loading phase. */
 	fill_event_params_table();
+	fill_ppm_sc_table();
 
 	/* We need to set the entries number for every BPF_MAP_TYPE_ARRAY
 	 * The number of entries will be always equal to the CPUs number.

@@ -21,6 +21,7 @@ limitations under the License.
 #include <scap.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include "strlcpy.h"
 
 #define SYSCALL_NAME_MAX_LEN 40
 #define UNKNOWN_ENGINE "unknown"
@@ -38,6 +39,8 @@ limitations under the License.
 #define EVENT_TYPE_OPTION "--evt_type"
 #define BUFFER_OPTION "--buffer_dim"
 #define SIMPLE_SET_OPTION "--simple_set"
+#define CPUS_FOR_EACH_BUFFER_MODE "--cpus_for_buf"
+#define ALL_AVAILABLE_CPUS_MODE "--available_cpus"
 
 /* PRINT */
 #define VALIDATION_OPTION "--validate_syscalls"
@@ -170,9 +173,9 @@ void print_sorted_syscalls(char string_vector[SYSCALL_TABLE_SIZE][SYSCALL_NAME_M
 			/* swapping strings if they are not in the lexicographical order */
 			if(strcmp(string_vector[i], string_vector[j]) > 0)
 			{
-				strcpy(temp, string_vector[i]);
-				strcpy(string_vector[i], string_vector[j]);
-				strcpy(string_vector[j], temp);
+				strlcpy(temp, string_vector[i], SYSCALL_NAME_MAX_LEN);
+				strlcpy(string_vector[i], string_vector[j], SYSCALL_NAME_MAX_LEN);
+				strlcpy(string_vector[j], temp, SYSCALL_NAME_MAX_LEN);
 			}
 		}
 	}
@@ -201,7 +204,7 @@ void print_UF_NEVER_DROP_syscalls()
 
 			if(g_syscall_table[syscall_nr].flags & UF_NEVER_DROP)
 			{
-				strcpy(str[interesting_syscall++], g_syscall_info_table[ppm_sc].name);
+				strlcpy(str[interesting_syscall++], g_syscall_info_table[ppm_sc].name, SYSCALL_NAME_MAX_LEN);
 			}
 		}
 	}
@@ -227,7 +230,7 @@ void print_EF_MODIFIES_STATE_syscalls()
 			int enter_event = g_syscall_table[syscall_nr].enter_event_type;
 			if(g_event_info[enter_event].flags & EF_MODIFIES_STATE)
 			{
-				strcpy(str[interesting_syscall++], g_syscall_info_table[ppm_sc].name);
+				strlcpy(str[interesting_syscall++], g_syscall_info_table[ppm_sc].name, SYSCALL_NAME_MAX_LEN);
 			}
 		}
 	}
@@ -256,7 +259,7 @@ void print_sinsp_modifies_state_syscalls()
 			{
 				continue;
 			}
-			strcpy(str[interesting_syscall++], g_syscall_info_table[ppm_sc].name);
+			strlcpy(str[interesting_syscall++], g_syscall_info_table[ppm_sc].name, SYSCALL_NAME_MAX_LEN);
 		}
 	}
 
@@ -452,7 +455,7 @@ void print_ipv4(int starting_index)
 {
 	char ipv4_string[50];
 	uint8_t* ipv4 = (uint8_t*)(valptr + starting_index);
-	sprintf(ipv4_string, "%d.%d.%d.%d", ipv4[0], ipv4[1], ipv4[2], ipv4[3]);
+	snprintf(ipv4_string, sizeof(ipv4_string), "%d.%d.%d.%d", ipv4[0], ipv4[1], ipv4[2], ipv4[3]);
 	printf("- ipv4: %s\n", ipv4_string);
 }
 
@@ -708,6 +711,9 @@ void print_help()
 	printf("'%s <num_events>': number of events to catch before terminating. (default: UINT64_MAX)\n", NUM_EVENTS_OPTION);
 	printf("'%s <event_type>': every event of this type will be printed to console. (default: -1, no print)\n", EVENT_TYPE_OPTION);
 	printf("'%s <dim>': dimension in bytes of a single per CPU buffer.\n", BUFFER_OPTION);
+	printf("[MODERN PROBE ONLY, EXPERIMENTAL]\n");
+	printf("'%s <cpus_for_each_buffer>': allocate a ring buffer for every `cpus_for_each_buffer` CPUs.\n", CPUS_FOR_EACH_BUFFER_MODE);
+	printf("'%s': allocate ring buffers for all available CPUs. Default: allocate ring buffers for online CPUs only.\n", ALL_AVAILABLE_CPUS_MODE);
 	printf("\n------> VALIDATION OPTIONS\n");
 	printf("'%s': validation checks.\n", VALIDATION_OPTION);
 	printf("\n------> PRINT OPTIONS\n");
@@ -730,7 +736,8 @@ void print_scap_source()
 	}
 	else if(strcmp(oargs.engine_name, MODERN_BPF_ENGINE) == 0)
 	{
-		printf("* Modern BPF probe.\n");
+		struct scap_modern_bpf_engine_params* params = oargs.engine_params;
+		printf("* Modern BPF probe, 1 ring buffer every %d CPUs\n", params->cpus_for_each_buffer);
 	}
 	else if(strcmp(oargs.engine_name, SAVEFILE_ENGINE) == 0)
 	{
@@ -814,6 +821,8 @@ void parse_CLI_options(int argc, char** argv)
 			oargs.engine_name = MODERN_BPF_ENGINE;
 			oargs.mode = SCAP_MODE_LIVE;
 			modern_bpf_params.buffer_bytes_dim = buffer_bytes_dim;
+			modern_bpf_params.cpus_for_each_buffer = DEFAULT_CPU_FOR_EACH_BUFFER;
+			modern_bpf_params.allocate_online_only = true;
 			oargs.engine_params = &modern_bpf_params;
 		}
 		if(!strcmp(argv[i], SCAP_FILE_OPTION))
@@ -887,6 +896,22 @@ void parse_CLI_options(int argc, char** argv)
 		{
 			enable_simple_set();
 		}
+		/* This should be used only with the modern probe */
+		if(!strcmp(argv[i], CPUS_FOR_EACH_BUFFER_MODE))
+		{
+			if(!(i + 1 < argc))
+			{
+				printf("\nYou need to specify also the number of CPUs. Bye!\n");
+				exit(EXIT_FAILURE);
+			}
+			modern_bpf_params.cpus_for_each_buffer = atoi(argv[++i]);
+		}
+		/* This should be used only with the modern probe */
+		if(!strcmp(argv[i], ALL_AVAILABLE_CPUS_MODE))
+		{
+			modern_bpf_params.allocate_online_only = false;
+		}
+
 
 		/*=============================== CONFIGURATIONS ===========================*/
 
@@ -1014,6 +1039,8 @@ int main(int argc, char** argv)
 
 	gettimeofday(&tval_start, NULL);
 
+	scap_start_capture(g_h);
+
 	while(g_nevts != num_events)
 	{
 		res = scap_next(g_h, &ev, &cpuid);
@@ -1049,6 +1076,7 @@ int main(int argc, char** argv)
 		g_nevts++;
 	}
 
+	scap_stop_capture(g_h);
 	print_stats();
 	scap_close(g_h);
 	return EXIT_SUCCESS;

@@ -76,7 +76,7 @@ bool cri_async_source::parse_containerd(const runtime::v1alpha2::ContainerStatus
 			container.m_id.c_str(),
 			info_it->second.c_str());
 
-	/* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
+    /* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
 	//m_cri->parse_cri_env(root, container);
 	/* End StackRox */
 	m_cri->parse_cri_json_image(root, container);
@@ -312,22 +312,47 @@ bool cri::resolve(sinsp_threadinfo *tinfo, bool query_os_for_missing_info)
 
 		if(!m_async_source)
 		{
-			auto async_source = new cri_async_source(cache, m_cri.get(), s_cri_timeout);
+			// Each lookup attempt involves two CRI API calls (see
+			// `cri_async_source::parse`), each one having a default timeout
+			// of 1000ms (`cri::set_cri_timeout`).
+			// On top of that, there's an exponential backoff with 125ms start
+			// time (`sinsp_container_lookup::delay`) with a maximum of 5
+			// retries.
+			// The maximum time to complete all attempts can be then evaluated
+			// with the following formula:
+			//
+			// max_wait_ms = (2 * s_cri_timeout) * n + (125 * (2^n - 1))
+			//
+			// Note that this excludes the time for the last 2 CRI API calls
+			// that will be performed anyway, even if the TTL expires.
+			//
+			// With n=5 the result is 13875ms, we keep some margin as we are
+			// taking into account elapsed time.
+			uint64_t max_wait_ms = 20000;
+			auto async_source = new cri_async_source(cache, m_cri.get(), max_wait_ms);
 			m_async_source = std::unique_ptr<cri_async_source>(async_source);
 		}
 
 		cache->set_lookup_status(container_id, m_cri->get_cri_runtime_type(), sinsp_container_lookup::state::STARTED);
 
-		sinsp_container_info result;
+		// sinsp_container_lookup is set-up to perform 5 retries at most, with
+		// an exponential backoff with 2000 ms of maximum wait time.
+		sinsp_container_info result(sinsp_container_lookup(5, 2000));
 
 		bool done;
 		const bool async = s_async && cache->async_allowed();
 		if(async)
 		{
+			g_logger.format(sinsp_logger::SEV_DEBUG,
+					"cri_async (%s): Starting asynchronous lookup",
+					container_id.c_str());
 			done = m_async_source->lookup(key, result);
 		}
 		else
 		{
+			g_logger.format(sinsp_logger::SEV_DEBUG,
+					"cri_async (%s): Starting synchronous lookup",
+					container_id.c_str());
 			done = m_async_source->lookup_sync(key, result);
 		}
 

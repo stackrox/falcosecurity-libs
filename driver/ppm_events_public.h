@@ -613,7 +613,8 @@ or GPL2.txt for full copies of the license.
  * Execve family additional flags.
  */
 #define PPM_EXE_WRITABLE		(1 << 0)
-
+#define PPM_EXE_UPPER_LAYER 	(1 << 1)
+  
 /*
  * Execveat flags
  */
@@ -1202,7 +1203,12 @@ enum extra_event_prog_code
 	T1_VFORK_X = 5,
 	T1_SCHED_PROC_EXEC = 6,
 	T1_SCHED_PROC_FORK = 7,
-	TAIL_EXTRA_EVENT_PROG_MAX = 8
+	T2_SCHED_PROC_FORK = 8,
+	T2_CLONE_X = 9,
+	T2_CLONE3_X = 10,
+	T2_FORK_X = 11,
+	T2_VFORK_X = 12,
+	TAIL_EXTRA_EVENT_PROG_MAX = 13
 };
 
 /*
@@ -1787,14 +1793,14 @@ struct ppm_evt_hdr {
  */
 #ifndef CYGWING_AGENT
 #define PPM_IOCTL_MAGIC	's'
-#define PPM_IOCTL_DISABLE_CAPTURE _IO(PPM_IOCTL_MAGIC, 0)
-#define PPM_IOCTL_ENABLE_CAPTURE _IO(PPM_IOCTL_MAGIC, 1)
+// #define PPM_IOCTL_DISABLE_CAPTURE _IO(PPM_IOCTL_MAGIC, 0) Support dropped
+// #define PPM_IOCTL_ENABLE_CAPTURE _IO(PPM_IOCTL_MAGIC, 1) Support dropped
 #define PPM_IOCTL_DISABLE_DROPPING_MODE _IO(PPM_IOCTL_MAGIC, 2)
 #define PPM_IOCTL_ENABLE_DROPPING_MODE _IO(PPM_IOCTL_MAGIC, 3)
 #define PPM_IOCTL_SET_SNAPLEN _IO(PPM_IOCTL_MAGIC, 4)
-#define PPM_IOCTL_MASK_ZERO_EVENTS _IO(PPM_IOCTL_MAGIC, 5)
-#define PPM_IOCTL_MASK_SET_EVENT   _IO(PPM_IOCTL_MAGIC, 6)
-#define PPM_IOCTL_MASK_UNSET_EVENT _IO(PPM_IOCTL_MAGIC, 7)
+// #define PPM_IOCTL_MASK_ZERO_EVENTS _IO(PPM_IOCTL_MAGIC, 5) Support dropped
+// #define PPM_IOCTL_MASK_SET_EVENT   _IO(PPM_IOCTL_MAGIC, 6) Support dropped
+// #define PPM_IOCTL_MASK_UNSET_EVENT _IO(PPM_IOCTL_MAGIC, 7) Support dropped
 #define PPM_IOCTL_DISABLE_DYNAMIC_SNAPLEN _IO(PPM_IOCTL_MAGIC, 8)
 #define PPM_IOCTL_ENABLE_DYNAMIC_SNAPLEN _IO(PPM_IOCTL_MAGIC, 9)
 #define PPM_IOCTL_GET_VTID _IO(PPM_IOCTL_MAGIC, 10)
@@ -1815,6 +1821,9 @@ struct ppm_evt_hdr {
 #define PPM_IOCTL_GET_SCHEMA_VERSION _IO(PPM_IOCTL_MAGIC, 25)
 #define PPM_IOCTL_MANAGE_TP _IO(PPM_IOCTL_MAGIC, 26)
 #define PPM_IOCTL_GET_TPMASK _IO(PPM_IOCTL_MAGIC, 27)
+#define PPM_IOCTL_ZERO_SYSCALLS _IO(PPM_IOCTL_MAGIC, 28) // this replaces PPM_IOCTL_MASK_ZERO_EVENTS
+#define PPM_IOCTL_ENABLE_SYSCALL   _IO(PPM_IOCTL_MAGIC, 29) // this replaces PPM_IOCTL_MASK_SET_EVENT
+#define PPM_IOCTL_DISABLE_SYSCALL _IO(PPM_IOCTL_MAGIC, 30) // this replaces PPM_IOCTL_MASK_UNSET_EVENT
 /* Begin StackRox Section */
 #define PPM_IOCTL_EXCLUDE_NS_OF_PID _IO(PPM_IOCTL_MAGIC, 40)
 /* End StackRox Section */
@@ -1973,27 +1982,5 @@ struct ppm_event_entry {
 #define RW_SNAPLEN 80
 #define RW_MAX_SNAPLEN PPM_MAX_ARG_SIZE
 #define RW_MAX_FULLCAPTURE_PORT_SNAPLEN 16000
-
-/*
- * Udig stuff
- */
-struct udig_consumer_t {
-	uint32_t snaplen;
-	uint32_t sampling_ratio;
-	bool do_dynamic_snaplen;
-	uint32_t sampling_interval;
-	int is_dropping;
-	int dropping_mode;
-	volatile int need_to_insert_drop_e;
-	volatile int need_to_insert_drop_x;
-	uint16_t fullcapture_port_range_start;
-	uint16_t fullcapture_port_range_end;
-	uint16_t statsd_port;
-};
-#ifdef UDIG
-typedef struct udig_consumer_t ppm_consumer_t;
-#else
-typedef struct ppm_consumer_t ppm_consumer_t;
-#endif /* UDIG */
 
 #endif /* EVENTS_PUBLIC_H_ */

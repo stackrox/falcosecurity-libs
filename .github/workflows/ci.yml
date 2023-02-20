@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - 'release/**'
+      - 'maintainers/**'
   workflow_dispatch:
 
 jobs:
@@ -161,6 +162,15 @@ jobs:
             KERNELDIR=/lib/modules/$(ls /lib/modules)/build make -j4
             make run-unit-tests
 
+  test-drivers-x86:
+    name: test-drivers-x86 😇 (bundled_deps)
+    runs-on: ubuntu-22.04
+    needs: paths-filter
+    if: false
+    steps:
+      - name: Fake test
+        run: echo "skipped"
+
   build-and-test-modern-bpf-x86:
     name: build-and-test-modern-bpf-x86 😇 (bundled_deps)
     runs-on: ubuntu-22.04
@@ -297,7 +307,7 @@ jobs:
             cmake_opts: -DBUILD_BPF=On -DUSE_BUNDLED_DEPS=True
           - name: system_deps_w_chisels
             cmake_opts: -DBUILD_BPF=On -DUSE_BUNDLED_DEPS=False -DWITH_CHISEL=True
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     container:
       image: debian:buster
       volumes:

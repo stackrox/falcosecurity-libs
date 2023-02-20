@@ -32,6 +32,8 @@ limitations under the License.
 #include "tracers.h"
 #include "value_parser.h"
 
+#include "strlcpy.h"
+
 extern sinsp_evttables g_infotables;
 int32_t g_screen_w = -1;
 bool g_filterchecks_force_raw_times = false;
@@ -1905,6 +1907,13 @@ const filtercheck_field_info sinsp_filter_check_thread_fields[] =
 	{PT_UINT64, EPF_NONE, PF_DEC, "proc.cmdnargs", "Number of cmd args", "The number of cmd args."},
 	{PT_UINT64, EPF_NONE, PF_DEC, "proc.cmdlenargs", "Total Count of Chars in cmd args", "The total count of characters / length of all cmd args combined excluding whitespaces."},
 	{PT_INT64, EPF_NONE, PF_ID, "proc.pvpid", "Parent Virtual Process ID", "the id of the parent process generating the event as seen from its current PID namespace."},
+	{PT_BOOL, EPF_NONE, PF_NA, "proc.is_exe_upper_layer", "Process Executable Is In Upper Layer", "true if this process' executable file is in upper layer in overlayfs. This field value can only be trusted if the underlying kernel version is greater or equal than 3.18.0, since overlayfs was introduced at that time."},
+	{PT_INT64, EPF_NONE, PF_DEC, "proc.exe_ino", "Inode number of executable image file on disk", "The inode number of the executable image file on disk. Can be correlated with fd.ino."},
+	{PT_ABSTIME, EPF_NONE, PF_DEC, "proc.exe_ino.ctime", "Last status change time (ctime - epoch ns) of exe file on disk", "Last status change time (ctime - epoch nanoseconds) of executable image file on disk (inode->ctime). Time is changed by writing or by setting inode information e.g. owner, group, link count, mode etc."},
+	{PT_ABSTIME, EPF_NONE, PF_DEC, "proc.exe_ino.mtime", "Last modification time (mtime - epoch ns) of exe file on disk", "Last modification time (mtime - epoch nanoseconds) of executable image file on disk (inode->mtime). Time is changed by file modifications, e.g. by mknod, truncate, utime, write of more than zero bytes etc. For tracking changes in owner, group, link count or mode, use proc.exe_ino.ctime instead."},
+	{PT_ABSTIME, EPF_NONE, PF_DEC, "proc.exe_ino.ctime_duration_proc_start", "Number of nanoseconds between ctime exe file and proc clone ts", "Number of nanoseconds between modifying status of executable image and spawning a new process using the changed executable image."},
+	{PT_ABSTIME, EPF_NONE, PF_DEC, "proc.exe_ino.ctime_duration_pidns_start", "Number of nanoseconds between pidns start ts and ctime exe file", "Number of nanoseconds between pid namespace start ts and ctime exe file if pidns start predates ctime."},
+	{PT_UINT64, EPF_NONE, PF_DEC, "proc.pidns_init_start_ts", "Start ts of pid namespace (epoch ns)", "Approximate start ts (epoch ns) of pid namespace (container or non container pid namespace)."},
 };
 
 sinsp_filter_check_thread::sinsp_filter_check_thread()
@@ -2736,6 +2745,9 @@ uint8_t* sinsp_filter_check_thread::extract(sinsp_evt *evt, OUT uint32_t* len, b
 	case TYPE_IS_EXE_WRITABLE:
 		m_tbool = tinfo->m_exe_writable;
 		RETURN_EXTRACT_VAR(m_tbool);
+	case TYPE_IS_EXE_UPPER_LAYER:
+		m_tbool = tinfo->m_exe_upper_layer;
+		RETURN_EXTRACT_VAR(m_tbool);
 	case TYPE_CAP_PERMITTED:
 		m_tstr = sinsp_utils::caps_to_string(tinfo->m_cap_permitted);
 		RETURN_EXTRACT_STRING(m_tstr);
@@ -2777,6 +2789,43 @@ uint8_t* sinsp_filter_check_thread::extract(sinsp_evt *evt, OUT uint32_t* len, b
 				return NULL;
 			}
 		}
+	case TYPE_EXE_INO:
+		// Inode 0 is used as a NULL value to indicate that there is no inode.
+		if(tinfo->m_exe_ino == 0)
+		{
+			return NULL;
+		}
+		RETURN_EXTRACT_VAR(tinfo->m_exe_ino);
+	case TYPE_EXE_INO_CTIME:
+		if(tinfo->m_exe_ino_ctime == 0)
+		{
+			return NULL;
+		}
+		RETURN_EXTRACT_VAR(tinfo->m_exe_ino_ctime);
+	case TYPE_EXE_INO_MTIME:
+		if(tinfo->m_exe_ino_mtime == 0)
+		{
+			return NULL;
+		}
+		RETURN_EXTRACT_VAR(tinfo->m_exe_ino_mtime);
+	case TYPE_EXE_INO_CTIME_DURATION_CLONE_TS:
+		if(tinfo->m_exe_ino_ctime_duration_clone_ts == 0)
+		{
+			return NULL;
+		}
+		RETURN_EXTRACT_VAR(tinfo->m_exe_ino_ctime_duration_clone_ts);
+	case TYPE_EXE_INO_CTIME_DURATION_PIDNS_START:
+		if(tinfo->m_exe_ino_ctime_duration_pidns_start == 0)
+		{
+			return NULL;
+		}
+		RETURN_EXTRACT_VAR(tinfo->m_exe_ino_ctime_duration_pidns_start);
+	case TYPE_PIDNS_INIT_START_TS:
+		if(tinfo->m_pidns_init_start_ts == 0)
+		{
+			return NULL;
+		}
+		RETURN_EXTRACT_VAR(tinfo->m_pidns_init_start_ts);
 	default:
 		ASSERT(false);
 		return NULL;
@@ -5189,28 +5238,31 @@ uint8_t* sinsp_filter_check_tracer::extract_args(sinsp_partial_tracer* pae, OUT 
 	}
 
 	char* p = m_storage;
+	size_t storage_len = 0;
 
 	for(nameit = pae->m_argnames.begin(), valit = pae->m_argvals.begin(),
 		namesit = pae->m_argnamelens.begin(), valsit = pae->m_argvallens.begin();
 		nameit != pae->m_argnames.end();
 		++nameit, ++namesit, ++valit, ++valsit)
 	{
-		strcpy(p, *nameit);
-		p += (*namesit);
-		*p++ = '=';
+		strlcpy(p + storage_len, *nameit, m_storage_size - storage_len);
+		storage_len += (*namesit);
+		m_storage[storage_len] = '=';
+		storage_len++;
 
-		memcpy(p, *valit, (*valsit));
-		p += (*valsit);
-		*p++ = ',';
+		memcpy(p + storage_len, *valit, (*valsit));
+		storage_len += (*valsit);
+		m_storage[storage_len] = ',';
+		storage_len++;
 	}
 
-	if(p != m_storage)
+	if (storage_len == 0)
 	{
-		*--p = 0;
+		m_storage[0] = '\0';
 	}
 	else
 	{
-		*p = 0;
+		m_storage[storage_len - 1] = '\0';
 	}
 
 	RETURN_EXTRACT_CSTR(m_storage);
@@ -5886,28 +5938,31 @@ inline uint8_t* sinsp_filter_check_evtin::extract_tracer(sinsp_evt *evt, sinsp_p
 		}
 
 		char* p = m_storage;
+		size_t storage_len = 0;
 
 		for(nameit = pae->m_argnames.begin(), valit = pae->m_argvals.begin(),
 			namesit = pae->m_argnamelens.begin(), valsit = pae->m_argvallens.begin();
 			nameit != pae->m_argnames.end();
 			++nameit, ++namesit, ++valit, ++valsit)
 		{
-			strcpy(p, *nameit);
-			p += (*namesit);
-			*p++ = ':';
+			strlcpy(p + storage_len, *nameit, m_storage_size - storage_len);
+			storage_len += (*namesit);
+			m_storage[storage_len] = ':';
+			storage_len++;
 
-			memcpy(p, *valit, (*valsit));
-			p += (*valsit);
-			*p++ = ',';
+			memcpy(p + storage_len, *valit, (*valsit));
+			storage_len += (*valsit);
+			m_storage[storage_len] = ',';
+			storage_len++;
 		}
 
-		if(p != m_storage)
+		if (storage_len == 0)
 		{
-			*--p = 0;
+			m_storage[0] = '\0';
 		}
 		else
 		{
-			*p = 0;
+			m_storage[storage_len - 1] = '\0';
 		}
 
 		RETURN_EXTRACT_CSTR(m_storage);
@@ -6227,7 +6282,9 @@ const filtercheck_field_info sinsp_filter_check_container_fields[] =
 	{PT_CHARBUF, EPF_NONE, PF_NA, "container.image.digest", "Registry Digest", "the container image registry digest (e.g. sha256:d977378f890d445c15e51795296e4e5062f109ce6da83e0a355fc4ad8699d27)."},
 	{PT_CHARBUF, EPF_NONE, PF_NA, "container.healthcheck", "Health Check", "The container's health check. Will be the null value (\"N/A\") if no healthcheck configured, \"NONE\" if configured but explicitly not created, and the healthcheck command line otherwise"},
 	{PT_CHARBUF, EPF_NONE, PF_NA, "container.liveness_probe", "Liveness", "The container's liveness probe. Will be the null value (\"N/A\") if no liveness probe configured, the liveness probe command line otherwise"},
-	{PT_CHARBUF, EPF_NONE, PF_NA, "container.readiness_probe", "Readiness", "The container's readiness probe. Will be the null value (\"N/A\") if no readiness probe configured, the readiness probe command line otherwise"}
+	{PT_CHARBUF, EPF_NONE, PF_NA, "container.readiness_probe", "Readiness", "The container's readiness probe. Will be the null value (\"N/A\") if no readiness probe configured, the readiness probe command line otherwise"},
+	{PT_UINT64, EPF_NONE, PF_DEC, "container.start_ts", "Container start ts (epoch in ns)", "Approximate container start ts (epoch in ns) based on proc.pidns_init_start_ts."},
+	{PT_RELTIME, EPF_NONE, PF_DEC, "container.duration", "Number of nanoseconds since container.start_ts", "Number of nanoseconds since container.start_ts."},
 };
 
 sinsp_filter_check_container::sinsp_filter_check_container()
@@ -6707,7 +6764,20 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 			m_tstr = "NONE";
 			RETURN_EXTRACT_STRING(m_tstr);
 		}
-
+	case TYPE_CONTAINER_START_TS:
+		if(tinfo->m_container_id.empty() || tinfo->m_pidns_init_start_ts == 0)
+		{
+			return NULL;
+		}
+		RETURN_EXTRACT_VAR(tinfo->m_pidns_init_start_ts);
+	case TYPE_CONTAINER_DURATION:
+		if(tinfo->m_container_id.empty() || tinfo->m_clone_ts == 0)
+		{
+			return NULL;
+		}
+		m_s64val = evt->get_ts() - tinfo->m_pidns_init_start_ts;
+		ASSERT(m_s64val > 0);
+		RETURN_EXTRACT_VAR(m_s64val);
 	default:
 		ASSERT(false);
 		break;

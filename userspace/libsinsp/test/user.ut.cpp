@@ -43,7 +43,7 @@ TEST_F(usergroup_manager_test, add_rm)
 	ASSERT_EQ(mgr.get_grouplist(container_id), nullptr);
 
 	// user
-	mgr.add_user(container_id, 0, 0, "test", "/test", "/bin/test");
+	mgr.add_user(container_id, -1, 0, 0, "test", "/test", "/bin/test");
 	auto* user = mgr.get_user(container_id, 0);
 	ASSERT_NE(user, nullptr);
 	ASSERT_EQ(user->uid, 0);
@@ -60,7 +60,7 @@ TEST_F(usergroup_manager_test, add_rm)
 	}
 
 	// group
-	mgr.add_group(container_id, 0, "test");
+	mgr.add_group(container_id, -1, 0, "test");
 	auto* group = mgr.get_group(container_id, 0);
 	ASSERT_NE(group, nullptr);
 	ASSERT_EQ(group->gid, 0);
@@ -86,7 +86,7 @@ TEST_F(usergroup_manager_test, system_lookup)
 
 	sinsp_usergroup_manager mgr(&m_inspector);
 
-	mgr.add_user(container_id, 0, 0, nullptr, nullptr, nullptr);
+	mgr.add_user(container_id, -1, 0, 0, nullptr, nullptr, nullptr);
 	auto* user = mgr.get_user(container_id, 0);
 	ASSERT_NE(user, nullptr);
 	ASSERT_EQ(user->uid, 0);
@@ -95,11 +95,38 @@ TEST_F(usergroup_manager_test, system_lookup)
 	ASSERT_STREQ(user->homedir, "/root");
 	ASSERT_EQ(std::string(user->shell).empty(), false);
 
-	mgr.add_group(container_id, 0, nullptr);
+	mgr.add_group(container_id, -1, 0, nullptr);
 	auto* group = mgr.get_group(container_id, 0);
 	ASSERT_NE(group, nullptr);
 	ASSERT_EQ(group->gid, 0);
 	ASSERT_STREQ(group->name, "root");
+}
+
+TEST_F(usergroup_manager_test, add_no_import_users)
+{
+	std::string container_id{""};
+
+	sinsp_usergroup_manager mgr(&m_inspector);
+	mgr.m_import_users = false;
+
+	auto *added_usr = mgr.add_user(container_id, -1, 37, 15, "test", "/test", "/bin/test");
+	ASSERT_NE(added_usr, nullptr);
+	ASSERT_EQ(added_usr->uid, 37);
+	ASSERT_EQ(added_usr->gid, 15);
+	ASSERT_STREQ(added_usr->name, "<NA>");
+	ASSERT_STREQ(added_usr->homedir, "<NA>");
+	ASSERT_STREQ(added_usr->shell, "<NA>");
+
+	auto* user = mgr.get_user(container_id, 37);
+	ASSERT_EQ(user, nullptr);
+
+	auto *added_grp = mgr.add_group(container_id, -1, 15, "foo");
+	ASSERT_NE(added_grp, nullptr);
+	ASSERT_EQ(added_grp->gid, 15);
+	ASSERT_STREQ(added_grp->name, "<NA>");
+
+	auto* group = mgr.get_group(container_id, 15);
+	ASSERT_EQ(group, nullptr);
 }
 
 #if defined(HAVE_PWD_H) || defined(HAVE_GRP_H)
@@ -115,6 +142,8 @@ protected:
 		m_host_root += "/host";
 
 		ASSERT_EQ(mkdir(m_host_root.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH), 0);
+		m_inspector.set_host_root(m_host_root);
+
 		std::string etc = m_host_root + "/etc";
 		ASSERT_EQ(mkdir(etc.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH), 0);
 
@@ -146,9 +175,8 @@ TEST_F(usergroup_manager_host_root_test, host_root_lookup)
 	std::string container_id{""};
 
 	sinsp_usergroup_manager mgr(&m_inspector);
-	sinsp_usergroup_manager::s_host_root = m_host_root;
 
-	mgr.add_user(container_id, 0, 0, nullptr, nullptr, nullptr);
+	mgr.add_user(container_id, -1, 0, 0, nullptr, nullptr, nullptr);
 	auto* user = mgr.get_user(container_id, 0);
 	ASSERT_NE(user, nullptr);
 	ASSERT_EQ(user->uid, 0);
@@ -157,7 +185,7 @@ TEST_F(usergroup_manager_host_root_test, host_root_lookup)
 	ASSERT_STREQ(user->homedir, "/toor");
 	ASSERT_STREQ(user->shell, "/bin/ash");
 
-	mgr.add_group(container_id, 0, nullptr);
+	mgr.add_group(container_id, -1, 0, nullptr);
 	auto* group = mgr.get_group(container_id, 0);
 	ASSERT_NE(group, nullptr);
 	ASSERT_EQ(group->gid, 0);

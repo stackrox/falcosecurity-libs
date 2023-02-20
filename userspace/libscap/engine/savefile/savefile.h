@@ -21,12 +21,36 @@ limitations under the License.
 #include "scap_reader.h"
 #include "scap_savefile.h"
 
-#define SCAP_HANDLE_T struct savefile_engine
+#define CHECK_READ_SIZE_ERR(read_size, expected_size, error) if(read_size != expected_size) \
+	{\
+		snprintf(error,	SCAP_LASTERR_SIZE, "expecting %d bytes, read %d at %s, line %d. Is the file truncated?",\
+			(int)expected_size,\
+			(int)read_size,\
+			__FILE__,\
+			__LINE__);\
+		return SCAP_FAILURE;\
+	}
 
-typedef struct _scap_machine_info scap_machine_info;
-struct scap_proclist;
-struct scap_addrlist;
-struct scap_userlist;
+#define CHECK_READ_SIZE(read_size, expected_size) if(read_size != expected_size) \
+	{\
+		snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "expecting %d bytes, read %d at %s, line %d. Is the file truncated?",\
+			(int)expected_size,\
+			(int)read_size,\
+			__FILE__,\
+			__LINE__);\
+		return SCAP_FAILURE;\
+	}
+
+#define CHECK_READ_SIZE_WITH_FREE_ERR(alloc_buffer, read_size, expected_size, error) if(read_size != expected_size) \
+    	{\
+		snprintf(error,	SCAP_LASTERR_SIZE, "expecting %d bytes, read %d at %s, line %d. Is the file truncated?",\
+			(int)expected_size,\
+			(int)read_size,\
+			__FILE__,\
+			__LINE__);\
+		free(alloc_buffer);\
+		return SCAP_FAILURE;\
+	}
 
 struct savefile_engine
 {

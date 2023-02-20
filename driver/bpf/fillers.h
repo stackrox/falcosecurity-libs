@@ -17,8 +17,8 @@ or GPL2.txt for full copies of the license.
 #include <linux/audit.h>
 
 
-/* Linux kernel 4.15 introduced the new const `UID_GID_MAP_MAX_BASE_EXTENTS` in place of
- * the old `UID_GID_MAP_MAX_EXTENTS`, which instead has changed its meaning.
+/* Linux kernel 4.15 introduced the new const `UID_GID_MAP_MAX_BASE_EXTENTS` in place of 
+ * the old `UID_GID_MAP_MAX_EXTENTS`, which instead has changed its meaning. 
  * For more info see https://github.com/torvalds/linux/commit/6397fac4915ab3002dc15aae751455da1a852f25
  */
 #ifndef UID_GID_MAP_MAX_BASE_EXTENTS
@@ -288,7 +288,7 @@ FILLER_RAW(terminate_filler)
 		if (state->n_drops_scratch_map != ULLONG_MAX) {
 			++state->n_drops_scratch_map;
 		}
-		break;
+		break;	
 	default:
 		bpf_printk("Unknown filler res=%d event=%d curarg=%d\n",
 			   state->tail_ctx.prev_res,
@@ -1015,7 +1015,7 @@ FILLER(sys_mprotect_x, true)
 	 */
 	retval = bpf_syscall_get_retval(data->ctx);
 	res = bpf_val_to_ring(data, retval);
-
+	
 	return res;
 }
 
@@ -1682,7 +1682,7 @@ FILLER(sys_execveat_e, true)
 	 * dirfd
 	 */
 	val = bpf_syscall_get_argument(data, 0);
-
+	
 	if ((int)val == AT_FDCWD)
 	{
 		val = PPM_AT_FDCWD;
@@ -1725,10 +1725,9 @@ static __always_inline int bpf_ppm_get_tty(struct task_struct *task)
 	struct signal_struct *sig;
 	struct tty_struct *tty;
 	struct tty_driver *driver;
-	int major;
-	int minor_start;
-	int index;
-	int tty_nr = 0;
+	int major = 0;
+	int minor_start = 0;
+	int index = 0;
 
 	sig = _READ(task->signal);
 	if (!sig)
@@ -1738,18 +1737,15 @@ static __always_inline int bpf_ppm_get_tty(struct task_struct *task)
 	if (!tty)
 		return 0;
 
-	index = _READ(tty->index);
-
 	driver = _READ(tty->driver);
 	if (!driver)
 		return 0;
 
+	index = _READ(tty->index);
 	major = _READ(driver->major);
 	minor_start = _READ(driver->minor_start);
 
-	tty_nr = new_encode_dev(MKDEV(major, minor_start) + index);
-
-	return tty_nr;
+	return new_encode_dev(MKDEV(major, minor_start) + index);
 }
 
 static __always_inline struct pid *bpf_task_pid(struct task_struct *task);
@@ -2031,7 +2027,7 @@ static __always_inline int bpf_append_cgroup(struct task_struct *task,
 					     char *buf,
 					     int *len)
 {
-	struct css_set *cgroups = _READ(task->cgroups);
+  	struct css_set *cgroups = _READ(task->cgroups);
 	int res;
 
 /* StackRox: Remove cpuset to reduce the number of cgroup paths */
@@ -2105,7 +2101,7 @@ static __always_inline int bpf_accumulate_argv_or_env(struct filler_data *data,
 		}
 
 		len = bpf_probe_read_str(&data->buf[off & SCRATCH_SIZE_HALF], SCRATCH_SIZE_HALF, arg);
-		if (len == -EFAULT || len == 0)
+		if (len == -EFAULT)
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		*args_len += len;
@@ -2140,7 +2136,7 @@ static __always_inline bool bpf_groups_search(struct group_info *group_info, kgi
 		if (left >= right) {
 			break;
 		}
-
+		
 		unsigned int mid = (left+right)/2;
 		if (gid_gt(grp, _READ(group_info->gid[mid]))) {
 			left = mid + 1;
@@ -2157,19 +2153,19 @@ static __always_inline bool bpf_groups_search(struct group_info *group_info, kgi
 // log(UID_GID_MAP_MAX_EXTENTS) = log(340)
 #define MAX_EXTENT_SEARCH_DEPTH 9
 
-static __always_inline struct uid_gid_extent *
+static __always_inline struct uid_gid_extent * 
 bpf_map_id_up_max(unsigned extents, struct uid_gid_map *map, u32 id)
 {
 	u32 left, right;
 	left = 0;
 	right = _READ(map->nr_extents);
-
+	
 	#pragma unroll MAX_EXTENT_SEARCH_DEPTH
 	for (int j = 0; j < MAX_EXTENT_SEARCH_DEPTH; j++) {
 		if (left >= right) {
 			break;
 		}
-
+		
 		unsigned int mid = (left+right)/2;
 		u32 mid_id = _READ(map->extent[mid].lower_first);
 		if (id > mid_id) {
@@ -2180,11 +2176,11 @@ bpf_map_id_up_max(unsigned extents, struct uid_gid_map *map, u32 id)
 			return &map->extent[mid];
 		}
 	}
-
+	
 	return NULL;
 }
 
-static __always_inline struct uid_gid_extent *
+static __always_inline struct uid_gid_extent * 
 bpf_map_id_up_base(unsigned extents, struct uid_gid_map *map, u32 id)
 {
 	unsigned idx;
@@ -2211,14 +2207,14 @@ static __always_inline u32 bpf_map_id_up(struct uid_gid_map *map, u32 id)
 	if (extents <= UID_GID_MAP_MAX_BASE_EXTENTS) {
 		extent = bpf_map_id_up_base(extents, map, id);
 	}
-	/* Kernel 4.15 increased the number of extents to `340` while all the previous kernels have
+	/* Kernel 4.15 increased the number of extents to `340` while all the previous kernels have 
 	 * the limit set to `5`. So the `if` case should be enough.
 	 */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))			
 	else {
 		extent = bpf_map_id_up_max(extents, map, id);
 	}
-#endif
+#endif 
 
 	/* Map the id or note failure */
 	if (extent) {
@@ -2241,24 +2237,32 @@ static __always_inline bool bpf_kgid_has_mapping(struct user_namespace *targ, kg
 	return bpf_map_id_up(&targ->gid_map, __kgid_val(kgid)) != (gid_t) -1;
 }
 
-static __always_inline bool get_exe_writable(struct task_struct *task)
+static __always_inline struct inode *get_exe_inode(struct task_struct *task)
 {
-	struct file *exe_file;
-	struct mm_struct *mm;
-	mm = _READ(task->mm);
-	exe_file = _READ(mm->exe_file);
-	if (!exe_file) {
-		return false;
-	}
+	struct mm_struct *mm = _READ(task->mm);
+	struct file *exe_file = _READ(mm->exe_file);
+	return _READ(exe_file->f_inode);
+}
 
-	struct inode *inode = _READ(exe_file->f_inode);
+/* `timespec64` was introduced in kernels >= 3.17 so it is ok here */
+static __always_inline unsigned long long bpf_epoch_ns_from_time(struct timespec64 time)
+{
+	time64_t tv_sec = time.tv_sec;
+	if (tv_sec < 0)
+	{
+		return 0;
+	}
+	return (tv_sec * (uint64_t) 1000000000 + time.tv_nsec);
+}
+
+static __always_inline bool get_exe_writable(struct inode *inode, struct cred *cred)
+{
 	umode_t i_mode = _READ(inode->i_mode);
 	unsigned i_flags = _READ(inode->i_flags);
 	struct super_block *sb = _READ(inode->i_sb);
 	kuid_t i_uid = _READ(inode->i_uid);
 	kgid_t i_gid = _READ(inode->i_gid);
 
-	struct cred *cred = (struct cred*) _READ(task->cred);
 	kuid_t fsuid = _READ(cred->fsuid);
 	kgid_t fsgid = _READ(cred->fsgid);
 	struct group_info *group_info = _READ(cred->group_info);
@@ -2329,6 +2333,28 @@ static __always_inline bool get_exe_writable(struct task_struct *task)
 	return false;
 }
 #endif // LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+
+static __always_inline bool get_exe_upper_layer(struct inode *inode)
+{
+	struct super_block *sb = _READ(inode->i_sb);
+	unsigned long sb_magic = _READ(sb->s_magic);
+	if(sb_magic == PPM_OVERLAYFS_SUPER_MAGIC)
+	{
+		struct dentry *upper_dentry = NULL;
+		char *vfs_inode = (char *)inode;
+		
+		// Pointer arithmetics due to unexported ovl_inode struct
+		// warning: this works if and only if the dentry pointer is placed right after the inode struct
+		bpf_probe_read(&upper_dentry, sizeof(upper_dentry), vfs_inode + sizeof(struct inode));
+
+		if(upper_dentry)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
 
 FILLER(proc_startupdate, true)
 {
@@ -2405,7 +2431,7 @@ FILLER(proc_startupdate, true)
 		case PPME_SYSCALL_EXECVE_19_X:
 			val = bpf_syscall_get_argument(data, 1);
 			break;
-
+		
 		case PPME_SYSCALL_EXECVEAT_X:
 			val = bpf_syscall_get_argument(data, 2);
 			break;
@@ -2430,7 +2456,7 @@ FILLER(proc_startupdate, true)
 						SCRATCH_SIZE_HALF,
 						&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
 
-		if (exe_len == -EFAULT || exe_len == 0)
+		if (exe_len == -EFAULT)
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		/*
@@ -2617,7 +2643,7 @@ FILLER(proc_startupdate_3, true)
 	if (data->state->tail_ctx.evt_type == PPME_SYSCALL_CLONE_20_X ||
 		data->state->tail_ctx.evt_type == PPME_SYSCALL_FORK_20_X ||
 		data->state->tail_ctx.evt_type == PPME_SYSCALL_VFORK_20_X ||
-		data->state->tail_ctx.evt_type == PPME_SYSCALL_CLONE3_X)
+		data->state->tail_ctx.evt_type == PPME_SYSCALL_CLONE3_X) 
 		{
 		/*
 		 * clone-only parameters
@@ -2639,11 +2665,11 @@ FILLER(proc_startupdate_3, true)
 		case PPME_SYSCALL_CLONE_20_X:
 			flags = bpf_syscall_get_argument(data, 0);
 			break;
-
+		
 		case PPME_SYSCALL_CLONE3_X:
 #ifdef __NR_clone3
 			flags = bpf_syscall_get_argument(data, 0);
-			if (bpf_probe_read(&cl_args, sizeof(struct clone_args), (void *)flags))
+			if (bpf_probe_read(&cl_args, sizeof(struct clone_args), (void *)flags)) 
 			{
 				return PPM_FAILURE_INVALID_USER_MEMORY;
 			}
@@ -2719,6 +2745,22 @@ FILLER(proc_startupdate_3, true)
 		 */
 		vpid = bpf_task_tgid_vnr(task);
 		res = bpf_val_to_ring_type(data, vpid, PT_PID);
+		CHECK_RES(res);
+
+		/* Parameter 21: pid_namespace init task start_time monotonic time in ns (type: PT_UINT64) */
+		// only perform lookup when clone/vfork/fork returns 0 (child process / childtid)
+		u64 pidns_init_start_time = 0;
+		if(retval == 0 && pidns)
+		{
+			struct task_struct *child_reaper = (struct task_struct *)_READ(pidns->child_reaper);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
+			pidns_init_start_time = _READ(child_reaper->start_time.tv_sec);
+#else
+			pidns_init_start_time = _READ(child_reaper->start_time);
+#endif
+		}
+		res = bpf_val_to_ring_type(data, pidns_init_start_time, PT_UINT64);
+		CHECK_RES(res);
 
 	} else if (data->state->tail_ctx.evt_type == PPME_SYSCALL_EXECVE_19_X ||
 	           data->state->tail_ctx.evt_type == PPME_SYSCALL_EXECVEAT_X) {
@@ -2771,8 +2813,8 @@ FILLER(proc_startupdate_3, true)
 
 			case PPME_SYSCALL_EXECVEAT_X:
 				val = bpf_syscall_get_argument(data, 3);
-				break;
-
+				break;	
+			
 			default:
 				val = 0;
 				break;
@@ -2833,7 +2875,7 @@ FILLER(proc_startupdate_3, true)
 
 		bpf_tail_call(data->ctx, &tail_map, PPM_FILLER_execve_family_flags);
 		bpf_printk("Can't tail call execve_family_flags filler\n");
-		return PPM_FAILURE_BUG;
+		return PPM_FAILURE_BUG;	
 	}
 
 	return res;
@@ -2842,61 +2884,78 @@ FILLER(proc_startupdate_3, true)
 /* This filler avoids a bpf stack overflow on old kernels (like 4.14). */
 FILLER(execve_family_flags, true)
 {
-	struct task_struct *task = NULL;
-	struct cred *cred;
-	kernel_cap_t cap;
-	uint32_t flags = 0;
-	int res = 0;
-	unsigned long val;
-	bool exe_writable = false;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	struct cred *cred = (struct cred *)_READ(task->cred);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+	struct inode *inode = get_exe_inode(task);
+#endif
 
-	task = (struct task_struct *)bpf_get_current_task();
-	cred = (struct cred *)_READ(task->cred);
+	/* `exe_writable` and `exe_upper_layer` flag logic */
+	bool exe_writable = false;
+	bool exe_upper_layer = false;
+	uint32_t flags = 0;
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
-	/*
-	 * exe_writable
-	 */
-	exe_writable = get_exe_writable(task);
-	if (exe_writable)
+	if(inode)
 	{
-		flags |= PPM_EXE_WRITABLE;
+		/*
+		 * exe_writable
+		 */
+		exe_writable = get_exe_writable(inode, cred);
+		if (exe_writable) 
+		{
+			flags |= PPM_EXE_WRITABLE;
+		}
+
+		/*
+		 * exe_upper_layer
+		 */
+		exe_upper_layer = get_exe_upper_layer(inode);
+		if (exe_upper_layer)
+		{
+			flags |= PPM_EXE_UPPER_LAYER;
+		}
+
+		// write all additional flags for execve family here...
 	}
-#endif // LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+#endif // LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0) 
 
-	// write all additional flags for execve family here...
+	/* Parameter 20: flags (type: PT_FLAGS32) */
+	int res = bpf_val_to_ring_type(data, flags, PT_UINT32);
+	CHECK_RES(res);
 
-	/*
-	 * flags
-	 */
-	res = bpf_val_to_ring_type(data, flags, PT_UINT32);
-	if (res != PPM_SUCCESS)
-	{
-		return res;
-	}
+	/* Parameter 21: cap_inheritable (type: PT_UINT64) */
+	kernel_cap_t cap = _READ(cred->cap_inheritable);
+	res = bpf_val_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
+	CHECK_RES(res);
 
-	/*
-	 * capabilities
-	 */
-	cap = _READ(cred->cap_inheritable);
-	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
-	res = bpf_val_to_ring(data, capabilities_to_scap(val));
-	if(unlikely(res != PPM_SUCCESS))
-		return res;
-
+	/* Parameter 22: cap_permitted (type: PT_UINT64) */
 	cap = _READ(cred->cap_permitted);
-	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
-	res = bpf_val_to_ring(data, capabilities_to_scap(val));
-	if(unlikely(res != PPM_SUCCESS))
-		return res;
+	res = bpf_val_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
+	CHECK_RES(res);
 
+	/* Parameter 23: cap_effective (type: PT_UINT64) */
 	cap = _READ(cred->cap_effective);
-	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
-	res = bpf_val_to_ring(data, capabilities_to_scap(val));
-	if(unlikely(res != PPM_SUCCESS))
-		return res;
+	res = bpf_val_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
+	CHECK_RES(res);
 
-	return res;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+	/* Parameter 24: exe_file ino (type: PT_UINT64) */
+	unsigned long ino = _READ(inode->i_ino);
+	res = bpf_val_to_ring_type(data, ino, PT_UINT64);
+	CHECK_RES(res);
+
+	struct timespec64 time = {0};
+
+	/* Parameter 25: exe_file ctime (last status change time, epoch value in nanoseconds) (type: PT_ABSTIME) */
+	time = _READ(inode->i_ctime);
+	res = bpf_val_to_ring_type(data, bpf_epoch_ns_from_time(time), PT_ABSTIME);
+	CHECK_RES(res);
+
+	/* Parameter 26: exe_file mtime (last modification time, epoch value in nanoseconds) (type: PT_ABSTIME) */
+	time = _READ(inode->i_mtime);
+	return bpf_val_to_ring_type(data, bpf_epoch_ns_from_time(time), PT_ABSTIME);
+#endif
 }
 
 FILLER(sys_accept4_e, true)
@@ -5998,7 +6057,7 @@ FILLER(sys_copy_file_range_e, true)
 	res = bpf_val_to_ring(data, len);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
-
+	
 	return res;
 }
 
@@ -6011,7 +6070,7 @@ FILLER(sys_copy_file_range_x, true)
 
 	retval = bpf_syscall_get_retval(data->ctx);
 	res = bpf_val_to_ring(data, retval);
-
+	
 	/*
 	* fdout
 	*/
@@ -6027,7 +6086,7 @@ FILLER(sys_copy_file_range_x, true)
 	res = bpf_val_to_ring(data, offout);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
-
+	
 	return res;
 }
 
@@ -6523,57 +6582,80 @@ FILLER(sched_prog_exec_3, false)
 
 FILLER(sched_prog_exec_4, false)
 {
-
-	int res = 0;
-	uint32_t flags = 0;
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	struct cred *cred = (struct cred *)_READ(task->cred);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+	struct inode *inode = get_exe_inode(task);
+#endif
 
-
-	/* `exe_writable` flag logic */
+	/* `exe_writable` and `exe_upper_layer` flag logic */
 	bool exe_writable = false;
-	exe_writable = get_exe_writable(task);
-	if(exe_writable)
-	{
-		flags |= PPM_EXE_WRITABLE;
-	}
+	bool exe_upper_layer = false;
+	uint32_t flags = 0;
 
-	// write all additional flags for execve family here...
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+	if(inode)
+	{
+		/*
+		 * exe_writable
+		 */
+		exe_writable = get_exe_writable(inode, cred);
+		if (exe_writable) 
+		{
+			flags |= PPM_EXE_WRITABLE;
+		}
+
+		/*
+		 * exe_upper_layer
+		 */
+		exe_upper_layer = get_exe_upper_layer(inode);
+		if (exe_upper_layer)
+		{
+			flags |= PPM_EXE_UPPER_LAYER;
+		}
+
+		// write all additional flags for execve family here...
+	}
+#endif
 
 	/* Parameter 20: flags (type: PT_FLAGS32) */
-	res = bpf_val_to_ring_type(data, flags, PT_UINT32);
-	if(res != PPM_SUCCESS)
-	{
-		return res;
-	}
-
-	kernel_cap_t cap;
-	unsigned long val;
+	int res = bpf_val_to_ring_type(data, flags, PT_UINT32);
+	CHECK_RES(res);
 
 	/* Parameter 21: cap_inheritable (type: PT_UINT64) */
-	cap = _READ(cred->cap_inheritable);
-	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
-	res = bpf_val_to_ring(data, capabilities_to_scap(val));
-	if(res != PPM_SUCCESS)
-	{
-		return res;
-	}
+	kernel_cap_t cap = _READ(cred->cap_inheritable);
+	res = bpf_val_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
+	CHECK_RES(res);
 
 	/* Parameter 22: cap_permitted (type: PT_UINT64) */
 	cap = _READ(cred->cap_permitted);
-	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
-	res = bpf_val_to_ring(data, capabilities_to_scap(val));
-	if(res != PPM_SUCCESS)
-	{
-		return res;
-	}
+	res = bpf_val_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
+	CHECK_RES(res);
 
 	/* Parameter 23: cap_effective (type: PT_UINT64) */
 	cap = _READ(cred->cap_effective);
-	val = ((unsigned long)cap.cap[1] << 32) | cap.cap[0];
-	res = bpf_val_to_ring(data, capabilities_to_scap(val));
+	res = bpf_val_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
+	CHECK_RES(res);
 
-	return res;
+	/* Parameter 24: exe_file ino (type: PT_UINT64) */
+	unsigned long ino = _READ(inode->i_ino);
+	res = bpf_val_to_ring_type(data, ino, PT_UINT64);
+	CHECK_RES(res);
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+	struct timespec64 time = {0};
+
+	/* Parameter 25: exe_file ctime (last status change time, epoch value in nanoseconds) (type: PT_ABSTIME) */
+	time = _READ(inode->i_ctime);
+	res = bpf_val_to_ring_type(data, bpf_epoch_ns_from_time(time), PT_ABSTIME);
+	CHECK_RES(res);
+
+	/* Parameter 26: exe_file mtime (last modification time, epoch value in nanoseconds) (type: PT_ABSTIME) */
+	time = _READ(inode->i_mtime);
+	return bpf_val_to_ring_type(data, bpf_epoch_ns_from_time(time), PT_ABSTIME);
+#else
+    return PPM_SUCCESS;
+#endif
 }
 #endif
 
@@ -6898,8 +6980,16 @@ FILLER(sched_prog_fork_3, false)
 	/* Parameter 20: vpid (type: PT_PID) */
 	pid_t vpid = bpf_task_tgid_vnr(child);
 	res = bpf_val_to_ring_type(data, vpid, PT_PID);
+	CHECK_RES(res);
 
-	return res;
+	/* Parameter 21: pid_namespace init task start_time monotonic time in ns (type: PT_UINT64) */
+	u64 pidns_init_start_time = 0;
+	if (pidns)
+	{
+		struct task_struct *child_reaper = (struct task_struct *)_READ(pidns->child_reaper);
+		pidns_init_start_time = _READ(child_reaper->start_time);
+	}
+	return bpf_val_to_ring_type(data, pidns_init_start_time, PT_UINT64);
 }
 #endif
 

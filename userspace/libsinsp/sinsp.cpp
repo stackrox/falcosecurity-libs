@@ -38,6 +38,7 @@ limitations under the License.
 #include "plugin.h"
 #include "plugin_manager.h"
 #include "plugin_filtercheck.h"
+#include "strlcpy.h"
 
 #ifndef CYGWING_AGENT
 #ifndef MINIMAL_BUILD
@@ -71,6 +72,7 @@ sinsp::sinsp(bool static_container, const std::string &static_id, const std::str
 	m_external_event_processor(),
 	m_evt(this),
 	m_lastevent_ts(0),
+	m_host_root(scap_get_host_root()),
 	m_container_manager(this, static_container, static_id, static_name, static_image),
 	m_usergroup_manager(this),
 	m_suppressed_comms(),
@@ -232,11 +234,6 @@ void sinsp::add_protodecoders()
 void sinsp::filter_proc_table_when_saving(bool filter)
 {
 	m_filter_proc_table_when_saving = filter;
-
-	if(m_h != NULL)
-	{
-		scap_set_refresh_proc_table_when_saving(m_h, !filter);
-	}
 }
 
 void sinsp::enable_tracers_capture()
@@ -482,8 +479,6 @@ void sinsp::open_common(scap_open_args* oargs)
 		throw scap_open_exception(error, scap_rc);
 	}
 
-	scap_set_refresh_proc_table_when_saving(m_h, !m_filter_proc_table_when_saving);
-
 	init();
 }
 
@@ -613,7 +608,7 @@ void sinsp::open_gvisor(const std::string& config_path, const std::string& root_
 	set_get_procs_cpu_from_driver(false);
 }
 
-void sinsp::open_modern_bpf(unsigned long driver_buffer_bytes_dim, const std::unordered_set<uint32_t> &ppm_sc_of_interest, const std::unordered_set<uint32_t> &tp_of_interest)
+void sinsp::open_modern_bpf(unsigned long driver_buffer_bytes_dim, uint16_t cpus_for_each_buffer, bool online_only, const std::unordered_set<uint32_t> &ppm_sc_of_interest, const std::unordered_set<uint32_t> &tp_of_interest)
 {
 	scap_open_args oargs = factory_open_args(MODERN_BPF_ENGINE, SCAP_MODE_LIVE);
 
@@ -624,6 +619,8 @@ void sinsp::open_modern_bpf(unsigned long driver_buffer_bytes_dim, const std::un
 	/* Engine-specific args. */
 	struct scap_modern_bpf_engine_params params;
 	params.buffer_bytes_dim = driver_buffer_bytes_dim;
+	params.cpus_for_each_buffer = cpus_for_each_buffer;
+	params.allocate_online_only = online_only;
 	oargs.engine_params = &params;
 	open_common(&oargs);
 }
@@ -953,12 +950,12 @@ void sinsp::import_user_list()
 	{
 		for(j = 0; j < ul->nusers; j++)
 		{
-			m_usergroup_manager.add_user("", ul->users[j].uid, ul->users[j].gid, ul->users[j].name, ul->users[j].homedir, ul->users[j].shell);
+			m_usergroup_manager.add_user("", -1, ul->users[j].uid, ul->users[j].gid, ul->users[j].name, ul->users[j].homedir, ul->users[j].shell);
 		}
 
 		for(j = 0; j < ul->ngroups; j++)
 		{
-			m_usergroup_manager.add_group("", ul->groups[j].gid, ul->groups[j].name);
+			m_usergroup_manager.add_group("", -1, ul->groups[j].gid, ul->groups[j].name);
 		}
 	}
 }
@@ -2255,10 +2252,18 @@ void sinsp::validate_k8s_node_name()
 
 		if(!found)
 		{
-			throw sinsp_exception(
+			// todo(jasondellaluce): we used to throw an exception here, however
+			// at this point we have no guarantee on whether the provided node
+			// name is wrong or if there was a failure in the k8s client event
+			// parsing logic. As such, it's unsafe to throw an exception that
+			// can potentially terminate the libs consumer. For now, we stick
+			// to error-level logging, however this is an issue we may want to
+			// further investigate in the future.
+			// see: https://github.com/falcosecurity/falco/issues/2358
+			g_logger.log(
 				"Failing to enrich events with Kubernetes metadata: "
 				"node name does not correspond to a node in the cluster: "
-				+ *m_k8s_node_name);
+				+ *m_k8s_node_name, sinsp_logger::SEV_ERROR);
 		}
 	}
 

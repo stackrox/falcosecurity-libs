@@ -17,15 +17,35 @@ limitations under the License.
 
 #include "state.h"
 #include <scap.h>
+#include <libpman.h>
 
-void pman_enable_capture()
+int pman_enable_capture(bool *tp_set)
 {
-	g_state.skel->bss->g_settings.capture_enabled = true;
+	if (!tp_set)
+	{
+		return pman_attach_all_programs();
+	}
+
+	int ret = 0;
+	/* Enable requested tracepoints */
+	for (int i = 0; i < TP_VAL_MAX && ret == 0; i++)
+	{
+		if (tp_set[i])
+		{
+			ret = pman_update_single_program(i, true);
+		}
+	}
+	return ret;
 }
 
-void pman_disable_capture()
+int pman_disable_capture()
 {
-	g_state.skel->bss->g_settings.capture_enabled = false;
+	/* If we fail at initialization time the BPF skeleton is not initialized */
+	if(g_state.skel)
+	{
+		return pman_detach_all_programs();
+	}
+	return 0;
 }
 
 #ifdef TEST_HELPERS
@@ -46,11 +66,11 @@ int pman_print_stats()
 		return errno;
 	}
 
-	for(int index = 0; index < g_state.n_cpus; index++)
+	for(int index = 0; index < g_state.n_possible_cpus; index++)
 	{
 		if(bpf_map_lookup_elem(counter_maps_fd, &index, &cnt_map) < 0)
 		{
-			sprintf(error_message, "unbale to get the counter map for CPU %d", index);
+			snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unbale to get the counter map for CPU %d", index);
 			pman_print_error((const char *)error_message);
 			goto clean_print_stats;
 		}
@@ -94,17 +114,21 @@ int pman_get_scap_stats(void *scap_stats_struct)
 	 * - stats->n_preemptions
 	 */
 
-	for(int index = 0; index < g_state.n_cpus; index++)
+	/* We always take statistics from all the CPUs, even if some of them are not online. 
+	 * If the CPU is not online the counter map will be empty.
+	 */
+	for(int index = 0; index < g_state.n_possible_cpus; index++)
 	{
 		if(bpf_map_lookup_elem(counter_maps_fd, &index, &cnt_map) < 0)
 		{
-			sprintf(error_message, "unbale to get the counter map for CPU %d", index);
+			snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unbale to get the counter map for CPU %d", index);
 			pman_print_error((const char *)error_message);
 			goto clean_print_stats;
 		}
 		stats->n_evts += cnt_map.n_evts;
 		stats->n_drops_buffer += cnt_map.n_drops_buffer;
 		stats->n_drops_scratch_map += cnt_map.n_drops_max_event_size;
+		stats->n_drops += (cnt_map.n_drops_buffer + cnt_map.n_drops_max_event_size);
 	}
 	return 0;
 
@@ -125,11 +149,14 @@ int pman_get_n_tracepoint_hit(long *n_events_per_cpu)
 		return errno;
 	}
 
-	for(int index = 0; index < g_state.n_cpus; index++)
+	/* We always take statistics from all the CPUs, even if some of them are not online. 
+	 * If the CPU is not online the counter map will be empty.
+	 */
+	for(int index = 0; index < g_state.n_possible_cpus; index++)
 	{
 		if(bpf_map_lookup_elem(counter_maps_fd, &index, &cnt_map) < 0)
 		{
-			sprintf(error_message, "unbale to get the counter map for CPU %d", index);
+			snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unbale to get the counter map for CPU %d", index);
 			pman_print_error((const char *)error_message);
 			goto clean_print_stats;
 		}

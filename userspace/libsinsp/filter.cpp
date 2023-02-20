@@ -35,6 +35,8 @@ limitations under the License.
 #include "sinsp_int.h"
 #include "utils.h"
 
+#include "strlcpy.h"
+
 #include "filter.h"
 #include "filterchecks.h"
 #include "value_parser.h"
@@ -175,7 +177,7 @@ bool flt_compare_string(cmpop op, char* operand1, char* operand2)
 		return (strncmp(operand1, operand2, strlen(operand2)) == 0);
 	case CO_BSTARTSWITH:
 		throw sinsp_exception("'bstartswith' not supported for string filters");
-	case CO_ENDSWITH:
+	case CO_ENDSWITH: 
 		return (sinsp_utils::endswith(operand1, operand2));
 	case CO_GLOB:
 		return sinsp_utils::glob_match(operand2, operand1);
@@ -1040,7 +1042,7 @@ char* sinsp_filter_check::rawval_to_string(uint8_t* rawval,
 
 			if(NULL == inet_ntop(AF_INET6, rawval, address, INET6_ADDRSTRLEN))
 			{
-				strcpy(address, "<NA>");
+				strlcpy(address, "<NA>", INET6_ADDRSTRLEN);
 			}
 
 			strlcpy(m_getpropertystr_storage, address, sizeof(m_getpropertystr_storage));
@@ -1097,7 +1099,7 @@ char* sinsp_filter_check::tostring(sinsp_evt* evt)
 			res += rawval_to_string(val.ptr, m_field->m_type, m_field->m_print_format, val.len);
 		}
 		res += ")";
-		strncpy(m_getpropertystr_storage, res.c_str(), sizeof(m_getpropertystr_storage) - 1);
+		strlcpy(m_getpropertystr_storage, res.c_str(), sizeof(m_getpropertystr_storage));
 		return m_getpropertystr_storage;
 	}
 	return rawval_to_string(m_extracted_values[0].ptr, m_field->m_type, m_field->m_print_format, m_extracted_values[0].len);
@@ -1559,7 +1561,7 @@ sinsp_filter* sinsp_filter_compiler::compile()
 		}
 		catch (const sinsp_exception& e)
 		{
-			throw sinsp_exception("filter error at "
+			throw sinsp_exception("filter error at " 
 				+ parser.get_pos().as_string() + ": " + e.what());
 		}
 	}
@@ -1578,7 +1580,7 @@ sinsp_filter* sinsp_filter_compiler::compile()
 	m_filter = new_sinsp_filter;
 	m_last_boolop = BO_NONE;
 	m_expect_values = false;
-	try
+	try 
 	{
 		m_flt_ast->accept(this);
 	}
@@ -1686,7 +1688,7 @@ void sinsp_filter_compiler::visit(libsinsp::filter::ast::binary_check_expr* e)
 	check->m_boolop = m_last_boolop;
 	check->parse_field_name(field.c_str(), true, true);
 
-	// Read the the the right-hand values of the filtercheck.
+	// Read the the the right-hand values of the filtercheck. 
 	// For list-related operators ('in', 'intersects', 'pmatch'), the vector
 	// can be filled with more than 1 value, whereas in all other cases we
 	// expect the vector to only have 1 value. We don't check this here, as
@@ -1939,6 +1941,7 @@ std::list<gen_event_filter_factory::filter_fieldclass_info> sinsp_filter_factory
 
 	return ret;
 }
+
 // Begin StackRox
 extern sinsp_filter_check_list g_filterlist;
 sinsp_filter_check_iface* sinsp_filter_check_iface::get(const std::string& field_name, sinsp* inspector) {

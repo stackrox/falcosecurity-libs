@@ -20,13 +20,13 @@ limitations under the License.
 #include <stdbool.h>
 #include <stdlib.h>
 #include "../../../../driver/ppm_events_public.h"
+#include "scap_open.h"
 
 struct scap;
 
 struct modern_bpf_engine
 {
-	size_t m_num_cpus;
-	char* m_lasterr;
+	unsigned long m_retry_us; /* Microseconds to wait if all ring buffers are empty */
+	char* m_lasterr; /* Last error caught by the engine */
+	interesting_tp_set open_tp_set; /* Interesting tracepoints */
 };
-
-#define SCAP_HANDLE_T struct modern_bpf_engine

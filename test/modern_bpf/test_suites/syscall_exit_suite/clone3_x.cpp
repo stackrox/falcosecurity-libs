@@ -125,9 +125,12 @@ TEST(SyscallExit, clone3X_father)
 	/* Parameter 20: vpid (type: PT_PID) */
 	evt_test->assert_numeric_param(20, (int64_t)info.vpid);
 
+	/* Parameter 21: pid_namespace init task start_time monotonic time in ns (type: PT_UINT64) */
+	evt_test->assert_numeric_param(21, (uint64_t)0);
+
 	/*=============================== ASSERT PARAMETERS  ===========================*/
 
-	evt_test->assert_num_params_pushed(20);
+	evt_test->assert_num_params_pushed(21);
 }
 
 TEST(SyscallExit, clone3X_child)
@@ -164,8 +167,6 @@ TEST(SyscallExit, clone3X_child)
 			ADD_FAILURE() << "Unable to get all the info from proc" << std::endl;
 			exit(EXIT_FAILURE);
 		}
-
-		evt_test->disable_capture();
 
 /* In some architectures we are not able to catch the `clone exit child
  * event` from the `sys_exit` tracepoint. This is because there is no
@@ -252,9 +253,12 @@ TEST(SyscallExit, clone3X_child)
 		/* Parameter 20: vpid (type: PT_PID) */
 		evt_test->assert_numeric_param(20, (int64_t)info.vpid);
 
+		/* Parameter 21: pid_namespace init task start_time monotonic time in ns (type: PT_UINT64) */
+		evt_test->assert_numeric_param(21, (uint64_t)1, GREATER_EQUAL);
+
 		/*=============================== ASSERT PARAMETERS  ===========================*/
 
-		evt_test->assert_num_params_pushed(20);
+		evt_test->assert_num_params_pushed(21);
 #endif
 		if(HasFailure())
 		{
@@ -276,6 +280,8 @@ TEST(SyscallExit, clone3X_child)
 	{
 		FAIL() << "Something in the child failed." << std::endl;
 	}
+
+	evt_test->disable_capture();
 
 	/*=============================== TRIGGER SYSCALL  ===========================*/
 }
