@@ -1252,7 +1252,7 @@ int32_t scap_fd_scan_fd_dir(scap_t *handle, char *procdir, scap_threadinfo *tinf
 			continue;
 		}
 
-        /* Begin StackRox Section */
+		/* Begin StackRox Section */
 		// StackRox does not track non-socket fds
 		if(!S_ISSOCK(sb.st_mode))
 		{

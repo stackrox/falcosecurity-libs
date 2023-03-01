@@ -1054,7 +1054,7 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	//
 	if(tinfo->pid == tinfo->tid)
 	{
-        /* Begin StackRox Section */
+		/* Begin StackRox Section */
 		if((res = scap_fd_scan_fd_dir(handle, dir_name, tinfo, sockets_by_ns, error)) != SCAP_SUCCESS)
 		{
 			// Ensure tinfo is not free'd twice
@@ -1260,7 +1260,7 @@ struct scap_threadinfo* scap_proc_get(scap_t* handle, int64_t tid, bool scan_soc
 	if(scap_proc_read_thread(handle, filename, tid, &tinfo, handle->m_lasterr, scan_sockets) != SCAP_SUCCESS)
 	{
 		free(tinfo);
-        /* Begin StackRox Section */
+		/* Begin StackRox Section */
 		// TODO ROX-6096 proc scrape error count statistics
 		/* End StackRox Section */
 		return NULL;

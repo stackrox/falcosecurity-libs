@@ -1439,14 +1439,6 @@ int32_t scap_bpf_load(
 		return SCAP_FAILURE;
 	}
 
-	/* Store interesting Tracepoints */
-	memcpy(&handle->open_tp_set, &oargs->tp_of_interest, sizeof(interesting_tp_set));
-	/* Start with all tracepoints disabled */
-	interesting_tp_set initial_tp_set = {0};
-	if (load_tracepoints(handle, &initial_tp_set) != SCAP_SUCCESS)
-	{
-		return SCAP_FAILURE;
-	}
 
 	if(populate_syscall_table_map(handle) != SCAP_SUCCESS)
 	{
@@ -1500,7 +1492,7 @@ int32_t scap_bpf_load(
 				// Fallback at considering them online if we can at least reach their folder.
 				// This is useful for example for raspPi devices.
 				// See: https://github.com/kubernetes/kubernetes/issues/95039
-				snprintf(filename, sizeof(filename), "/sys/devices/system/cpu/cpu%d/", j);
+				snprintf(filename, sizeof(filename), "%s/sys/devices/system/cpu/cpu%d/", scap_get_host_root(), j);
 				if (access(filename, F_OK) == 0)
 				{
 					online = 1;
@@ -1572,6 +1564,15 @@ int32_t scap_bpf_load(
 	}
 
 	if(set_default_settings(handle) != SCAP_SUCCESS)
+	{
+		return SCAP_FAILURE;
+	}
+
+	/* Store interesting Tracepoints */
+	memcpy(&handle->open_tp_set, &oargs->tp_of_interest, sizeof(interesting_tp_set));
+	/* Start with all tracepoints disabled */
+	interesting_tp_set initial_tp_set = {0};
+	if (load_tracepoints(handle, &initial_tp_set) != SCAP_SUCCESS)
 	{
 		return SCAP_FAILURE;
 	}

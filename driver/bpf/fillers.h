@@ -2101,7 +2101,9 @@ static __always_inline int bpf_accumulate_argv_or_env(struct filler_data *data,
 		}
 
 		len = bpf_probe_read_str(&data->buf[off & SCRATCH_SIZE_HALF], SCRATCH_SIZE_HALF, arg);
-		if (len == -EFAULT)
+        /* Begin StackRox Section */
+		if (len == -EFAULT || len == 0)
+        /* End StackRox Section */
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		*args_len += len;
@@ -2456,7 +2458,9 @@ FILLER(proc_startupdate, true)
 						SCRATCH_SIZE_HALF,
 						&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]);
 
-		if (exe_len == -EFAULT)
+        /* Begin StackRox Section */
+		if (exe_len == -EFAULT || exe_len == 0)
+        /* End StackRox Section */
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		/*
@@ -2955,6 +2959,8 @@ FILLER(execve_family_flags, true)
 	/* Parameter 26: exe_file mtime (last modification time, epoch value in nanoseconds) (type: PT_ABSTIME) */
 	time = _READ(inode->i_mtime);
 	return bpf_val_to_ring_type(data, bpf_epoch_ns_from_time(time), PT_ABSTIME);
+#else
+    return res;
 #endif
 }
 

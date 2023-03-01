@@ -76,7 +76,7 @@ bool cri_async_source::parse_containerd(const runtime::v1alpha2::ContainerStatus
 			container.m_id.c_str(),
 			info_it->second.c_str());
 
-    /* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
+	/* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
 	//m_cri->parse_cri_env(root, container);
 	/* End StackRox */
 	m_cri->parse_cri_json_image(root, container);
