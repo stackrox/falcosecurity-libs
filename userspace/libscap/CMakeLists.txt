@@ -63,9 +63,6 @@ if(CYGWIN)
 include_directories("${WIN_HAL_INCLUDE}")
 endif()
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
-
 list(APPEND targetfiles
 	scap.c
 	scap_fds.c
@@ -88,8 +85,6 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_library(scap STATIC
 	${targetfiles})
-
-set_target_properties(scap PROPERTIES COMPILE_FLAGS "-fPIC")
 
 if (CMAKE_SYSTEM_NAME MATCHES "SunOS")
 	target_link_libraries(scap
