@@ -25,6 +25,15 @@ or GPL2.txt for full copies of the license.
 #define MAX_PATH_COMPONENTS 16
 #define MAX_PATH_LENGTH 4096
 
+/* This enum is used to tell our helpers if they have to
+ * read from kernel or user memory.
+ */
+enum read_memory
+{
+	USER = 0,
+	KERNEL = 1,
+};
+
 static __always_inline bool in_port_range(uint16_t port, uint16_t min, uint16_t max)
 {
 	return port >= min && port <= max;
@@ -96,7 +105,7 @@ static __always_inline char *bpf_get_path(struct filler_data *data, int fd)
 	for(i = 1; i < MAX_PATH_COMPONENTS && i <= nreads && res >= 0; i++)
 	{
 		path_level = (nreads-i) & (MAX_PATH_COMPONENTS-1);	
-		res = bpf_probe_read_str(&filepath[curoff_bounded], MAX_PATH_LENGTH,
+		res = bpf_probe_read_kernel_str(&filepath[curoff_bounded], MAX_PATH_LENGTH,
 				(const void*)pointers_buf[path_level]);	
 		curoff_bounded = (curoff_bounded+res-1) & SCRATCH_SIZE_HALF;
 		if(i>1 && i<nreads && res>0)
@@ -255,9 +264,9 @@ static __always_inline bool bpf_getsockname(struct socket *sock,
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
 			if (len > 0)
-				bpf_probe_read(sunaddr, ((len - 1) & 0xff) + 1, addr->name);
+				bpf_probe_read_kernel(sunaddr, ((len - 1) & 0xff) + 1, addr->name);
 #else
-			bpf_probe_read(sunaddr, len, addr->name);
+			bpf_probe_read_kernel(sunaddr, len, addr->name);
 #endif
 		}
 
@@ -273,16 +282,17 @@ static __always_inline bool bpf_getsockname(struct socket *sock,
 static __always_inline int bpf_addr_to_kernel(void *uaddr, int ulen,
 					      struct sockaddr *kaddr)
 {
-	int len = _READ(ulen);
+	int len = ulen & 0xfff;	/* required by BPF verifier */
+
 	if (len < 0 || len > sizeof(struct sockaddr_storage))
 		return -EINVAL;
 	if (len == 0)
 		return 0;
 
 #ifdef BPF_FORBIDS_ZERO_ACCESS
-	if (bpf_probe_read(kaddr, ((len - 1) & 0xff) + 1, uaddr))
+	if (bpf_probe_read_user(kaddr, ((len - 1) & 0xff) + 1, uaddr))
 #else
-	if (bpf_probe_read(kaddr, len & 0xff, uaddr))
+	if (bpf_probe_read_user(kaddr, len & 0xff, uaddr))
 #endif
 		return -EFAULT;
 
@@ -367,7 +377,7 @@ static __always_inline u32 bpf_compute_snaplen(struct filler_data *data,
 		int addrlen;
 
 		val = bpf_syscall_get_argument(data, 1);
-		if (bpf_probe_read(&mh, sizeof(mh), (void *)val)) {
+		if (bpf_probe_read_user(&mh, sizeof(mh), (void *)val)) {
 			usrsockaddr = NULL;
 			addrlen = 0;
 		} else {
@@ -468,9 +478,9 @@ static __always_inline u32 bpf_compute_snaplen(struct filler_data *data,
 }
 
 static __always_inline int unix_socket_path(char *dest, const char *user_ptr, size_t size) {
-	int res = bpf_probe_read_str(dest,
-				     size,
-				     user_ptr);
+	int res = bpf_probe_read_kernel_str(dest,
+				            size,
+				            user_ptr);
 	/*
   	 * Extract from: https://man7.org/linux/man-pages/man7/unix.7.html
 	 * an abstract socket address is distinguished (from a
@@ -481,9 +491,9 @@ static __always_inline int unix_socket_path(char *dest, const char *user_ptr, si
 	 */
 	if (res == 1) {
 		dest[0] = '@';
-		res = bpf_probe_read_str(dest + 1,
-					 size - 1, // account for '@'
-					 user_ptr + 1);
+		res = bpf_probe_read_kernel_str(dest + 1,
+					        size - 1, // account for '@'
+					        user_ptr + 1);
 		res++; // account for '@'
 	}
 	return res;
@@ -603,6 +613,7 @@ static __always_inline long bpf_fd_to_socktuple(struct filler_data *data,
 	struct socket *sock;
 	struct sock *sk;
 	long size = 0;
+	struct in6_addr in6 = {0};
 
 	sock = bpf_sockfd_lookup(data, fd);
 	if (!sock)
@@ -651,8 +662,14 @@ static __always_inline long bpf_fd_to_socktuple(struct filler_data *data,
 			struct sockaddr_in *usrsockaddr_in = (struct sockaddr_in *)usrsockaddr;
 
 			if (is_inbound) {
-				sip = usrsockaddr_in->sin_addr.s_addr;
-				sport = ntohs(usrsockaddr_in->sin_port);
+				/* To take inbound info we cannot use the `src_addr` obtained from the syscall
+				 * it could be empty!
+				 * From kernel 3.13 we can take both ipv4 and ipv6 info from here
+				 * https://elixir.bootlin.com/linux/v3.13/source/include/net/sock.h#L164
+				 */
+				bpf_probe_read_kernel(&sip, sizeof(sip), &sk->__sk_common.skc_daddr);
+				bpf_probe_read_kernel(&sport, sizeof(sport), &sk->__sk_common.skc_dport);
+				sport = ntohs(sport);
 				dip = ((struct sockaddr_in *)sock_address)->sin_addr.s_addr;
 				dport = ntohs(((struct sockaddr_in *)sock_address)->sin_port);
 			} else {
@@ -707,8 +724,10 @@ static __always_inline long bpf_fd_to_socktuple(struct filler_data *data,
 			struct sockaddr_in6 *usrsockaddr_in6 = (struct sockaddr_in6 *)usrsockaddr;
 
 			if (is_inbound) {
-				sip6 = usrsockaddr_in6->sin6_addr.s6_addr;
-				sport = ntohs(usrsockaddr_in6->sin6_port);
+				bpf_probe_read_kernel(&in6, sizeof(in6), &sk->__sk_common.skc_v6_daddr);
+				sip6 = in6.in6_u.u6_addr8;
+				bpf_probe_read_kernel(&sport, sizeof(sport), &sk->__sk_common.skc_dport);
+				sport = ntohs(sport);
 				dip6 = ((struct sockaddr_in6 *)sock_address)->sin6_addr.s6_addr;
 				dport = ntohs(((struct sockaddr_in6 *)sock_address)->sin6_port);
 			} else {
@@ -801,12 +820,43 @@ static __always_inline long bpf_fd_to_socktuple(struct filler_data *data,
 	return size;
 }
 
+static __always_inline int __bpf_read_val_into(struct filler_data *data,
+					       unsigned long curoff_bounded,
+					       unsigned long val,
+					       volatile u16 read_size,
+					       enum read_memory mem)
+{
+	int rc;
+	int read_size_bound;
+
+#ifdef BPF_FORBIDS_ZERO_ACCESS
+	if (read_size == 0)
+		return -1;
+
+	read_size_bound = ((read_size - 1) & SCRATCH_SIZE_HALF) + 1;
+#else
+	read_size_bound = read_size & SCRATCH_SIZE_HALF;
+#endif
+
+	if (mem == KERNEL)
+		rc = bpf_probe_read_kernel(&data->buf[curoff_bounded],
+				read_size_bound,
+				(void *)val);
+	else
+		rc = bpf_probe_read_user(&data->buf[curoff_bounded],
+				read_size_bound,
+				(void *)val);
+
+	return rc;
+}
+
 static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 					     unsigned long val,
 					     unsigned long val_len,
 					     enum ppm_param_type type,
 					     u8 dyn_idx,
-					     bool enforce_snaplen)
+					     bool enforce_snaplen,
+					     enum read_memory mem)
 {
 	unsigned int len_dyn = 0;
 	unsigned int len = 0;
@@ -835,13 +885,18 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 	case PT_CHARBUF:
 	case PT_FSPATH:
 	case PT_FSRELPATH: {
-		if (!data->curarg_already_on_frame) 
+		if (!data->curarg_already_on_frame)
 		{
-			int res;
-			/* Return `res<0` only in case of error. */ 
-			res = bpf_probe_read_str(&data->buf[curoff_bounded], 
-						PPM_MAX_ARG_SIZE,
-						(const void *)val);
+			int res = -1;
+
+			if (val)
+				/* Return `res<0` only in case of error. */
+				res = (mem == KERNEL) ? bpf_probe_read_kernel_str(&data->buf[curoff_bounded],
+								PPM_MAX_ARG_SIZE,
+								(const void *)val)
+						      : bpf_probe_read_user_str(&data->buf[curoff_bounded],
+								PPM_MAX_ARG_SIZE,
+								(const void *)val);
 			if(res >= 0)
 			{
 				len = res;
@@ -880,24 +935,14 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 					 * we send an empty param `len=0`.
 					 */
 					volatile u16 read_size = dpi_lookahead_size;
+					int rc = 0;
 
-#ifdef BPF_FORBIDS_ZERO_ACCESS
-					if(!read_size || bpf_probe_read(&data->buf[curoff_bounded],
-								((read_size - 1) & SCRATCH_SIZE_HALF) + 1,
-								(void *)val))
+					rc = __bpf_read_val_into(data, curoff_bounded, val, read_size, mem);
+					if (rc)
 					{
 						len=0;
 						break;
 					}
-#else
-					if(bpf_probe_read(&data->buf[curoff_bounded],
-								read_size & SCRATCH_SIZE_HALF,
-								(void *)val))
-					{
-						len=0;
-						break;
-					}
-#endif /* BPF_FORBIDS_ZERO_ACCESS */
 				}
 
 				/* If `curarg` was already on frame, we are interested only in this computation,
@@ -916,6 +961,7 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 			if(!data->curarg_already_on_frame)
 			{
 				volatile u16 read_size = len;
+				int rc = 0;
 
 				curoff_bounded = data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF;
 				if (data->state->tail_ctx.curoff > SCRATCH_SIZE_HALF)
@@ -923,24 +969,12 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 					return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 				}
 
-#ifdef BPF_FORBIDS_ZERO_ACCESS
-
-				if (!read_size || bpf_probe_read(&data->buf[curoff_bounded],
-							((read_size - 1) & SCRATCH_SIZE_HALF) + 1,
-							(void *)val))
+				rc = __bpf_read_val_into(data, curoff_bounded, val, read_size, mem);
+				if (rc)
 				{
 					len=0;
 					break;
 				}
-#else
-				if (bpf_probe_read(&data->buf[curoff_bounded],
-							read_size & SCRATCH_SIZE_HALF,
-							(void *)val))
-				{
-					len=0;
-					break;
-				}
-#endif /* BPF_FORBIDS_ZERO_ACCESS */
 			}
 		} 
 		else 
@@ -953,15 +987,24 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 	case PT_SOCKADDR:
 	case PT_SOCKTUPLE:
 	case PT_FDLIST:
-		if (!data->curarg_already_on_frame) {
-			bpf_printk("expected arg already on frame: evt_type %d, curarg %d, type %d\n",
-				   data->state->tail_ctx.evt_type,
-				   data->state->tail_ctx.curarg, type);
-			return PPM_FAILURE_BUG;
+		if(data->curarg_already_on_frame)
+		{
+			len = val_len;
+			break;
 		}
+		/* Cases in which we don't have the tuple and
+		 * we want to send an empty param.
+		 */
+		else if(val==0)
+		{
+			len = 0;
+			break;
+		}
+		bpf_printk("expected arg already on frame: evt_type %d, curarg %d, type %d\n",
+				data->state->tail_ctx.evt_type,
+				data->state->tail_ctx.curarg, type);
+		return PPM_FAILURE_BUG;
 
-		len = val_len;
-		break;
 	case PT_FLAGS8:
 	case PT_ENUMFLAGS8:
 	case PT_UINT8:
@@ -1032,6 +1075,115 @@ static __always_inline int __bpf_val_to_ring(struct filler_data *data,
 	return PPM_SUCCESS;
 }
 
+static __always_inline int bpf_push_empty_param(struct filler_data *data)
+{
+	/* This is not so necessary but just keep it for compliance with other helpers */
+	if (data->state->tail_ctx.curarg >= PPM_MAX_EVENT_PARAMS) {
+		bpf_printk("invalid curarg: %d\n", data->state->tail_ctx.curarg);
+		return PPM_FAILURE_BUG;
+	}
+
+	/* We push 0 in the length array */
+	fixup_evt_arg_len(data->buf, data->state->tail_ctx.curarg, 0);
+	data->curarg_already_on_frame = false;
+
+	/* We increment the current argument */
+	++data->state->tail_ctx.curarg;
+	return PPM_SUCCESS;
+}
+
+static __always_inline enum read_memory param_type_to_mem(enum ppm_param_type type)
+{
+	/* __bpf_val_to_ring() uses bpf_probe_read_* functions for particular types
+	 * only.  Instead of changing all places, let's keep it simple and try to
+	 * spot the correct address space by type.
+	 */
+
+	switch (type)
+	{
+	case PT_CHARBUF:
+	case PT_FSPATH:
+	case PT_FSRELPATH:
+	case PT_BYTEBUF:
+		/* Those types typically read memory from user space pointers.
+		 * If not, explicit use the respective helper with the _mem()
+		 * suffix to specify the memory to read from.
+		 *
+		 * See also the usage below in the helpers.
+		 */
+		return USER;
+	default:
+		return KERNEL;
+	}
+}
+
+static __always_inline int bpf_val_to_ring_mem(struct filler_data *data,
+					       unsigned long val,
+					       enum read_memory mem)
+{
+	const struct ppm_param_info *param_info;
+
+	if (data->state->tail_ctx.curarg >= PPM_MAX_EVENT_PARAMS) {
+		bpf_printk("invalid curarg: %d\n", data->state->tail_ctx.curarg);
+		return PPM_FAILURE_BUG;
+	}
+
+	param_info = &data->evt->params[data->state->tail_ctx.curarg & (PPM_MAX_EVENT_PARAMS - 1)];
+
+	return __bpf_val_to_ring(data, val, 0, param_info->type, -1, false, mem);
+}
+
+/// TODO: @Andreagit97 these functions should return void
+static __always_inline int bpf_push_s64_to_ring(struct filler_data *data, s64 val)
+{
+	/// TODO: @Andreagit97 this could be removed in a second iteration.
+	if (data->state->tail_ctx.curoff > SCRATCH_SIZE_HALF)
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
+	unsigned int len = sizeof(s64);
+	*((s64 *)&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]) = val;
+	/// TODO: @Andreagit97 this could be simplified
+	fixup_evt_arg_len(data->buf, data->state->tail_ctx.curarg, len);
+	data->state->tail_ctx.curoff += len;
+	data->state->tail_ctx.len += len;
+	data->curarg_already_on_frame = false;
+	++data->state->tail_ctx.curarg;
+	return PPM_SUCCESS;
+}
+
+static __always_inline int bpf_push_u64_to_ring(struct filler_data *data, u64 val)
+{
+	if (data->state->tail_ctx.curoff > SCRATCH_SIZE_HALF)
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
+	unsigned int len = sizeof(u64);
+	*((u64 *)&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]) = val;
+	fixup_evt_arg_len(data->buf, data->state->tail_ctx.curarg, len);
+	data->state->tail_ctx.curoff += len;
+	data->state->tail_ctx.len += len;
+	data->curarg_already_on_frame = false;
+	++data->state->tail_ctx.curarg;
+	return PPM_SUCCESS;
+}
+
+static __always_inline int bpf_push_u32_to_ring(struct filler_data *data, u32 val)
+{
+	if (data->state->tail_ctx.curoff > SCRATCH_SIZE_HALF)
+	{
+		return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
+	}
+	unsigned int len = sizeof(u32);
+	*((u32 *)&data->buf[data->state->tail_ctx.curoff & SCRATCH_SIZE_HALF]) = val;
+	fixup_evt_arg_len(data->buf, data->state->tail_ctx.curarg, len);
+	data->state->tail_ctx.curoff += len;
+	data->state->tail_ctx.len += len;
+	data->curarg_already_on_frame = false;
+	++data->state->tail_ctx.curarg;
+	return PPM_SUCCESS;
+}
+
 static __always_inline int bpf_val_to_ring(struct filler_data *data,
 					   unsigned long val)
 {
@@ -1044,7 +1196,8 @@ static __always_inline int bpf_val_to_ring(struct filler_data *data,
 
 	param_info = &data->evt->params[data->state->tail_ctx.curarg & (PPM_MAX_EVENT_PARAMS - 1)];
 
-	return __bpf_val_to_ring(data, val, 0, param_info->type, -1, false);
+	return __bpf_val_to_ring(data, val, 0, param_info->type, -1, false,
+				 param_type_to_mem(param_info->type));
 }
 
 static __always_inline int bpf_val_to_ring_len(struct filler_data *data,
@@ -1060,7 +1213,8 @@ static __always_inline int bpf_val_to_ring_len(struct filler_data *data,
 
 	param_info = &data->evt->params[data->state->tail_ctx.curarg & (PPM_MAX_EVENT_PARAMS - 1)];
 
-	return __bpf_val_to_ring(data, val, val_len, param_info->type, -1, false);
+	return __bpf_val_to_ring(data, val, val_len, param_info->type, -1, false,
+				 param_type_to_mem(param_info->type));
 }
 
 static __always_inline int bpf_val_to_ring_dyn(struct filler_data *data,
@@ -1068,14 +1222,22 @@ static __always_inline int bpf_val_to_ring_dyn(struct filler_data *data,
 					       enum ppm_param_type type,
 					       u8 dyn_idx)
 {
-	return __bpf_val_to_ring(data, val, 0, type, dyn_idx, false);
+	return __bpf_val_to_ring(data, val, 0, type, dyn_idx, false, param_type_to_mem(type));
+}
+
+static __always_inline int bpf_val_to_ring_type_mem(struct filler_data *data,
+						unsigned long val,
+						enum ppm_param_type type,
+						enum read_memory mem)
+{
+	return __bpf_val_to_ring(data, val, 0, type, -1, false, mem);
 }
 
 static __always_inline int bpf_val_to_ring_type(struct filler_data *data,
 						unsigned long val,
 						enum ppm_param_type type)
 {
-	return __bpf_val_to_ring(data, val, 0, type, -1, false);
+	return __bpf_val_to_ring(data, val, 0, type, -1, false, param_type_to_mem(type));
 }
 
 static __always_inline bool bpf_in_ia32_syscall()

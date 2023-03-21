@@ -428,7 +428,7 @@ public:
 			if(processed > m_data_max_b)
 			{
 				throw sinsp_exception("Socket handler (" + m_id + "): "
-										  "read more than " + to_string(m_data_max_b / 1024 / 1024) + " MB of data from " +
+										  "read more than " + std::to_string(m_data_max_b / 1024 / 1024) + " MB of data from " +
 						      m_url.to_string(false) + m_path + " (" + std::to_string(processed) +
 						      " bytes, " + std::to_string(counter) + " reads). Giving up");
 			} else {
@@ -1592,6 +1592,10 @@ private:
 		if(!m_http_parser)
 		{
 			m_http_parser = (http_parser *)std::malloc(sizeof(http_parser));
+			if(m_http_parser == NULL)
+			{
+				throw sinsp_exception("memory allocation error allocating http_parser..");
+			}
 		}
 		m_http_parser_data.m_data_buf = &m_data_buf;
 		m_http_parser_data.m_json = &m_json;

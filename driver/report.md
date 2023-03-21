@@ -1,8 +1,9 @@
 # Supported Syscalls
 
-A table that describes which syscalls are mapped to a specific event in the event table.  
-Syscalls that are not mapped to any event, are instead mapped to the `generic` one.  
-Specific events are capable of extracting information from the syscall, while the generic ones can only tell which syscall happened.
+This table represents the syscalls supported by our drivers.
+
+🟢 means that the syscall is fully instrumented so its parameters are available to userspace.
+🟡 means that the syscall is not fully instrumented so the userspace is just notified when the syscall happens but no parameters are available.
 
 |         SYSCALL         | SUPPORTED |
 |-------------------------|-----------|
@@ -22,7 +23,7 @@ Specific events are capable of extracting information from the syscall, while th
 | capset                  | 🟢        |
 | chdir                   | 🟢        |
 | chmod                   | 🟢        |
-| chown                   | 🟡        |
+| chown                   | 🟢        |
 | chroot                  | 🟢        |
 | clock_adjtime           | 🟡        |
 | clock_getres            | 🟡        |
@@ -64,8 +65,8 @@ Specific events are capable of extracting information from the syscall, while th
 | fchdir                  | 🟢        |
 | fchmod                  | 🟢        |
 | fchmodat                | 🟢        |
-| fchown                  | 🟡        |
-| fchownat                | 🟡        |
+| fchown                  | 🟢        |
+| fchownat                | 🟢        |
 | fcntl                   | 🟢        |
 | fdatasync               | 🟡        |
 | fgetxattr               | 🟡        |
@@ -145,7 +146,7 @@ Specific events are capable of extracting information from the syscall, while th
 | landlock_add_rule       | 🟡        |
 | landlock_create_ruleset | 🟡        |
 | landlock_restrict_self  | 🟡        |
-| lchown                  | 🟡        |
+| lchown                  | 🟢        |
 | lgetxattr               | 🟡        |
 | link                    | 🟢        |
 | linkat                  | 🟢        |

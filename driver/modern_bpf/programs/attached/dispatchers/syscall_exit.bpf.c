@@ -6,6 +6,7 @@
  */
 
 #include <helpers/interfaces/syscalls_dispatcher.h>
+#include <helpers/interfaces/attached_programs.h>
 
 /* From linux tree: /include/trace/events/syscall.h
  * TP_PROTO(struct pt_regs *regs, long ret),
@@ -15,7 +16,15 @@ int BPF_PROG(sys_exit,
 	     struct pt_regs *regs,
 	     long ret)
 {
-	u32 syscall_id = syscalls_dispatcher__get_syscall_id(regs);
+	u32 syscall_id = extract__syscall_id(regs);
+
+#ifdef CAPTURE_SOCKETCALL
+	/* we convert it here in this way the syscall will be treated exactly as the original one */
+	if(syscall_id == __NR_socketcall)
+	{
+		syscall_id = convert_network_syscalls(regs);
+	}
+#endif
 
 	/* The `syscall-id` can refer to both 64-bit and 32-bit architectures.
 	 * Right now we filter only 64-bit syscalls, all the 32-bit syscalls
@@ -24,6 +33,11 @@ int BPF_PROG(sys_exit,
 	 * If the syscall is not interesting we drop it.
 	 */
 	if(!syscalls_dispatcher__64bit_interesting_syscall(syscall_id))
+	{
+		return 0;
+	}
+
+	if(sampling_logic(syscall_id, SYSCALL))
 	{
 		return 0;
 	}

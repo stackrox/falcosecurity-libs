@@ -161,9 +161,9 @@ void sinsp_usergroup_manager::dump_users_groups(scap_dumper_t* dumper) {
 		for (const auto &user: usrlist) {
 			sinsp_evt evt;
 			if (user_to_sinsp_event(&user.second, &evt, container_id, PPME_USER_ADDED_E)) {
-				int32_t res = scap_dump(m_inspector->m_h, dumper, evt.m_pevt, evt.m_cpuid, 0);
+				int32_t res = scap_dump(dumper, evt.m_pevt, evt.m_cpuid, 0);
 				if (res != SCAP_SUCCESS) {
-					throw sinsp_exception(scap_getlasterr(m_inspector->m_h));
+					throw sinsp_exception(scap_dump_getlasterr(dumper));
 				}
 			}
 		}
@@ -175,9 +175,9 @@ void sinsp_usergroup_manager::dump_users_groups(scap_dumper_t* dumper) {
 		for (const auto &group: grplist) {
 			sinsp_evt evt;
 			if (group_to_sinsp_event(&group.second, &evt, container_id, PPME_GROUP_ADDED_E)) {
-				int32_t res = scap_dump(m_inspector->m_h, dumper, evt.m_pevt, evt.m_cpuid, 0);
+				int32_t res = scap_dump(dumper, evt.m_pevt, evt.m_cpuid, 0);
 				if (res != SCAP_SUCCESS) {
-					throw sinsp_exception(scap_getlasterr(m_inspector->m_h));
+					throw sinsp_exception(scap_dump_getlasterr(dumper));
 				}
 			}
 		}
@@ -256,9 +256,11 @@ scap_userinfo *sinsp_usergroup_manager::userinfo_map_insert(
 	auto &usr = map[uid];
 	usr.uid = uid;
 	usr.gid = gid;
-	strlcpy(usr.name, name, MAX_CREDENTIALS_STR_LEN);
-	strlcpy(usr.homedir, home, SCAP_MAX_PATH_SIZE);
-	strlcpy(usr.shell, shell, SCAP_MAX_PATH_SIZE);
+	// In case the node is configured to use NIS,
+	// some struct passwd* fields may be set to NULL.
+	strlcpy(usr.name, (name != nullptr) ? name : "<NA>", MAX_CREDENTIALS_STR_LEN);
+	strlcpy(usr.homedir, (home != nullptr) ? home : "<NA>", SCAP_MAX_PATH_SIZE);
+	strlcpy(usr.shell, (shell != nullptr) ? shell : "<NA>", SCAP_MAX_PATH_SIZE);
 
 	return &usr;
 }
@@ -272,7 +274,7 @@ scap_groupinfo *sinsp_usergroup_manager::groupinfo_map_insert(
 
 	auto &grp = map[gid];
 	grp.gid = gid;
-	strlcpy(grp.name, name, MAX_CREDENTIALS_STR_LEN);
+	strlcpy(grp.name, (name != nullptr) ? name : "<NA>", MAX_CREDENTIALS_STR_LEN);
 
 	return &grp;
 }
@@ -354,19 +356,7 @@ scap_userinfo *sinsp_usergroup_manager::add_container_user(const std::string &co
 
 	scap_userinfo *retval{nullptr};
 
-	//
-	// When a container is running with a specific user and this
-	// get called with 0, it's too early to make an attempt.
-	// As a downside we won't load users for containers running as
-	// root, but we will load them if e.g.docker exec -u <specific-user>.
-	//
-	if (uid == 0)
-	{
-		return retval;
-	}
-
 #if defined HAVE_PWD_H && defined HAVE_FGET__ENT
-
 	if(!m_ns_helper->in_own_ns_mnt(pid))
 	{
 		return retval;
@@ -485,17 +475,6 @@ scap_groupinfo *sinsp_usergroup_manager::add_container_group(const std::string &
 			"adding container [%s] group: %d", container_id.c_str(), gid);
 
 	scap_groupinfo *retval{nullptr};
-
-	//
-	// When a container is running with a specific user and this
-	// get called with 0, it's too early to make an attempt.
-	// As a downside we won't load users for containers running as
-	// root, but we will load them if e.g.docker exec -u <specific-user>.
-	//
-	if(gid == 0)
-	{
-		return retval;
-	}
 
 #if defined HAVE_GRP_H && defined HAVE_FGET__ENT
 	if(!m_ns_helper->in_own_ns_mnt(pid))

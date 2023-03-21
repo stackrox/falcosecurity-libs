@@ -148,7 +148,7 @@ static int force_tp_set(struct ppm_consumer_t *consumer, u32 new_tp_set);
 static long ppm_ioctl(struct file *f, unsigned int cmd, unsigned long arg);
 static int ppm_mmap(struct file *filp, struct vm_area_struct *vma);
 static int record_event_consumer(struct ppm_consumer_t *consumer,
-                                 enum ppm_event_type event_type,
+                                 ppm_event_code event_type,
                                  enum syscall_flags drop_flags,
                                  nanoseconds ns,
                                  struct event_data_t *event_datap);
@@ -756,7 +756,7 @@ static int ppm_open(struct inode *inode, struct file *filp)
 		consumer->id = num_consumers;
 		consumer->consumer_id = consumer_id;
 		consumer->buffer_bytes_dim = g_buffer_bytes_dim;
-		consumer->tracepoints_attached = 0;
+		consumer->tracepoints_attached = 0; /* Start with no tracepoints */
 
 		/* Begin StackRox section */
 		if (exclude_selfns) {
@@ -869,7 +869,7 @@ static int ppm_open(struct inode *inode, struct file *filp)
 	consumer->statsd_port = PPM_PORT_STATSD;
 	/* Begin StackRox section */
 	/* Commenting out the following line that is in sysdig open-source driver */
-	//bitmap_fill(consumer->events_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
+	//bitmap_fill(consumer->syscalls_mask, PPM_EVENT_MAX); /* Enable all syscall to be passed to userspace */
 	/* End StackRox section */
 	reset_ring_buffer(ring);
 	ring->open = true;
@@ -1013,7 +1013,7 @@ static int force_tp_set(struct ppm_consumer_t *consumer, u32 new_tp_set)
 				// If disable is requested, unset ref bit
 				g_tracepoints_refs[idx] &= ~(1 << consumer->id);
 			}
-			// no change needed, we just update the refs
+			// no change needed, we just update the refs for the consumer
 			continue;
 		}
 
@@ -1113,31 +1113,14 @@ static int force_tp_set(struct ppm_consumer_t *consumer, u32 new_tp_set)
 			break;
 		}
 
-		if (new_val)
+		if (ret == 0)
 		{
-			if (ret == 0)
-			{
-				g_tracepoints_attached |= 1 << idx;
-				g_tracepoints_refs[idx] |= 1 << consumer->id;
-				vpr_info("attached tracepoint %s\n", tp_names[idx]);
-			}
-			else
-			{
-				pr_err("can't attach the %s tracepoint\n", tp_names[idx]);
-			}
+			g_tracepoints_attached ^= (1 << idx);
+			g_tracepoints_refs[idx] ^= (1 << consumer->id);
 		}
 		else
 		{
-			if (ret == 0)
-			{
-				g_tracepoints_attached &= ~(1 << idx);
-				g_tracepoints_refs[idx] &= ~(1 << consumer->id);
-				vpr_info("detached tracepoint %s\n", tp_names[idx]);
-			}
-			else
-			{
-				pr_err("can't detach the %s tracepoint\n", tp_names[idx]);
-			}
+			pr_err("can't %s the %s tracepoint\n", new_val ? "attach" : "detach", tp_names[idx]);
 		}
 	}
 
@@ -1320,23 +1303,11 @@ cleanup_ioctl_procinfo:
 	switch (cmd) {
 	case PPM_IOCTL_DISABLE_DROPPING_MODE:
 	{
-		struct event_data_t event_data;
-
 		vpr_info("PPM_IOCTL_DISABLE_DROPPING_MODE, consumer %p\n", consumer_id);
 
 		consumer->dropping_mode = 0;
 		consumer->sampling_interval = 1000000000;
 		consumer->sampling_ratio = 1;
-
-		/*
-		 * Push an event into the ring buffer so that the user can know that dropping
-		 * mode has been disabled
-		 */
-		event_data.category = PPMC_CONTEXT_SWITCH;
-		event_data.event_info.context_data.sched_prev = (void *)DEI_DISABLE_DROPPING;
-		event_data.event_info.context_data.sched_next = (void *)0;
-
-		record_event_consumer(consumer, PPME_SCAPEVENT_E, UF_NEVER_DROP, ppm_nsecs(), &event_data);
 
 		ret = 0;
 		goto cleanup_ioctl;
@@ -1412,15 +1383,6 @@ cleanup_ioctl_procinfo:
 		consumer->statsd_port = (u16)arg;
 
 		pr_info("new statsd_port: %d\n", (int)consumer->statsd_port);
-
-		ret = 0;
-		goto cleanup_ioctl;
-	}
-	case PPM_IOCTL_ZERO_SYSCALLS:
-	{
-		vpr_info("PPM_IOCTL_ZERO_SYSCALLS, consumer %p\n", consumer_id);
-
-		bitmap_zero(consumer->syscalls_mask, SYSCALL_TABLE_SIZE);
 
 		ret = 0;
 		goto cleanup_ioctl;
@@ -1536,18 +1498,32 @@ cleanup_ioctl_procinfo:
 		ret = 0;
 		goto cleanup_ioctl;
 	}
-	case PPM_IOCTL_MANAGE_TP:
+	case PPM_IOCTL_ENABLE_TP:
 	{
-		set_consumer_tracepoints(consumer, (u32)arg);
+		u32 new_tp_set;
+		if ((u32)arg >= TP_VAL_MAX) {
+			pr_err("invalid tp %u\n", (u32)arg);
+			ret = -EINVAL;
+			goto cleanup_ioctl;
+		}
+		new_tp_set = consumer->tracepoints_attached;
+		new_tp_set |= 1 << (u32)arg;
+		set_consumer_tracepoints(consumer, new_tp_set);
 		ret = 0;
 		goto cleanup_ioctl;
 	}
-	case PPM_IOCTL_GET_TPMASK:
+	case PPM_IOCTL_DISABLE_TP:
 	{
-		u32 __user *out = (u32 __user *)arg;
-		ret = 0;
-		if(put_user(consumer->tracepoints_attached, out))
+		u32 new_tp_set;
+		if ((u32)arg >= TP_VAL_MAX) {
+			pr_err("invalid tp %u\n", (u32)arg);
 			ret = -EINVAL;
+			goto cleanup_ioctl;
+		}
+		new_tp_set = consumer->tracepoints_attached;
+		new_tp_set &= ~(1 << (u32)arg);
+		set_consumer_tracepoints(consumer, new_tp_set);
+		ret = 0;
 		goto cleanup_ioctl;
 	}
 	default:
@@ -1845,7 +1821,7 @@ static inline void record_drop_e_for(struct task_struct* task, struct ppm_consum
 	}
 }
 
-static inline void drops_buffer_syscall_categories_counters(enum ppm_event_type event_type,
+static inline void drops_buffer_syscall_categories_counters(ppm_event_code event_type,
 				    struct ppm_ring_buffer_info *ring_info)
 {
 	switch (event_type) {
@@ -1862,6 +1838,10 @@ static inline void drops_buffer_syscall_categories_counters(enum ppm_event_type 
 	case PPME_SYSCALL_CHMOD_E:
 	case PPME_SYSCALL_FCHMOD_E:
 	case PPME_SYSCALL_FCHMODAT_E:
+	case PPME_SYSCALL_CHOWN_E:
+	case PPME_SYSCALL_LCHOWN_E:
+	case PPME_SYSCALL_FCHOWN_E:
+	case PPME_SYSCALL_FCHOWNAT_E:
 	case PPME_SYSCALL_LINK_E:
 	case PPME_SYSCALL_LINK_2_E:
 	case PPME_SYSCALL_LINKAT_E:
@@ -1871,6 +1851,7 @@ static inline void drops_buffer_syscall_categories_counters(enum ppm_event_type 
 	case PPME_SYSCALL_MKDIRAT_E:
 	case PPME_SYSCALL_MOUNT_E:
 	case PPME_SYSCALL_UMOUNT_E:
+	case PPME_SYSCALL_UMOUNT_1_E:
 	case PPME_SYSCALL_RENAME_E:
 	case PPME_SYSCALL_RENAMEAT_E:
 	case PPME_SYSCALL_RENAMEAT2_E:
@@ -1928,6 +1909,10 @@ static inline void drops_buffer_syscall_categories_counters(enum ppm_event_type 
 	case PPME_SYSCALL_CHMOD_X:
 	case PPME_SYSCALL_FCHMOD_X:
 	case PPME_SYSCALL_FCHMODAT_X:
+	case PPME_SYSCALL_CHOWN_X:
+	case PPME_SYSCALL_LCHOWN_X:
+	case PPME_SYSCALL_FCHOWN_X:
+	case PPME_SYSCALL_FCHOWNAT_X:
 	case PPME_SYSCALL_LINK_X:
 	case PPME_SYSCALL_LINK_2_X:
 	case PPME_SYSCALL_LINKAT_X:
@@ -1937,6 +1922,7 @@ static inline void drops_buffer_syscall_categories_counters(enum ppm_event_type 
 	case PPME_SYSCALL_MKDIRAT_X:
 	case PPME_SYSCALL_MOUNT_X:
 	case PPME_SYSCALL_UMOUNT_X:
+	case PPME_SYSCALL_UMOUNT_1_X:
 	case PPME_SYSCALL_RENAME_X:
 	case PPME_SYSCALL_RENAMEAT_X:
 	case PPME_SYSCALL_RENAMEAT2_X:
@@ -2004,8 +1990,8 @@ static inline void record_drop_x_for(struct task_struct* task, struct ppm_consum
 }
 
 // Return 1 if the event should be dropped, else 0
-static inline int drop_nostate_event_for(struct task_struct* task,
-                                     enum ppm_event_type event_type,
+static inline int drop_nostate_event(struct task_struct *task,
+                     ppm_event_code event_type,
 				     struct pt_regs *regs)
 {
 	unsigned long args[6] = {};
@@ -2077,7 +2063,7 @@ static inline int drop_event_for(struct task_struct* task,
 	int maybe_ret = 0;
 
 	if (consumer->dropping_mode) {
-		maybe_ret = drop_nostate_event_for(task,event_type, regs);
+		maybe_ret = drop_nostate_event(task,event_type, regs);
 		if (maybe_ret > 0)
 			return maybe_ret;
 	}
@@ -2264,7 +2250,7 @@ static int record_event_consumer_for(struct task_struct* task,
 	 * call. I guess this was done to reduce the number of syscalls...
 	 */
 	if (event_datap->category == PPMC_SYSCALL && event_datap->event_info.syscall_data.regs && event_datap->event_info.syscall_data.id == event_datap->socketcall_syscall) {
-		enum ppm_event_type tet;
+		ppm_event_code tet;
 
 		args.is_socketcall = true;
 		args.compat = event_datap->compat;
@@ -2583,7 +2569,7 @@ TRACEPOINT_PROBE(syscall_enter_probe, struct pt_regs *regs, long id)
 		struct event_data_t event_data;
 		int used = cur_g_syscall_table[table_index].flags & UF_USED;
 		enum syscall_flags drop_flags = cur_g_syscall_table[table_index].flags;
-		enum ppm_event_type type;
+		ppm_event_code type;
 
 #ifdef _HAS_SOCKETCALL
 		if (id == socketcall_syscall) {
@@ -2608,6 +2594,41 @@ TRACEPOINT_PROBE(syscall_enter_probe, struct pt_regs *regs, long id)
 		else
 			record_event_all_consumers(PPME_GENERIC_E, UF_ALWAYS_DROP, &event_data);
 	}
+}
+
+static __always_inline bool kmod_drop_syscall_exit_events(long ret, ppm_event_code evt_type)
+{
+	switch (evt_type)
+	{
+		/* On s390x, clone and fork child events will be generated but
+		 * due to page faults, no args/envp information will be collected.
+		 * Also no child events appear for clone3 syscall.
+		 *
+		 * Because child events are covered by CAPTURE_SCHED_PROC_FORK,
+		 * let proactively ignore them.
+		 */
+#ifdef CAPTURE_SCHED_PROC_FORK
+		case PPME_SYSCALL_CLONE_20_X:
+		case PPME_SYSCALL_FORK_20_X:
+		case PPME_SYSCALL_VFORK_20_X:
+		case PPME_SYSCALL_CLONE3_X:
+			/* We ignore only child events, so ret == 0! */
+			return ret == 0;
+#endif
+
+		/* If `CAPTURE_SCHED_PROC_EXEC` logic is enabled we collect execve-family
+		 * exit events through a dedicated tracepoint so we can ignore them here.
+		 */
+#ifdef CAPTURE_SCHED_PROC_EXEC
+		case PPME_SYSCALL_EXECVE_19_X:
+		case PPME_SYSCALL_EXECVEAT_X:
+			/* We ignore only successful events, so ret == 0! */
+			return ret == 0;
+#endif
+		default:
+			break;
+	}
+	return false;
 }
 
 TRACEPOINT_PROBE(syscall_exit_probe, struct pt_regs *regs, long ret)
@@ -2658,7 +2679,7 @@ TRACEPOINT_PROBE(syscall_exit_probe, struct pt_regs *regs, long ret)
 		struct event_data_t event_data;
 		int used = cur_g_syscall_table[table_index].flags & UF_USED;
 		enum syscall_flags drop_flags = cur_g_syscall_table[table_index].flags;
-		enum ppm_event_type type;
+		ppm_event_code type;
 
 #ifdef _HAS_SOCKETCALL
 		if (id == socketcall_syscall) {
@@ -2669,6 +2690,11 @@ TRACEPOINT_PROBE(syscall_exit_probe, struct pt_regs *regs, long ret)
 			type = cur_g_syscall_table[table_index].exit_event_type;
 #else
 		type = cur_g_syscall_table[table_index].exit_event_type;
+#endif
+
+#if defined(CAPTURE_SCHED_PROC_FORK) || defined(CAPTURE_SCHED_PROC_EXEC)
+		if(kmod_drop_syscall_exit_events(ret, type))
+			return;
 #endif
 
 		event_data.category = PPMC_SYSCALL;
@@ -3069,11 +3095,15 @@ static int get_tracepoint_handles(void)
 #endif
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+static char *ppm_devnode(const struct device *dev, umode_t *mode)
+#else
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0)
 static char *ppm_devnode(struct device *dev, umode_t *mode)
 #else
 static char *ppm_devnode(struct device *dev, mode_t *mode)
-#endif
+#endif /* LINUX_VERSION_CODE > KERNEL_VERSION(3, 3, 0) */
+#endif /* LINUX_VERSION_CODE > KERNEL_VERSION(6, 2, 0) */
 {
 	if (mode) {
 		*mode = 0400;

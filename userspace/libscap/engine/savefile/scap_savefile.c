@@ -635,8 +635,7 @@ static int32_t scap_read_proclist(scap_reader_t* r, uint32_t block_length, uint3
 		else
 		{
 			proclist->m_proc_callback(
-				proclist->m_proc_callback_context,
-				proclist->m_main_handle, tinfo.tid, &tinfo, NULL);
+				proclist->m_proc_callback_context, tinfo.tid, &tinfo, NULL);
 		}
 
 		if(sub_len && subreadsize != sub_len)
@@ -1113,12 +1112,15 @@ static int32_t scap_read_userlist(scap_reader_t* r, uint32_t block_length, uint3
 			scap_userinfo* puser;
 
 			(*userlist_p)->nusers++;
-			(*userlist_p)->users = (scap_userinfo*)realloc((*userlist_p)->users, (*userlist_p)->nusers * sizeof(scap_userinfo));
-			if((*userlist_p)->users == NULL)
+			scap_userinfo *new_userlist = (scap_userinfo*)realloc((*userlist_p)->users, (*userlist_p)->nusers * sizeof(scap_userinfo));
+			if(new_userlist == NULL)
 			{
+				free((*userlist_p)->users);
+				(*userlist_p)->users = NULL;
 				snprintf(error, SCAP_LASTERR_SIZE, "memory allocation error in scap_read_userlist(1)");
 				return SCAP_FAILURE;
 			}
+			(*userlist_p)->users = new_userlist;
 
 			puser = &(*userlist_p)->users[(*userlist_p)->nusers -1];
 
@@ -1218,12 +1220,15 @@ static int32_t scap_read_userlist(scap_reader_t* r, uint32_t block_length, uint3
 			scap_groupinfo* pgroup;
 
 			(*userlist_p)->ngroups++;
-			(*userlist_p)->groups = (scap_groupinfo*)realloc((*userlist_p)->groups, (*userlist_p)->ngroups * sizeof(scap_groupinfo));
-			if((*userlist_p)->groups == NULL)
+			scap_groupinfo *new_grouplist = (scap_groupinfo*)realloc((*userlist_p)->groups, (*userlist_p)->ngroups * sizeof(scap_groupinfo));
+			if(new_grouplist == NULL)
 			{
+				free((*userlist_p)->groups);
+				(*userlist_p)->groups = NULL;
 				snprintf(error, SCAP_LASTERR_SIZE, "memory allocation error in scap_read_userlist(2)");
 				return SCAP_FAILURE;
 			}
+			(*userlist_p)->groups = new_grouplist;
 
 			pgroup = &(*userlist_p)->groups[(*userlist_p)->ngroups -1];
 
@@ -1589,8 +1594,7 @@ static int32_t scap_read_fdlist(scap_reader_t* r, uint32_t block_length, uint32_
 			ASSERT(tinfo == NULL);
 
 			proclist->m_proc_callback(
-				proclist->m_proc_callback_context,
-				proclist->m_main_handle, tid, NULL, &fdi);
+				proclist->m_proc_callback_context, tid, NULL, &fdi);
 		}
 	}
 
@@ -1907,6 +1911,8 @@ static int32_t next(struct scap_engine_handle engine, scap_evt **pevent, uint16_
 			// Try to allocate a buffer large enough
 			char *tmp = realloc(handle->m_reader_evt_buf, readlen);
 			if (!tmp) {
+				free(handle->m_reader_evt_buf);
+				handle->m_reader_evt_buf = NULL;
 				snprintf(handle->m_lasterr, SCAP_LASTERR_SIZE, "event block length %u greater than read buffer size %zu",
 					 readlen,
 					 handle->m_reader_evt_buf_size);
@@ -2030,11 +2036,6 @@ void scap_savefile_fseek(struct scap_engine_handle engine, uint64_t off)
 {
 	scap_reader_t* reader = engine.m_handle->m_reader;
 	reader->seek(reader, off, SEEK_SET);
-}
-
-static bool match(struct scap_open_args* oargs)
-{
-	return strcmp(oargs->engine_name, SAVEFILE_ENGINE) == 0;
 }
 
 static struct savefile_engine* alloc_handle(struct scap* main_handle, char* lasterr_ptr)
@@ -2214,7 +2215,6 @@ struct scap_vtable scap_savefile_engine = {
 	.mode = SCAP_MODE_CAPTURE,
 	.savefile_ops = &savefile_ops,
 
-	.match = match,
 	.alloc_handle = alloc_handle,
 	.init = init,
 	.free_handle = free_handle,
@@ -2231,4 +2231,6 @@ struct scap_vtable scap_savefile_engine = {
 	.get_vpid = noop_get_vxid,
 	.get_vtid = noop_get_vxid,
 	.getpid_global = noop_getpid_global,
+	.get_api_version = NULL,
+	.get_schema_version = NULL,
 };

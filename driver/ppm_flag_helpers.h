@@ -22,6 +22,7 @@ or GPL2.txt for full copies of the license.
 #include <linux/futex.h>
 #include <linux/ptrace.h>
 #include <linux/capability.h>
+#include <linux/eventpoll.h>
 #include "ppm.h"
 #ifdef __NR_io_uring_register
 #include <uapi/linux/io_uring.h>
@@ -888,12 +889,37 @@ static __always_inline u8 sockopt_optname_to_scap(int level, int optname)
 		case SO_SNDLOWAT:
 			return PPM_SOCKOPT_SO_SNDLOWAT;
 #endif
+/* We use this workaround to avoid 2 switch cases with the same value.
+ * An `elif` approach is not enough if `SO_RCVTIMEO` is not defined.
+ * In this case we have only `SO_RCVTIMEO_OLD` and `SO_RCVTIMEO_NEW` so
+ * we couldn't be able to detect the right flag value, for example: 
+ * `SO_RCVTIMEO_OLD` is defined so we compile only this branch, but
+ * actual value of `SO_RCVTIMEO` is `SO_RCVTIMEO_NEW`.
+ * https://github.com/torvalds/linux/commit/a9beb86ae6e55bd92f38453c8623de60b8e5a308
+ */
 #ifdef SO_RCVTIMEO
 		case SO_RCVTIMEO:
 			return PPM_SOCKOPT_SO_RCVTIMEO;
 #endif
+#if (defined(SO_RCVTIMEO_OLD) && !defined(SO_RCVTIMEO)) || (defined(SO_RCVTIMEO_OLD) && (SO_RCVTIMEO_OLD != SO_RCVTIMEO))
+		case SO_RCVTIMEO_OLD:
+			return PPM_SOCKOPT_SO_RCVTIMEO;
+#endif			
+#if (defined(SO_RCVTIMEO_NEW) && !defined(SO_RCVTIMEO)) || (defined(SO_RCVTIMEO_NEW) && (SO_RCVTIMEO_NEW != SO_RCVTIMEO)) 
+		case SO_RCVTIMEO_NEW:
+			return PPM_SOCKOPT_SO_RCVTIMEO;
+#endif
+/* Look at `SO_RCVTIMEO` */
 #ifdef SO_SNDTIMEO
 		case SO_SNDTIMEO:
+			return PPM_SOCKOPT_SO_SNDTIMEO;
+#endif
+#if (defined(SO_SNDTIMEO_OLD) && !defined(SO_SNDTIMEO)) || (defined(SO_SNDTIMEO_OLD) && (SO_SNDTIMEO_OLD != SO_SNDTIMEO))
+		case SO_SNDTIMEO_OLD:
+			return PPM_SOCKOPT_SO_SNDTIMEO;
+#endif
+#if (defined(SO_SNDTIMEO_NEW) && !defined(SO_SNDTIMEO)) || (defined(SO_SNDTIMEO_NEW) && (SO_SNDTIMEO_NEW != SO_SNDTIMEO))
+		case SO_SNDTIMEO_NEW:
 			return PPM_SOCKOPT_SO_SNDTIMEO;
 #endif
 #ifdef SO_SECURITY_AUTHENTICATION
@@ -1685,6 +1711,23 @@ static __always_inline u32 chmod_mode_to_scap(unsigned long modes)
 	return res;
 }
 
+static __always_inline u32 fchownat_flags_to_scap(unsigned long flags)
+{
+	u32 res = 0;
+
+#ifdef AT_SYMLINK_FOLLOW
+	if (flags & AT_SYMLINK_FOLLOW)
+		res |= PPM_AT_SYMLINK_FOLLOW;
+#endif
+
+#ifdef AT_EMPTY_PATH
+	if (flags & AT_EMPTY_PATH)
+		res |= PPM_AT_EMPTY_PATH;
+#endif
+
+	return res;
+}
+
 static __always_inline u64 capabilities_to_scap(unsigned long caps)
 {
 	u64 res = 0;
@@ -1873,6 +1916,28 @@ static __always_inline uint32_t epoll_create1_flags_to_scap(uint32_t flags)
 #ifdef EPOLL_CLOEXEC
 	if (flags & EPOLL_CLOEXEC)
 		res |= PPM_EPOLL_CLOEXEC;
+#endif
+	return res;
+}
+
+static __always_inline uint32_t splice_flags_to_scap(uint32_t flags)
+{
+	uint32_t res = 0;
+#ifdef SPLICE_F_MOVE
+	if (flags & SPLICE_F_MOVE)
+		res |= PPM_SPLICE_F_MOVE;
+#endif
+#ifdef SPLICE_F_NONBLOCK
+	if (flags & SPLICE_F_NONBLOCK)
+		res |= PPM_SPLICE_F_NONBLOCK;
+#endif
+#ifdef SPLICE_F_MORE
+	if (flags & SPLICE_F_MORE)
+		res |= PPM_SPLICE_F_MORE;
+#endif
+#ifdef SPLICE_F_GIFT
+	if (flags & SPLICE_F_GIFT)
+		res |= PPM_SPLICE_F_GIFT;
 #endif
 	return res;
 }

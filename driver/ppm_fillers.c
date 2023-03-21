@@ -127,7 +127,7 @@ int f_sys_generic(struct event_filler_arguments *args)
 
 	if (likely(table_index >= 0 &&
 		   table_index <  SYSCALL_TABLE_SIZE)) {
-		enum ppm_syscall_code sc_code = cur_g_syscall_table[table_index].ppm_sc;
+		ppm_sc_code sc_code = cur_g_syscall_table[table_index].ppm_sc;
 
 		/*
 		 * ID
@@ -334,6 +334,26 @@ int f_sys_open_x(struct event_filler_arguments *args)
 	return add_sentinel(args);
 }
 
+int f_sys_read_e(struct event_filler_arguments *args)
+{
+	unsigned long val = 0;
+	int res = 0;
+	s32 fd = 0;
+
+	/* Parameter 1: fd (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: size (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
 int f_sys_read_x(struct event_filler_arguments *args)
 {
 	unsigned long val;
@@ -385,6 +405,26 @@ int f_sys_read_x(struct event_filler_arguments *args)
 	return add_sentinel(args);
 }
 
+int f_sys_write_e(struct event_filler_arguments *args)
+{
+	unsigned long val = 0;
+	int res = 0;
+	s32 fd = 0;
+
+	/* Parameter 1: fd (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: size (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
 int f_sys_write_x(struct event_filler_arguments *args)
 {
 	unsigned long val;
@@ -398,18 +438,26 @@ int f_sys_write_x(struct event_filler_arguments *args)
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
 	args->fd = (int)val;
 
-	/*
-	 * res
-	 */
+	/* Parameter 1: res (type: PT_ERRNO) */
 	retval = (int64_t)(long)syscall_get_return_value(current, args->regs);
 
 	res = val_to_ring(args, retval, 0, false, 0);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
 
-	/*
-	 * data
+	/* If the syscall fails we are not able to collect reliable params
+	 * so we return empty ones.
 	 */
+	if(retval < 0)
+	{
+		/* Parameter 2: data (type: PT_BYTEBUF) */
+		res = push_empty_param(args);
+		CHECK_RES(res);
+
+		return add_sentinel(args);
+	}
+
+	/* Parameter 2: data (type: PT_BYTEBUF) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
 	bufsize = val;
 
@@ -799,7 +847,6 @@ int f_proc_startupdate(struct event_filler_arguments *args)
 	struct mm_struct *mm = current->mm;
 	int64_t retval;
 	int ptid;
-	char *spwd = "";
 	long total_vm = 0;
 	long total_rss = 0;
 	long swap = 0;
@@ -966,7 +1013,7 @@ int f_proc_startupdate(struct event_filler_arguments *args)
 	 * cwd, pushed empty to avoid breaking compatibility
 	 * with the older event format
 	 */
-	res = val_to_ring(args, (uint64_t)(long)spwd, 0, false, 0);
+	res = push_empty_param(args);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
 
@@ -1181,6 +1228,7 @@ cgroups_error:
 		uint64_t cap_inheritable = 0;
 		uint64_t cap_permitted = 0;
 		uint64_t cap_effective = 0;
+		uint64_t euid = 0;
 
 		if (likely(retval >= 0)) {
 			/*
@@ -1390,6 +1438,17 @@ cgroups_error:
 		/* Parameter 26: exe_file mtime (last modification time, epoch value in nanoseconds) (type: PT_ABSTIME) */
 		res = val_to_ring(args, mtime, 0, false, 0);
 		CHECK_RES(res);
+
+		/* Parameter 27: uid */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
+		euid = from_kuid_munged(current_user_ns(), current_euid());
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
+		euid = current_euid();
+#else
+		euid = current->euid;
+#endif
+		res = val_to_ring(args, euid, 0, false, 0);
+		CHECK_RES(res);
 	}
 	return add_sentinel(args);
 
@@ -1457,6 +1516,31 @@ int f_sys_execveat_e(struct event_filler_arguments *args)
 	{
 		return res;
 	}
+
+	return add_sentinel(args);
+}
+
+int f_sys_socket_bind_e(struct event_filler_arguments *args)
+{
+	int res = 0;
+	s32 fd = 0;
+	unsigned long val = 0;
+
+	if(!args->is_socketcall)
+	{
+		syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	}
+#ifndef UDIG
+	else
+	{
+		val = args->socketcall_args[0];
+	}
+#endif
+
+	/* Parameter 1: fd (type: PT_FD) */
+	fd = (int32_t)val;
+	res = val_to_ring(args, (int64_t)fd, 0, false, 0);
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -1702,7 +1786,8 @@ int f_sys_socketpair_x(struct event_filler_arguments *args)
 	int res;
 	int64_t retval;
 	unsigned long val;
-	int fds[2];
+	/* In case of failure we send invalid fd (-1) */
+	int fds[2] = {-1, -1};
 	int err;
 	struct socket *sock;
 	struct unix_sock *us;
@@ -1740,11 +1825,11 @@ int f_sys_socketpair_x(struct event_filler_arguments *args)
 		}
 #endif
 
-		res = val_to_ring(args, fds[0], 0, false, 0);
+		res = val_to_ring(args, (s64)fds[0], 0, false, 0);
 		if (unlikely(res != PPM_SUCCESS))
 			return res;
 
-		res = val_to_ring(args, fds[1], 0, false, 0);
+		res = val_to_ring(args, (s64)fds[1], 0, false, 0);
 		if (unlikely(res != PPM_SUCCESS))
 			return res;
 
@@ -1771,11 +1856,11 @@ int f_sys_socketpair_x(struct event_filler_arguments *args)
 		}
 	} else {
 #endif /* UDIG */
-		res = val_to_ring(args, 0, 0, false, 0);
+		res = val_to_ring(args, (s64)fds[0], 0, false, 0);
 		if (unlikely(res != PPM_SUCCESS))
 			return res;
 
-		res = val_to_ring(args, 0, 0, false, 0);
+		res = val_to_ring(args, (s64)fds[1], 0, false, 0);
 		if (unlikely(res != PPM_SUCCESS))
 			return res;
 
@@ -1795,264 +1880,292 @@ int f_sys_socketpair_x(struct event_filler_arguments *args)
 
 static int parse_sockopt(struct event_filler_arguments *args, int level, int optname, const void __user *optval, int optlen)
 {
-	union {
-		uint32_t val32;
-		uint64_t val64;
-		struct timeval tv;
-	} u;
-	nanoseconds ns = 0;
+	int32_t val32 = 0;
+	uint64_t val64 = 0;
+	struct __aux_timeval tv = {0};
 
-	if (level == SOL_SOCKET) {
-		switch (optname) {
+	if(level != SOL_SOCKET)
+	{
+		return val_to_ring(args, (unsigned long)optval, optlen, true, PPM_SOCKOPT_IDX_UNKNOWN);
+	}
+
+	switch (optname) {
 #ifdef SO_ERROR
-			case SO_ERROR:
-				if (unlikely(ppm_copy_from_user(&u.val32, optval, sizeof(u.val32))))
-					return PPM_FAILURE_INVALID_USER_MEMORY;
-				return val_to_ring(args, -(int)u.val32, 0, false, PPM_SOCKOPT_IDX_ERRNO);
+		case SO_ERROR:
+			/* in case of failure we have to clear again the value */
+			if(unlikely(ppm_copy_from_user(&val32, optval, sizeof(val32))))
+			{
+				val32 = 0;
+			}
+			return val_to_ring(args, (s64)-val32, 0, false, PPM_SOCKOPT_IDX_ERRNO);
 #endif
 
 #ifdef SO_RCVTIMEO
-			case SO_RCVTIMEO:
+		case SO_RCVTIMEO:
+#endif
+#if (defined(SO_RCVTIMEO_OLD) && !defined(SO_RCVTIMEO)) || (defined(SO_RCVTIMEO_OLD) && (SO_RCVTIMEO_OLD != SO_RCVTIMEO))
+		case SO_RCVTIMEO_OLD:
+#endif			
+#if (defined(SO_RCVTIMEO_NEW) && !defined(SO_RCVTIMEO)) || (defined(SO_RCVTIMEO_NEW) && (SO_RCVTIMEO_NEW != SO_RCVTIMEO)) 
+		case SO_RCVTIMEO_NEW:
 #endif
 #ifdef SO_SNDTIMEO
-			case SO_SNDTIMEO:
+		case SO_SNDTIMEO:
 #endif
-				if (unlikely(ppm_copy_from_user(&u.tv, optval, sizeof(u.tv)))) {
-					return PPM_FAILURE_INVALID_USER_MEMORY;
-				}
-				ns = u.tv.tv_sec * SECOND_IN_NS + u.tv.tv_usec * 1000;
-				return val_to_ring(args, ns, 0, false, PPM_SOCKOPT_IDX_TIMEVAL);
+#if (defined(SO_SNDTIMEO_OLD) && !defined(SO_SNDTIMEO)) || (defined(SO_SNDTIMEO_OLD) && (SO_SNDTIMEO_OLD != SO_SNDTIMEO))
+		case SO_SNDTIMEO_OLD:
+#endif
+#if (defined(SO_SNDTIMEO_NEW) && !defined(SO_SNDTIMEO)) || (defined(SO_SNDTIMEO_NEW) && (SO_SNDTIMEO_NEW != SO_SNDTIMEO))
+		case SO_SNDTIMEO_NEW:
+#endif
+			if(unlikely(ppm_copy_from_user(&tv, optval, sizeof(tv))))
+			{
+				tv.tv_sec = 0;
+				tv.tv_usec = 0;
+			}
+			return val_to_ring(args, tv.tv_sec * SECOND_IN_NS + tv.tv_usec * USECOND_IN_NS, 0, false, PPM_SOCKOPT_IDX_TIMEVAL);
 
 #ifdef SO_COOKIE
-			case SO_COOKIE:
-				if (unlikely(ppm_copy_from_user(&u.val64, optval, sizeof(u.val64))))
-					return PPM_FAILURE_INVALID_USER_MEMORY;
-				return val_to_ring(args, u.val64, 0, false, PPM_SOCKOPT_IDX_UINT64);
+		case SO_COOKIE:
+			if(unlikely(ppm_copy_from_user(&val64, optval, sizeof(val64))))
+			{
+				val64 = 0;
+			}
+			return val_to_ring(args, val64, 0, false, PPM_SOCKOPT_IDX_UINT64);
 #endif
 
 #ifdef SO_DEBUG
-			case SO_DEBUG:
+		case SO_DEBUG:
 #endif
 #ifdef SO_REUSEADDR
-			case SO_REUSEADDR:
+		case SO_REUSEADDR:
 #endif
 #ifdef SO_TYPE
-			case SO_TYPE:
+		case SO_TYPE:
 #endif
 #ifdef SO_DONTROUTE
-			case SO_DONTROUTE:
+		case SO_DONTROUTE:
 #endif
 #ifdef SO_BROADCAST
-			case SO_BROADCAST:
+		case SO_BROADCAST:
 #endif
 #ifdef SO_SNDBUF
-			case SO_SNDBUF:
+		case SO_SNDBUF:
 #endif
 #ifdef SO_RCVBUF
-			case SO_RCVBUF:
+		case SO_RCVBUF:
 #endif
 #ifdef SO_SNDBUFFORCE
-			case SO_SNDBUFFORCE:
+		case SO_SNDBUFFORCE:
 #endif
 #ifdef SO_RCVBUFFORCE
-			case SO_RCVBUFFORCE:
+		case SO_RCVBUFFORCE:
 #endif
 #ifdef SO_KEEPALIVE
-			case SO_KEEPALIVE:
+		case SO_KEEPALIVE:
 #endif
 #ifdef SO_OOBINLINE
-			case SO_OOBINLINE:
+		case SO_OOBINLINE:
 #endif
 #ifdef SO_NO_CHECK
-			case SO_NO_CHECK:
+		case SO_NO_CHECK:
 #endif
 #ifdef SO_PRIORITY
-			case SO_PRIORITY:
+		case SO_PRIORITY:
 #endif
 #ifdef SO_BSDCOMPAT
-			case SO_BSDCOMPAT:
+		case SO_BSDCOMPAT:
 #endif
 #ifdef SO_REUSEPORT
-			case SO_REUSEPORT:
+		case SO_REUSEPORT:
 #endif
 #ifdef SO_PASSCRED
-			case SO_PASSCRED:
+		case SO_PASSCRED:
 #endif
 #ifdef SO_RCVLOWAT
-			case SO_RCVLOWAT:
+		case SO_RCVLOWAT:
 #endif
 #ifdef SO_SNDLOWAT
-			case SO_SNDLOWAT:
+		case SO_SNDLOWAT:
 #endif
 #ifdef SO_SECURITY_AUTHENTICATION
-			case SO_SECURITY_AUTHENTICATION:
+		case SO_SECURITY_AUTHENTICATION:
 #endif
 #ifdef SO_SECURITY_ENCRYPTION_TRANSPORT
-			case SO_SECURITY_ENCRYPTION_TRANSPORT:
+		case SO_SECURITY_ENCRYPTION_TRANSPORT:
 #endif
 #ifdef SO_SECURITY_ENCRYPTION_NETWORK
-			case SO_SECURITY_ENCRYPTION_NETWORK:
+		case SO_SECURITY_ENCRYPTION_NETWORK:
 #endif
 #ifdef SO_BINDTODEVICE
-			case SO_BINDTODEVICE:
+		case SO_BINDTODEVICE:
 #endif
 #ifdef SO_DETACH_FILTER
-			case SO_DETACH_FILTER:
+		case SO_DETACH_FILTER:
 #endif
 #ifdef SO_TIMESTAMP
-			case SO_TIMESTAMP:
+		case SO_TIMESTAMP:
 #endif
 #ifdef SO_ACCEPTCONN
-			case SO_ACCEPTCONN:
+		case SO_ACCEPTCONN:
 #endif
 #ifdef SO_PEERSEC
-			case SO_PEERSEC:
+		case SO_PEERSEC:
 #endif
 #ifdef SO_PASSSEC
-			case SO_PASSSEC:
+		case SO_PASSSEC:
 #endif
 #ifdef SO_TIMESTAMPNS
-			case SO_TIMESTAMPNS:
+		case SO_TIMESTAMPNS:
 #endif
 #ifdef SO_MARK
-			case SO_MARK:
+		case SO_MARK:
 #endif
 #ifdef SO_TIMESTAMPING
-			case SO_TIMESTAMPING:
+		case SO_TIMESTAMPING:
 #endif
 #ifdef SO_PROTOCOL
-			case SO_PROTOCOL:
+		case SO_PROTOCOL:
 #endif
 #ifdef SO_DOMAIN
-			case SO_DOMAIN:
+		case SO_DOMAIN:
 #endif
 #ifdef SO_RXQ_OVFL
-			case SO_RXQ_OVFL:
+		case SO_RXQ_OVFL:
 #endif
 #ifdef SO_WIFI_STATUS
-			case SO_WIFI_STATUS:
+		case SO_WIFI_STATUS:
 #endif
 #ifdef SO_PEEK_OFF
-			case SO_PEEK_OFF:
+		case SO_PEEK_OFF:
 #endif
 #ifdef SO_NOFCS
-			case SO_NOFCS:
+		case SO_NOFCS:
 #endif
 #ifdef SO_LOCK_FILTER
-			case SO_LOCK_FILTER:
+		case SO_LOCK_FILTER:
 #endif
 #ifdef SO_SELECT_ERR_QUEUE
-			case SO_SELECT_ERR_QUEUE:
+		case SO_SELECT_ERR_QUEUE:
 #endif
 #ifdef SO_BUSY_POLL
-			case SO_BUSY_POLL:
+		case SO_BUSY_POLL:
 #endif
 #ifdef SO_MAX_PACING_RATE
-			case SO_MAX_PACING_RATE:
+		case SO_MAX_PACING_RATE:
 #endif
 #ifdef SO_BPF_EXTENSIONS
-			case SO_BPF_EXTENSIONS:
+		case SO_BPF_EXTENSIONS:
 #endif
 #ifdef SO_INCOMING_CPU
-			case SO_INCOMING_CPU:
+		case SO_INCOMING_CPU:
 #endif
-				if (unlikely(ppm_copy_from_user(&u.val32, optval, sizeof(u.val32))))
-					return PPM_FAILURE_INVALID_USER_MEMORY;
-				return val_to_ring(args, u.val32, 0, false, PPM_SOCKOPT_IDX_UINT32);
+			if(unlikely(ppm_copy_from_user(&val32, optval, sizeof(val32))))
+			{
+				val32 = 0;
+			}
+			return val_to_ring(args, val32, 0, false, PPM_SOCKOPT_IDX_UINT32);
 
-			default:
-				return val_to_ring(args, (unsigned long)optval, optlen, true, PPM_SOCKOPT_IDX_UNKNOWN);
-		}
-	} else {
-		return val_to_ring(args, (unsigned long)optval, optlen, true, PPM_SOCKOPT_IDX_UNKNOWN);
+		default:
+			return val_to_ring(args, (unsigned long)optval, optlen, true, PPM_SOCKOPT_IDX_UNKNOWN);
 	}
 }
 
 int f_sys_setsockopt_x(struct event_filler_arguments *args)
 {
-	int res;
-	int64_t retval;
+	int res = 0;
+	long retval = 0;
 	syscall_arg_t val[5] = {0};
+	s32 fd = 0;
 
-	syscall_get_arguments_deprecated(current, args->regs, 0, 5, val);
-	retval = (int64_t)(long)syscall_get_return_value(current, args->regs);
-
-	/* retval */
+	/* Parameter 1: res (type: PT_ERRNO) */
+	retval = syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* fd */
-	res = val_to_ring(args, val[0], 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	/* Get all the five arguments */
+	if (!args->is_socketcall)
+		syscall_get_arguments_deprecated(current, args->regs, 0, 5, val);
+#ifndef UDIG
+	else
+		memcpy(val, args->socketcall_args, 5*sizeof(syscall_arg_t));
+#endif
 
-	/* level */
+	/* Parameter 2: fd (type: PT_FD) */
+	fd = (s32)val[0];
+	res = val_to_ring(args, (s64)fd, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: level (type: PT_ENUMFLAGS8) */
 	res = val_to_ring(args, sockopt_level_to_scap(val[1]), 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* optname */
+	/* Parameter 4: optname (type: PT_ENUMFLAGS8) */
 	res = val_to_ring(args, sockopt_optname_to_scap(val[1], val[2]), 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* optval */
+	/* Parameter 5: optval (type: PT_DYN) */
 	res = parse_sockopt(args, val[1], val[2], (const void __user*)val[3], val[4]);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* optlen */
+	/* Parameter 6: optlen (type: PT_UINT32) */
 	res = val_to_ring(args, val[4], 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
-
 }
 
 int f_sys_getsockopt_x(struct event_filler_arguments *args)
 {
-	int res;
-	int64_t retval;
-	uint32_t optlen;
+	int res = 0;
+	int64_t retval = 0;
+	uint32_t optlen = 0;
+	s32 fd = 0;
 	syscall_arg_t val[5] = {0};
 
-	syscall_get_arguments_deprecated(current, args->regs, 0, 5, val);
+	/* Get all the five arguments */
+	if (!args->is_socketcall)
+		syscall_get_arguments_deprecated(current, args->regs, 0, 5, val);
+#ifndef UDIG
+	else
+		memcpy(val, args->socketcall_args, 5*sizeof(syscall_arg_t));
+#endif
+
+	/* Parameter 1: res (type: PT_ERRNO) */
 	retval = (int64_t)(long)syscall_get_return_value(current, args->regs);
-
-	/* retval */
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* fd */
-	res = val_to_ring(args, val[0], 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	/* Parameter 2: fd (type: PT_FD) */
+	fd = (s32)val[0];
+	res = val_to_ring(args, (s64)fd, 0, true, 0);
+	CHECK_RES(res);
 
-	/* level */
+	/* Parameter 3: level (type: PT_ENUMFLAGS8) */
 	res = val_to_ring(args, sockopt_level_to_scap(val[1]), 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* optname */
+	/* Parameter 4: optname (type: PT_ENUMFLAGS8) */
 	res = val_to_ring(args, sockopt_optname_to_scap(val[1], val[2]), 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	if (unlikely(ppm_copy_from_user(&optlen, (const void __user*)val[4], sizeof(optlen))))
-		return PPM_FAILURE_INVALID_USER_MEMORY;
+	/* `optval` and `optlen` will be the ones provided by the user if the syscall fails
+	 * otherwise they will refer to the real socket data since the kernel populated them.
+	 */
 
-	/* optval */
+	/* Extract optlen */
+	if(unlikely(ppm_copy_from_user(&optlen, (const void __user*)val[4], sizeof(optlen))))
+	{
+		optlen = 0;
+	}
+
+	/* Parameter 5: optval (type: PT_DYN) */
 	res = parse_sockopt(args, val[1], val[2], (const void __user*)val[3], optlen);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* optlen */
+	/* Parameter 6: optlen (type: PT_UINT32) */
 	res = val_to_ring(args, optlen, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -2094,61 +2207,71 @@ int f_sys_accept_x(struct event_filler_arguments *args)
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
 
-	/*
-	 * Convert the fd into socket endpoint information
-	 */
-	size = fd_to_socktuple(fd,
-		NULL,
-		0,
-		false,
-		true,
-		targetbuf,
-		STR_STORAGE_SIZE);
-
-	/*
-	 * Copy the endpoint info into the ring
-	 */
-	res = val_to_ring(args,
-			    (uint64_t)targetbuf,
-			    size,
-			    false,
-			    0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-
-	/*
-	 * queuepct
-	 */
-	if (!args->is_socketcall)
-		syscall_get_arguments_deprecated(current, args->regs, 0, 1, &srvskfd);
+	if (fd >= 0)
+	{
+		/*
+		 * Convert the fd into socket endpoint information
+		 */
+		size = fd_to_socktuple(fd,
+				NULL,
+				0,
+				false,
+				true,
+				targetbuf,
+				STR_STORAGE_SIZE);
+		/*
+		 * queuepct
+		 */
+		if (!args->is_socketcall)
+			syscall_get_arguments_deprecated(current, args->regs, 0, 1, &srvskfd);
 #ifndef UDIG
-	else
-		srvskfd = args->socketcall_args[0];
+		else
+			srvskfd = args->socketcall_args[0];
 #endif
 
 #ifndef UDIG
-	sock = sockfd_lookup(srvskfd, &err);
+		sock = sockfd_lookup(srvskfd, &err);
 
-	if (sock && sock->sk) {
-		ack_backlog = sock->sk->sk_ack_backlog;
-		max_ack_backlog = sock->sk->sk_max_ack_backlog;
-	}
+		if (sock && sock->sk) {
+			ack_backlog = sock->sk->sk_ack_backlog;
+			max_ack_backlog = sock->sk->sk_max_ack_backlog;
+		}
 
-	if (sock)
-		sockfd_put(sock);
+		if (sock)
+			sockfd_put(sock);
 
-	if (max_ack_backlog)
-		queuepct = (unsigned long)ack_backlog * 100 / max_ack_backlog;
+		if (max_ack_backlog)
+			queuepct = (unsigned long)ack_backlog * 100 / max_ack_backlog;
 #endif /* UDIG */
 
+		/* Parameter 2: tuple (type: PT_SOCKTUPLE) */
+		res = val_to_ring(args,
+				(uint64_t)targetbuf,
+				size,
+				false,
+				0);
+		if (unlikely(res != PPM_SUCCESS))
+			return res;
+	}
+	else
+	{
+		/* Parameter 2: tuple (type: PT_SOCKTUPLE) */
+		res = push_empty_param(args);
+		if (unlikely(res != PPM_SUCCESS))
+			return res;
+	}
+
+	/* Parameter 3: queuepct (type: PT_UINT8) */
 	res = val_to_ring(args, queuepct, 0, false, 0);
 	if (res != PPM_SUCCESS)
 		return res;
 
+	/* Parameter 4: queuelen (type: PT_UINT32) */
 	res = val_to_ring(args, ack_backlog, 0, false, 0);
 	if (res != PPM_SUCCESS)
 		return res;
 
+	/* Parameter 5: queuemax (type: PT_UINT32) */
 	res = val_to_ring(args, max_ack_backlog, 0, false, 0);
 	if (res != PPM_SUCCESS)
 		return res;
@@ -2409,6 +2532,44 @@ int f_sys_recv_x(struct event_filler_arguments *args)
 	return res;
 }
 
+int f_sys_recvfrom_e(struct event_filler_arguments *args)
+{
+	int res = 0;
+	unsigned long val = 0;
+	s32 fd = 0;
+
+	/* Parameter 1: fd (type: PT_FD) */
+	if(!args->is_socketcall)
+	{
+		syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	}
+#ifndef UDIG
+	else
+	{
+		val = args->socketcall_args[0];
+	}
+#endif
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: size (type: PT_UINT32) */
+	if(!args->is_socketcall)
+	{
+		syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+	}
+#ifndef UDIG
+	else
+	{
+		val = args->socketcall_args[2];
+	}
+#endif
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
 int f_sys_recvfrom_x(struct event_filler_arguments *args)
 {
 	unsigned long val;
@@ -2643,7 +2804,7 @@ int f_sys_sendmsg_x(struct event_filler_arguments *args)
 {
 	int res;
 	unsigned long val;
-	int64_t retval;
+	long retval;
 	const struct iovec __user *iov;
 #ifdef CONFIG_COMPAT
 	const struct compat_iovec __user *compat_iov;
@@ -2661,13 +2822,22 @@ int f_sys_sendmsg_x(struct event_filler_arguments *args)
 	struct msghdr mh;
 #endif /* UDIG */
 
-	/*
-	 * res
-	 */
-	retval = (int64_t)syscall_get_return_value(current, args->regs);
+	/* Parameter 1: res (type: PT_ERRNO) */
+	retval = syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
+
+	/* If the syscall fails we are not able to collect reliable params
+	 * so we return empty ones.
+	 */
+	if(retval < 0)
+	{
+		/* Parameter 2: data (type: PT_BYTEBUF) */
+		res = push_empty_param(args);
+		CHECK_RES(res);
+
+		return add_sentinel(args);
+	}
 
 	/*
 	 * Retrieve the message header
@@ -2712,6 +2882,30 @@ int f_sys_sendmsg_x(struct event_filler_arguments *args)
 	return add_sentinel(args);
 }
 
+int f_sys_recvmsg_e(struct event_filler_arguments *args)
+{
+	unsigned long val = 0;
+	int res = 0;
+	s32 fd = 0;
+
+	/* Parameter 1: fd (type: PT_FD)*/
+	if(!args->is_socketcall)
+	{
+		syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	}
+#ifndef UDIG
+	else
+	{
+		val = args->socketcall_args[0];
+	}
+#endif
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
 int f_sys_recvmsg_x(struct event_filler_arguments *args)
 {
 	int res;
@@ -2740,13 +2934,30 @@ int f_sys_recvmsg_x(struct event_filler_arguments *args)
 	int addrlen;
 	int err = 0;
 
-	/*
-	 * res
-	 */
+	/* Parameter 1: res (type: PT_ERRNO) */
 	retval = (int64_t)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
+
+	/* If the syscall fails we are not able to collect reliable params
+	 * so we return empty ones.
+	 */
+	if(retval < 0)
+	{
+		/* Parameter 2: size (type: PT_UINT32) */
+		res = val_to_ring(args, 0, 0, false, 0);
+		CHECK_RES(res);
+
+		/* Parameter 3: data (type: PT_BYTEBUF) */
+		res = push_empty_param(args);
+		CHECK_RES(res);
+
+		/* Parameter 4: tuple (type: PT_SOCKTUPLE) */
+		res = push_empty_param(args);
+		CHECK_RES(res);
+
+		return add_sentinel(args);
+	}
 
 	/*
 	 * Retrieve the message header
@@ -2928,51 +3139,54 @@ int f_sys_creat_x(struct event_filler_arguments *args)
 
 int f_sys_pipe_x(struct event_filler_arguments *args)
 {
-	int res;
-	int64_t retval;
-	unsigned long val;
-	int fds[2];
+	int res = 0;
+	int64_t retval = 0;
+	unsigned long val = 0;
+	int pipefd[2] = {-1, -1};
 	uint32_t dev = 0;
 	uint64_t ino = 0;
 
-	/*
-	 * retval
-	 */
+	/* Parameter 1: res (type: PT_ERRNO) */
 	retval = (int64_t)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * fds
-	 */
+	/* Here `val` is a pointer to the vector with the 2 file descriptors. */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
 
 #ifdef CONFIG_COMPAT
 	if (!args->compat) {
 #endif
-		if (unlikely(ppm_copy_from_user(fds, (const void __user *)val, sizeof(fds))))
-			return PPM_FAILURE_INVALID_USER_MEMORY;
+		if (unlikely(ppm_copy_from_user(pipefd, (const void __user *)val, sizeof(pipefd))))
+		{
+			pipefd[0] = -1;
+			pipefd[1] = -1;
+		}
 #ifdef CONFIG_COMPAT
 	} else {
-		if (unlikely(ppm_copy_from_user(fds, (const void __user *)compat_ptr(val), sizeof(fds))))
-			return PPM_FAILURE_INVALID_USER_MEMORY;
+		if (unlikely(ppm_copy_from_user(pipefd, (const void __user *)compat_ptr(val), sizeof(pipefd))))
+		{
+			pipefd[0] = -1;
+			pipefd[1] = -1;
+		}
 	}
 #endif
 
-	res = val_to_ring(args, fds[0], 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	/* Parameter 2: fd1 (type: PT_FD) */
+	res = val_to_ring(args, (s64)pipefd[0], 0, false, 0);
+	CHECK_RES(res);
 
-	res = val_to_ring(args, fds[1], 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	/* Parameter 3: fd2 (type: PT_FD) */
+	res = val_to_ring(args, (s64)pipefd[1], 0, false, 0);
+	CHECK_RES(res);
 
-	get_fd_dev_ino(fds[0], &dev, &ino);
-
+	/* On success, pipe returns `0` */
+	if(retval == 0)
+	{
+		get_fd_dev_ino(pipefd[0], &dev, &ino);
+	}
 	res = val_to_ring(args, ino, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -3005,12 +3219,11 @@ int f_sys_eventfd_e(struct event_filler_arguments *args)
 
 int f_sys_shutdown_e(struct event_filler_arguments *args)
 {
-	int res;
-	unsigned long val;
+	int res = 0;
+	unsigned long val = 0;
+	s32 fd = 0;
 
-	/*
-	 * fd
-	 */
+	/* Parameter 1: fd (type: PT_FD) */
 	if (!args->is_socketcall)
 		syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
 #ifndef UDIG
@@ -3018,13 +3231,11 @@ int f_sys_shutdown_e(struct event_filler_arguments *args)
 		val = args->socketcall_args[0];
 #endif
 
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
 
-	/*
-	 * how
-	 */
+	/* Parameter 2: how (type: PT_ENUMFLAGS8) */
 	if (!args->is_socketcall)
 		syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 #ifndef UDIG
@@ -3033,8 +3244,7 @@ int f_sys_shutdown_e(struct event_filler_arguments *args)
 #endif
 
 	res = val_to_ring(args, (unsigned long)shutdown_how_to_scap(val), 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -3074,13 +3284,15 @@ int f_sys_futex_e(struct event_filler_arguments *args)
 int f_sys_lseek_e(struct event_filler_arguments *args)
 {
 	unsigned long val;
+	s32 fd;
 	int res;
 
 	/*
 	 * fd
 	 */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, false, 0);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
 
@@ -3110,12 +3322,14 @@ int f_sys_llseek_e(struct event_filler_arguments *args)
 	unsigned long oh;
 	unsigned long ol;
 	uint64_t offset;
+	s32 fd;
 
 	/*
 	 * fd
 	 */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, false, 0);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
 
@@ -3170,20 +3384,25 @@ static int poll_parse_fds(struct event_filler_arguments *args, bool enter_event)
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
 
 	fds = (struct pollfd *)args->str_storage;
+
+	/* We don't want to discard the whole event if the pointer is null.
+	 * Setting `nfds = 0` we will just push to userspace the number of fds read,
+	 * in this case `0`.
+	 */
 #ifdef CONFIG_COMPAT
 	if (!args->compat) {
 #endif
 		if (unlikely(ppm_copy_from_user(fds, (const void __user *)val, nfds * sizeof(struct pollfd))))
-			return PPM_FAILURE_INVALID_USER_MEMORY;
+			nfds = 0;
 #ifdef CONFIG_COMPAT
 	} else {
 		if (unlikely(ppm_copy_from_user(fds, (const void __user *)compat_ptr(val), nfds * sizeof(struct pollfd))))
-			return PPM_FAILURE_INVALID_USER_MEMORY;
+			nfds = 0;
 	}
 #endif
 
 	pos = 2;
-	targetbuf = args->str_storage + nfds * sizeof(struct pollfd) + pos;
+	targetbuf = args->str_storage + nfds * sizeof(struct pollfd);
 	fds_count = 0;
 
 	/* Copy each fd into the temporary buffer */
@@ -3201,7 +3420,7 @@ static int poll_parse_fds(struct event_filler_arguments *args, bool enter_event)
 			flags = poll_events_to_scap(fds[j].revents);
 		}
 
-		*(int64_t *)(targetbuf + pos) = fds[j].fd;
+		*(int64_t *)(targetbuf + pos) = (s64)fds[j].fd;
 		*(int16_t *)(targetbuf + pos + 8) = flags;
 		pos += 10;
 		++fds_count;
@@ -3234,13 +3453,19 @@ int f_sys_poll_e(struct event_filler_arguments *args)
 
 static int timespec_parse(struct event_filler_arguments *args, unsigned long val)
 {
-	uint64_t longtime;
+	uint64_t longtime = 0;
+	int cfulen = 0;
 	char *targetbuf = args->str_storage;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+	struct __kernel_timespec* tts = (struct __kernel_timespec *)targetbuf;
+#else
 	struct timespec *tts = (struct timespec *)targetbuf;
+#endif
+
 #ifdef CONFIG_COMPAT
 	struct compat_timespec *compat_tts = (struct compat_timespec *)targetbuf;
 #endif
-	int cfulen;
 
 	/*
 	 * interval
@@ -3250,17 +3475,17 @@ static int timespec_parse(struct event_filler_arguments *args, unsigned long val
 	if (!args->compat) {
 #endif
 		cfulen = (int)ppm_copy_from_user(targetbuf, (void __user *)val, sizeof(*tts));
-		if (unlikely(cfulen != 0))
-			return PPM_FAILURE_INVALID_USER_MEMORY;
-
-		longtime = ((uint64_t)tts->tv_sec) * 1000000000 + tts->tv_nsec;
+		if(likely(cfulen == 0))
+		{
+			longtime = ((uint64_t)tts->tv_sec) * 1000000000 + tts->tv_nsec;
+		}
 #ifdef CONFIG_COMPAT
 	} else {
 		cfulen = (int)ppm_copy_from_user(targetbuf, (void __user *)compat_ptr(val), sizeof(struct compat_timespec));
-		if (unlikely(cfulen != 0))
-			return PPM_FAILURE_INVALID_USER_MEMORY;
-
-		longtime = ((uint64_t)compat_tts->tv_sec) * 1000000000 + compat_tts->tv_nsec;
+		if(likely(cfulen == 0))
+		{
+			longtime = ((uint64_t)compat_tts->tv_sec) * 1000000000 + compat_tts->tv_nsec;
+		}
 	}
 #endif
 
@@ -3269,36 +3494,26 @@ static int timespec_parse(struct event_filler_arguments *args, unsigned long val
 
 int f_sys_ppoll_e(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
+	unsigned long val = 0;
+	int res = 0;
 
+	/* Parameter 1: fds (type: PT_FDLIST) */
 	res = poll_parse_fds(args, true);
-	if (res != PPM_SUCCESS)
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * timeout
-	 */
+	/* Parameter 2: timeout (type: PT_RELTIME) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
-	/* NULL timeout specified as 0xFFFFFF.... */
-	if (val == (unsigned long)NULL)
-		res = val_to_ring(args, (uint64_t)(-1), 0, false, 0);
-	else
-		res = timespec_parse(args, val);
-	if (res != PPM_SUCCESS)
-		return res;
+	res = timespec_parse(args, val);
+	CHECK_RES(res);
 
-	/*
-	 * sigmask
-	 */
+	/* Parameter 3: sigmask (type: PT_SIGSET) */
 	syscall_get_arguments_deprecated(current, args->regs, 3, 1, &val);
-	if (val != (unsigned long)NULL)
-		if (0 != ppm_copy_from_user(&val, (void __user *)val, sizeof(val)))
-			return PPM_FAILURE_INVALID_USER_MEMORY;
-
-	res = val_to_ring(args, val, 0, false, 0);
-	if (res != PPM_SUCCESS)
-		return res;
+	if (val == (unsigned long)NULL || ppm_copy_from_user(&val, (void __user *)val, sizeof(val)))
+	{
+		val = 0;
+	}
+	res = val_to_ring(args, (u32)val, 0, false, 0);
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -3469,43 +3684,35 @@ int f_sys_openat_x(struct event_filler_arguments *args)
 
 int f_sys_unlinkat_x(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
-	int64_t retval;
+	unsigned long val = 0;
+	int res = 0;
+	long retval = 0;
+	s32 dirfd = 0;
 
-	retval = (int64_t)syscall_get_return_value(current, args->regs);
+	/* Parameter 1: res (type: PT_ERRNO) */
+	retval = syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * dirfd
-	 */
+	/* Parameter 2: dirfd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	dirfd = (s32)val;
+	if(dirfd == AT_FDCWD)
+	{
+		dirfd = PPM_AT_FDCWD;
+	}
+	res = val_to_ring(args, (s64)dirfd, 0, false, 0);
+	CHECK_RES(res);
 
-	if ((int)val == AT_FDCWD)
-		val = PPM_AT_FDCWD;
-
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-
-	/*
-	 * name
-	 */
+	/* Parameter 3: path (type: PT_FSRELPATH) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * flags
-	 * Note that we convert them into the ppm portable representation before pushing them to the ring
-	 */
+	/* Parameter 4: flags (type: PT_FLAGS32) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
 	res = val_to_ring(args, unlinkat_flags_to_scap(val), 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -4019,29 +4226,20 @@ int f_sys_getrlimit_setrlrimit_x(struct event_filler_arguments *args)
 
 int f_sys_prlimit_e(struct event_filler_arguments *args)
 {
-	u8 ppm_resource;
-	unsigned long val;
-	int res;
+	unsigned long val = 0;
+	int res = 0;
+	pid_t pid = 0;
 
-	/*
-	 * pid
-	 */
+	/* Parameter 1: pid (type: PT_PID) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	pid = (s32)val;
+	res = val_to_ring(args, (s64)pid, 0, false, 0);
+	CHECK_RES(res);
 
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-
-	/*
-	 * resource
-	 */
+	/* Parameter 2: resource (type: PT_ENUMFLAGS8) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
-
-	ppm_resource = rlimit_resource_to_scap(val);
-
-	res = val_to_ring(args, (uint64_t)ppm_resource, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	res = val_to_ring(args, rlimit_resource_to_scap(val), 0, false, 0);
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -4249,24 +4447,20 @@ int f_sched_drop(struct event_filler_arguments *args)
 
 int f_sys_fcntl_e(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
+	unsigned long val = 0;
+	int res = 0;
+	s32 fd = 0;
 
-	/*
-	 * fd
-	 */
+	/* Parameter 1: fd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
 
-	/*
-	 * cmd
-	 */
+	/* Parameter 2: cmd (type: PT_ENUMFLAGS8) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 	res = val_to_ring(args, fcntl_cmd_to_scap(val), 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -4336,24 +4530,20 @@ static inline int parse_ptrace_data(struct event_filler_arguments *args, u16 req
 
 int f_sys_ptrace_e(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
+	unsigned long val = 0;
+	int res = 0;
+	pid_t pid = 0;
 
-	/*
-	 * request
-	 */
+	/* Parameter 1: request (type: PT_FLAGS16) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
 	res = val_to_ring(args, ptrace_requests_to_scap(val), 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * pid
-	 */
+	/* Parameter 2: pid (type: PT_PID) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	pid = (s32)val;
+	res = val_to_ring(args, (s64)pid, 0, false, 0);
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -4453,6 +4643,7 @@ int f_sys_brk_munmap_mmap_x(struct event_filler_arguments *args)
 int f_sys_mmap_e(struct event_filler_arguments *args)
 {
 	unsigned long val;
+	s32 fd = 0;
 	int res;
 
 	/*
@@ -4491,7 +4682,8 @@ int f_sys_mmap_e(struct event_filler_arguments *args)
 	 * fd
 	 */
 	syscall_get_arguments_deprecated(current, args->regs, 4, 1, &val);
-	res = val_to_ring(args, val, 0, false, 0);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
 
@@ -4876,115 +5068,91 @@ int f_sys_openat2_x(struct event_filler_arguments *args)
 
 int f_sys_copy_file_range_e(struct event_filler_arguments *args)
 {
-	unsigned long fdin;
-	unsigned long offin;
-	unsigned long len;
-	int res;
+	unsigned long val = 0;
+	s32 fdin = 0;
+	unsigned long offin = 0;
+	unsigned long len = 0;
+	int res = 0;
 
-	/*
-	* fdin
-	*/
-	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &fdin);
-	res = val_to_ring(args, fdin, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	/* Parameter 1: fdin (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fdin = (s32)val;
+	res = val_to_ring(args, (s64)fdin, 0, false, 0);
+	CHECK_RES(res);
 
 	/*
 	* offin
 	*/
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &offin);
 	res = val_to_ring(args, offin, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	/*
 	* len
 	*/
 	syscall_get_arguments_deprecated(current, args->regs, 4, 1, &len);
 	res = val_to_ring(args, len, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 	
 	return add_sentinel(args);
 }
 
 int f_sys_copy_file_range_x(struct event_filler_arguments *args)
 {
-	unsigned long fdout;
-	unsigned long offout;
-	int64_t retval;
-	int res;
+	unsigned long val = 0;
+	unsigned long offout = 0;
+	int64_t retval = 0;
+	int res = 0;
+	s32 fdout = 0;
 
+	/* Parameter 1: res (type: PT_ERRNO) */
 	retval = (int64_t)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-	/*
-	* fdout
-	*/
-	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &fdout);
-	res = val_to_ring(args, fdout, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-	/*
-	* offout
-	*/
+	CHECK_RES(res);
+
+	/* Parameter 2: fdout (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+	fdout = (s32)val;
+	res = val_to_ring(args, (s64)fdout, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: offout (type: PT_UINT64) */
 	syscall_get_arguments_deprecated(current, args->regs, 3, 1, &offout);
 	res = val_to_ring(args, offout, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
 
 int f_sys_open_by_handle_at_x(struct event_filler_arguments *args)
 {
-	unsigned long flags;
-	unsigned long val;
-	int res;
-	int64_t retval;
+	unsigned long val = 0;
+	int res = 0;
+	long retval = 0;
 	char *pathname = NULL;
+	s32 mountfd = 0;
 
-	/*
-	 * fd
-	 */
-	retval = (int64_t)syscall_get_return_value(current, args->regs);
+	/* Parameter 1: ret (type: PT_FD) */
+	retval = syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-	{
-		return res;
-	}
+	CHECK_RES(res);
 
-	/*
-	 * mountfd
-	 */
+	/* Parameter 2: mountfd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	if ((int)val == AT_FDCWD)
+	mountfd = (s32)val;
+	if(mountfd == AT_FDCWD)
 	{
-		val = PPM_AT_FDCWD;	
+		mountfd = PPM_AT_FDCWD;
 	}
+	res = val_to_ring(args, (s64)mountfd, 0, false, 0);
+	CHECK_RES(res);
 
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-	{
-		return res;
-	}
-
-	/*
-	 * flags
-	 */
+	/* Parameter 3: flags (type: PT_FLAGS32) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
-	flags = open_flags_to_scap(val);
+	res = val_to_ring(args, open_flags_to_scap(val), 0, false, 0);
+	CHECK_RES(res);
 
-	res = val_to_ring(args, flags, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-	{
-		return res;
-	}
-
-	/*
-	 * path
-	 */
+	/* Parameter 4: path (type: PT_FSPATH) */
 	if (retval > 0)
 	{
 		/* String storage size is exactly one page. 
@@ -5005,176 +5173,162 @@ int f_sys_open_by_handle_at_x(struct event_filler_arguments *args)
 	}
 
 	res = val_to_ring(args, (unsigned long)pathname, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-	{
-		return res;
-	}
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
 
-int f_sys_io_uring_setup_x (struct event_filler_arguments *args)
+int f_sys_io_uring_setup_x(struct event_filler_arguments *args)
 {
-	int res;
-	unsigned long val;
-	unsigned long sq_entries = 0;
-	unsigned long cq_entries = 0;
-	unsigned long flags = 0;
-	unsigned long sq_thread_cpu = 0;
-	unsigned long sq_thread_idle = 0;
-	unsigned long features = 0;
+	int res = 0;
+	long retval = 0;
+	unsigned long val = 0;
 
-#ifdef __NR_io_uring_setup
-	struct io_uring_params params;
-#endif
-
-	int64_t retval = (int64_t)syscall_get_return_value(current, args->regs);
-	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-
-	/* entries */
-	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-
-#ifdef __NR_io_uring_setup
-	/*
-	 * io_uring_params: we get the data structure, and put its fields in the buffer one by one
+	/* All these params are sent equal to `0` if `__NR_io_uring_setup`
+	 * syscall is not defined.
 	 */
+	u32 sq_entries = 0;
+	u32 cq_entries = 0;
+	u32 flags = 0;
+	u32 sq_thread_cpu = 0;
+	u32 sq_thread_idle = 0;
+	u32 features = 0;
+
+#ifdef __NR_io_uring_setup
+	struct io_uring_params params = {0};
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 	res = ppm_copy_from_user(&params, (void *)val, sizeof(struct io_uring_params));
-	if (unlikely(res != 0))
-		return PPM_FAILURE_INVALID_USER_MEMORY;
+	if(unlikely(res != 0))
+	{
+		memset(&params, 0, sizeof(params));
+	}
 
 	sq_entries = params.sq_entries;
 	cq_entries = params.cq_entries;
 	flags = io_uring_setup_flags_to_scap(params.flags);
 	sq_thread_cpu = params.sq_thread_cpu;
 	sq_thread_idle = params.sq_thread_idle;
+	
+	/* We need this ifdef because `features` field is defined into the 
+	 * `struct io_uring_params` only if the `IORING_FEAT_SINGLE_MMAP` is
+	 * defined.
+	 */	
 #ifdef IORING_FEAT_SINGLE_MMAP
 	features = io_uring_setup_feats_to_scap(params.features);
 #endif
-#endif // __NR_io_uring_setup
-	/*
-	 * sq_entries (extracted from io_uring_params structure)
-	 */
+#endif /* __NR_io_uring_setup */
+
+	/* Parameter 1: res (type: PT_ERRNO) */
+	retval = (long)syscall_get_return_value(current, args->regs);
+	res = val_to_ring(args, retval, 0, false, 0);
+	CHECK_RES(res);
+	
+	/* Parameter 2: entries (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	res = val_to_ring(args, val, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: sq_entries (type: PT_UINT32) */
 	res = val_to_ring(args, sq_entries, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-	/*
-	 * cq_entries (extracted from io_uring_params structure)
-	 */
+	CHECK_RES(res);
+
+	/* Parameter 4: cq_entries (type: PT_UINT32) */
 	res = val_to_ring(args, cq_entries, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-	/*
-	 * flags (extracted from io_uring_params structure)
-	 * Already converted in ppm portable representation
-	 */
+	CHECK_RES(res);
+
+	/* Parameter 5: flags (type: PT_FLAGS32) */
 	res = val_to_ring(args, flags, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-	/*
-	 * sq_thread_cpu (extracted from io_uring_params structure)
-	 */
+	CHECK_RES(res);
+
+	/* Parameter 6: sq_thread_cpu (type: PT_UINT32) */
 	res = val_to_ring(args, sq_thread_cpu, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-	/*
-	 * sq_thread_idle (extracted from io_uring_params structure)
-	 */
+	CHECK_RES(res);
+
+	/* Parameter 7: sq_thread_idle (type: PT_UINT32) */
 	res = val_to_ring(args, sq_thread_idle, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-	/*
-	 * features (extracted from io_uring_params structure)
-	 * Already converted in ppm portable representation
-	 */
+	CHECK_RES(res);
+
+	/* Parameter 8: features (type: PT_FLAGS32) */
 	res = val_to_ring(args, features, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
 
-int f_sys_io_uring_enter_x (struct event_filler_arguments *args)
+int f_sys_io_uring_enter_x(struct event_filler_arguments *args)
 {
-	int res;
-	unsigned long val;
+	int res = 0;
+	int32_t fd = 0;
+	unsigned long val = 0;
 
-	int64_t retval = (int64_t)syscall_get_return_value(current, args->regs);
+	/* Parameter 1: res (type: PT_ERRNO) */
+	long retval = (long)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* fd */
+	/* Parameter 2: fd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, true, 0);
+	CHECK_RES(res);
 
-	/* to_submit */
+	/* Parameter 3: to_submit (type: PT_UINT32) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* min_complete */
+	/* Parameter 4: min_complete (type: PT_UINT32) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* flags */
+	/* Parameter 5: flags (type: PT_FLAGS32) */
 	syscall_get_arguments_deprecated(current, args->regs, 3, 1, &val);
 	res = val_to_ring(args, io_uring_enter_flags_to_scap(val), 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* sig */
+	/* Parameter 6: sig (type: PT_SIGSET) */
 	syscall_get_arguments_deprecated(current, args->regs, 4, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
+
+	/// TODO: We miss the last parameter `size_t argsz`
+	/// we need to implement it in all our drivers
 
 	return add_sentinel(args);
 }
 
 int f_sys_io_uring_register_x (struct event_filler_arguments *args)
 {
-	int res;
-	unsigned long val;
+	int res = 0;
+	unsigned long val = 0;
+	s32 fd = 0;
 
+	/* Parameter 1: res (type: PT_ERRNO) */
 	int64_t retval = (int64_t)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* fd */
+	/* Parameter 2: fd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, true, 0);
+	CHECK_RES(res);
 
-	/* opcode */
+	/* Parameter 3: opcode (type: PT_UINT32) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 	res = val_to_ring(args, io_uring_register_opcodes_to_scap(val) , 0 , true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* arg */
+	/* Parameter 4: arg (type: PT_UINT64) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/* nr_args */
+	/* Parameter 5: nr_args (type: PT_UINT32) */
 	syscall_get_arguments_deprecated(current, args->regs, 3, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -5409,6 +5563,29 @@ int f_sys_fsconfig_x(struct event_filler_arguments *args)
 
 	/* Parameter 7: aux (type: PT_INT32) */
 	res = val_to_ring(args, aux, 0, true, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_signalfd_e(struct event_filler_arguments *args)
+{
+	unsigned long val = 0;
+	int res = 0;
+	s32 fd = 0;
+
+	/* Parameter 1: fd (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: mask (type: PT_UINT32) */
+	res = val_to_ring(args, 0, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: flags (type: PT_FLAGS8) */
+	res = val_to_ring(args, 0, 0, false, 0);
 	CHECK_RES(res);
 
 	return add_sentinel(args);
@@ -5664,29 +5841,26 @@ int f_sys_procexit_e(struct event_filler_arguments *args)
 
 int f_sys_sendfile_e(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
-	off_t offset;
+	unsigned long val = 0;
+	int res = 0;
+	off_t offset = 0;
+	s32 out_fd = 0;
+	s32 in_fd = 0;
 
-	/*
-	 * out_fd
-	 */
+	/* Parameter 1: out_fd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	out_fd = (s32)val;
+	res = val_to_ring(args, (s64)out_fd, 0, true, 0);
+	CHECK_RES(res);
 
-	/*
-	 * in_fd
-	 */
+	/* Parameter 2: in_fd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
-	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	in_fd = (s32)val;
+	res = val_to_ring(args, (s64)in_fd, 0, true, 0);
+	CHECK_RES(res);
 
-	/*
-	 * offset
-	 */
+
+	/* Parameter 3: offset (type: PT_UINT64) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
 
 	if (val != 0) {
@@ -5706,16 +5880,12 @@ int f_sys_sendfile_e(struct event_filler_arguments *args)
 	}
 
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * size
-	 */
+	/* Parameter 4: size (type: PT_UINT64) */
 	syscall_get_arguments_deprecated(current, args->regs, 3, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -5765,56 +5935,49 @@ int f_sys_sendfile_x(struct event_filler_arguments *args)
 
 int f_sys_quotactl_e(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
-	uint32_t id;
-	uint8_t quota_fmt;
-	uint16_t cmd;
+	unsigned long val = 0;
+	int res = 0;
+	uint32_t id = 0;
+	uint8_t quota_fmt = 0;
+	uint32_t cmd = 0;
+	uint16_t scap_cmd = 0;
 
-	/*
-	 * extract cmd
-	 */
+	/* Parameter 1: cmd (type: PT_FLAGS16) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	cmd = quotactl_cmd_to_scap(val);
-	res = val_to_ring(args, cmd, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	cmd = (uint32_t)val;
+	scap_cmd = quotactl_cmd_to_scap(cmd);
+	res = val_to_ring(args, scap_cmd, 0, false, 0);
+	CHECK_RES(res);
 
-	/*
-	 * extract type
-	 */
-	res = val_to_ring(args, quotactl_type_to_scap(val), 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	/* Parameter 2: type (type: PT_FLAGS8) */
+	res = val_to_ring(args, quotactl_type_to_scap(cmd), 0, false, 0);
+	CHECK_RES(res);
 
-	/*
-	 *  extract id
-	 */
-	id = 0;
+	/* Parameter 3: id (type: PT_UINT32) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
-	if ((cmd == PPM_Q_GETQUOTA) ||
-		 (cmd == PPM_Q_SETQUOTA) ||
-		 (cmd == PPM_Q_XGETQUOTA) ||
-		 (cmd == PPM_Q_XSETQLIM)) {
-		/*
-		 * in this case id represent an userid or groupid so add it
-		 */
-		id = val;
+	id = (u32)val;
+	if ((scap_cmd != PPM_Q_GETQUOTA) &&
+		 (scap_cmd != PPM_Q_SETQUOTA) &&
+		 (scap_cmd != PPM_Q_XGETQUOTA) &&
+		 (scap_cmd != PPM_Q_XSETQLIM))
+	{
+		/* In this case `id` don't represent a `userid` or a `groupid` */
+		res = val_to_ring(args, 0, 0, false, 0);
 	}
-	res = val_to_ring(args, id, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	else
+	{
+		res = val_to_ring(args, id, 0, false, 0);
+	}
+	CHECK_RES(res);
 
-	/*
-	 * extract quota_fmt from id
-	 */
+	/* Parameter 4: quota_fmt (type: PT_FLAGS8) */
 	quota_fmt = PPM_QFMT_NOT_USED;
-	if (cmd == PPM_Q_QUOTAON)
-		quota_fmt = quotactl_fmt_to_scap(val);
-
+	if(scap_cmd == PPM_Q_QUOTAON)
+	{
+		quota_fmt = quotactl_fmt_to_scap(id);
+	}
 	res = val_to_ring(args, quota_fmt, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -5828,8 +5991,6 @@ int f_sys_quotactl_x(struct event_filler_arguments *args)
 	struct if_dqblk dqblk;
 	struct if_dqinfo dqinfo;
 	uint32_t quota_fmt_out;
-
-	const char empty_string[] = "";
 
 	/*
 	 * extract cmd
@@ -5864,7 +6025,7 @@ int f_sys_quotactl_x(struct event_filler_arguments *args)
 	if (cmd == PPM_Q_QUOTAON)
 		res = val_to_ring(args, val, 0, true, 0);
 	else
-		res = val_to_ring(args, (unsigned long)empty_string, 0, false, 0);
+		res = val_to_ring(args, 0, 0, false, 0);
 
 	if (unlikely(res != PPM_SUCCESS))
 		return res;
@@ -6080,46 +6241,102 @@ int f_sys_getresuid_and_gid_x(struct event_filler_arguments *args)
 
 int f_sys_flock_e(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
-	u32 flags;
+	unsigned long val = 0;
+	int res = 0;
+	u32 flags = 0;
+	s32 fd = 0;
 
+	/* Parameter 1: fd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
 
+	/* Parameter 2: operation (type: PT_FLAGS32) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 	flags = flock_flags_to_scap(val);
 	res = val_to_ring(args, flags, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_ioctl_e(struct event_filler_arguments *args)
+{
+	unsigned long val = 0;
+	int res = 0;
+	s32 fd = 0;
+
+	/* Parameter 1: fd (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: request (type: PT_UINT64) */
+	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: argument (type: PT_UINT64) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_mkdir_e(struct event_filler_arguments *args)
+{
+	unsigned long val = 0;
+	int res = 0;
+
+	/* Parameter 1: mode (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
 
 int f_sys_setns_e(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
-	u32 flags;
+	unsigned long val = 0;
+	int res = 0;
+	s32 fd = 0;
 
-	/*
-	 * parse fd
-	 */
+	/* Parameter 1: fd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
-	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, true, 0);
+	CHECK_RES(res);
 
-	/*
-	 * get type, parse as clone flags as it's a subset of it
-	 */
+	/* Parameter 2: nstype (type: PT_FLAGS32) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
-	flags = clone_flags_to_scap(val);
-	res = val_to_ring(args, flags, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	res = val_to_ring(args, clone_flags_to_scap(val), 0, true, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_setpgid_e(struct event_filler_arguments *args)
+{
+	unsigned long val = 0;
+	int res = 0;
+	pid_t pid = 0;
+	pid_t pgid = 0;
+
+	/* Parameter 1: pid (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	pid = (s32)val;
+	res = val_to_ring(args, (s64)pid, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: pgid (type: PT_PID) */
+	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
+	pgid = (s32)val;
+	res = val_to_ring(args, (s64)pgid, 0, true, 0);
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -6216,59 +6433,73 @@ int f_cpu_hotplug_e(struct event_filler_arguments *args)
 
 int f_sys_semop_x(struct event_filler_arguments *args)
 {
-	unsigned long nsops;
-	int res;
-	int64_t retval;
-	struct sembuf *ptr;
+	unsigned long nsops = 0 ;
+	int res = 0;
+	long retval = 0;
+	struct sembuf *sops_pointer = NULL;
+	struct sembuf sops[2] = {0};
 
-	/*
-	 * return value
-	 */
+	/* Parameter 1: res (type: PT_ERRNO) */
 	retval = (int64_t)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * nsops
-	 * actually this could be read in the enter function but
-	 * we also need to know the value to access the sembuf structs
-	 */
+	/* Parameter 2: nsops (type: PT_UINT32) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &nsops);
 	res = val_to_ring(args, nsops, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * sembuf
-	 */
-	syscall_get_arguments_deprecated(current, args->regs, 1, 1, (unsigned long *) &ptr);
+	/* Extract pointer to the `sembuf` struct */
+	syscall_get_arguments_deprecated(current, args->regs, 1, 1, (unsigned long *) &sops_pointer);
 
-	if (nsops && ptr) {
-		/* max length of sembuf array in g_event_info = 2 */
-		const unsigned max_nsops = 2;
-		unsigned       j;
-
-		for (j = 0; j < max_nsops; j++) {
-			struct sembuf sops = {0, 0, 0};
-
-			if (nsops--)
-				if (unlikely(ppm_copy_from_user(&sops, (void *)&ptr[j], sizeof(struct sembuf))))
-					return PPM_FAILURE_INVALID_USER_MEMORY;
-
-			res = val_to_ring(args, sops.sem_num, 0, true, 0);
-			if (unlikely(res != PPM_SUCCESS))
-				return res;
-
-			res = val_to_ring(args, sops.sem_op, 0, true, 0);
-			if (unlikely(res != PPM_SUCCESS))
-				return res;
-
-			res = val_to_ring(args, semop_flags_to_scap(sops.sem_flg), 0, true, 0);
-			if (unlikely(res != PPM_SUCCESS))
-				return res;
+	if(retval != 0 || sops_pointer == 0 || nsops == 0)
+	{
+		/* We send all 0 when one of these is true:
+		 * - the syscall fails (retval != 0)
+		 * - `sops_pointer` is NULL
+		 * - `nsops` is 0
+		 */
+	}
+	else if(nsops == 1)
+	{
+		/* If we have just one entry the second will be empty, we don't fill it */
+		if(unlikely(ppm_copy_from_user(sops, (void *)sops_pointer, sizeof(struct sembuf))))
+		{
+			memset(&sops, 0, sizeof(sops));
 		}
 	}
+	else
+	{
+		/* If `nsops>1` we read just the first 2 entries. */
+		if(unlikely(ppm_copy_from_user(sops, (void *)sops_pointer, 2 * sizeof(struct sembuf))))
+		{
+			memset(&sops, 0, sizeof(sops));
+		}
+	}
+
+	/* Parameter 3: sem_num_0 (type: PT_UINT16) */
+	res = val_to_ring(args, sops[0].sem_num, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 4: sem_op_0 (type: PT_INT16) */
+	res = val_to_ring(args, sops[0].sem_op, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 5: sem_flg_0 (type: PT_FLAGS16) */
+	res = val_to_ring(args, semop_flags_to_scap(sops[0].sem_flg), 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 6: sem_num_1 (type: PT_UINT16) */
+	res = val_to_ring(args, sops[1].sem_num, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 7: sem_op_1 (type: PT_INT16) */
+	res = val_to_ring(args, sops[1].sem_op, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 8: sem_flg_1 (type: PT_FLAGS16) */
+	res = val_to_ring(args, semop_flags_to_scap(sops[1].sem_flg), 0, true, 0);
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -6364,6 +6595,70 @@ int f_sys_access_e(struct event_filler_arguments *args)
 	return add_sentinel(args);
 }
 
+int f_sys_fchdir_e(struct event_filler_arguments *args)
+{
+	int res = 0;
+	s32 fd = 0;
+	unsigned long val = 0;
+
+	/* Parameter 1: fd (type: PT_FD)*/
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (int32_t)val;
+	res = val_to_ring(args, (int64_t)fd, 0, false, 0);
+	CHECK_RES(res);
+	return add_sentinel(args);
+}
+
+int f_sys_fchdir_x(struct event_filler_arguments *args)
+{
+	int64_t res = 0;
+
+	/* Parameter 1: res (type: PT_ERRNO)*/
+	res = (int64_t)syscall_get_return_value(current, args->regs);
+	res = val_to_ring(args, res, 0, false, 0);
+	CHECK_RES(res);
+	return add_sentinel(args);
+}
+
+int f_sys_close_e(struct event_filler_arguments *args)
+{
+	int res = 0;
+	s32 fd = 0;
+	unsigned long val = 0;
+
+	/* Parameter 1: fd (type: PT_FD)*/
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (int32_t)val;
+	res = val_to_ring(args, (int64_t)fd, 0, false, 0);
+	CHECK_RES(res);
+	return add_sentinel(args);
+}
+
+int f_sys_close_x(struct event_filler_arguments *args)
+{
+	int64_t res = 0;
+
+	/* Parameter 1: res (type: PT_ERRNO)*/
+	res = (int64_t)syscall_get_return_value(current, args->regs);
+	res = val_to_ring(args, res, 0, false, 0);
+	CHECK_RES(res);
+	return add_sentinel(args);
+}
+
+int f_sys_bpf_e(struct event_filler_arguments *args)
+{
+	int res = 0;
+	s32 cmd = 0;
+	unsigned long val = 0;
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+
+	/* Parameter 1: cmd (type: PT_INT64) */
+	cmd = (int32_t)val;
+	res = val_to_ring(args, (int64_t)cmd, 0, false, 0);
+	CHECK_RES(res);
+	return add_sentinel(args);
+}
+
 int f_sys_bpf_x(struct event_filler_arguments *args)
 {
 	int res;
@@ -6382,84 +6677,70 @@ int f_sys_bpf_x(struct event_filler_arguments *args)
 
 int f_sys_mkdirat_x(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
-	int64_t retval;
+	unsigned long val = 0;
+	int res = 0;
+	int64_t retval = 0;
+	s32 dirfd = 0;
 
+	/* Parameter 1: res (type: PT_ERRNO) */
 	retval = (int64_t)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * dirfd
-	 */
+	/* Parameter 2: dirfd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	dirfd = (s32)val;
+	if(dirfd == AT_FDCWD)
+	{
+		dirfd = PPM_AT_FDCWD;
+	}
+	res = val_to_ring(args, (s64)dirfd, 0, false, 0);
+	CHECK_RES(res);
 
-	if ((int)val == AT_FDCWD)
-		val = PPM_AT_FDCWD;
-
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-
-	/*
-	 * path
-	 */
+	/* Parameter 3: path (type: PT_FSRELPATH) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * mode
-	 */
+	/* Parameter 4: mode (type: PT_UINT32) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
 	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
 
 int f_sys_fchmodat_x(struct event_filler_arguments *args)
 {
-	unsigned long val;
-	int res;
-	int64_t retval;
+	unsigned long val = 0;
+	int res = 0;
+	int64_t retval = 0;
+	s32 dirfd = 0;
 
+	/* Parameter 1: res (type: PT_ERRNO) */
 	retval = (int64_t)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * dirfd
-	 */
+	/* Parameter 2: dirfd (type: PT_FD) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	dirfd = (s32)val;
+	if(dirfd == AT_FDCWD)
+	{
+		dirfd = PPM_AT_FDCWD;
+	}
+	res = val_to_ring(args, (s64)dirfd, 0, false, 0);
+	CHECK_RES(res);
 
-	if ((int)val == AT_FDCWD)
-		val = PPM_AT_FDCWD;
-
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
-
-	/*
-	 * filename
-	 */
+	/* Parameter 3: filename (type: PT_FSRELPATH) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
 	res = val_to_ring(args, val, 0, true, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * mode
-	 */
+	/* Parameter 4: mode (type: PT_MODE) */
 	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
 	res = val_to_ring(args, chmod_mode_to_scap(val), 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -6496,31 +6777,171 @@ int f_sys_chmod_x(struct event_filler_arguments *args)
 
 int f_sys_fchmod_x(struct event_filler_arguments *args)
 {
+	unsigned long val = 0;
+	int res = 0;
+	int64_t retval = 0;
+	s32 fd = 0;
+
+	/* Parameter 1: res (type: PT_ERRNO) */
+	retval = (int64_t)syscall_get_return_value(current, args->regs);
+	res = val_to_ring(args, retval, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: fd (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: mode (type: PT_MODE) */
+	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
+	res = val_to_ring(args, chmod_mode_to_scap(val), 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_chown_x(struct event_filler_arguments *args)
+{
 	unsigned long val;
 	int res;
 	int64_t retval;
 
+	/* Parameter 1: res (type: PT_ERRNO)*/
 	retval = (int64_t)syscall_get_return_value(current, args->regs);
 	res = val_to_ring(args, retval, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	CHECK_RES(res);
 
-	/*
-	 * fd
-	 */
+	/* Parameter 2: path (type: PT_FSPATH) */
 	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
 
-	res = val_to_ring(args, val, 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+	res = val_to_ring(args, val, 0, true, 0);
+	CHECK_RES(res);
 
-	/*
-	 * mode
-	 */
+	/* Parameter 3: uid (type: PT_UINT32) */
 	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
-	res = val_to_ring(args, chmod_mode_to_scap(val), 0, false, 0);
-	if (unlikely(res != PPM_SUCCESS))
-		return res;
+
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 4: gid (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_lchown_x(struct event_filler_arguments *args)
+{
+	unsigned long val;
+	int res;
+	int64_t retval;
+
+	/* Parameter 1: res (type: PT_ERRNO)*/
+	retval = (int64_t)syscall_get_return_value(current, args->regs);
+	res = val_to_ring(args, retval, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: path (type: PT_FSPATH) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+
+	res = val_to_ring(args, val, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: uid (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
+
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 4: gid (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_fchown_x(struct event_filler_arguments *args)
+{
+	unsigned long val;
+	int res;
+	int64_t retval;
+	s32 fd;
+
+	/* Parameter 1: res (type: PT_ERRNO)*/
+	retval = (int64_t)syscall_get_return_value(current, args->regs);
+	res = val_to_ring(args, retval, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: fd (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (s32)val;
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: uid (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
+
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 4: gid (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_fchownat_x(struct event_filler_arguments *args)
+{
+	unsigned long val;
+	int res;
+	int64_t retval;
+	s32 fd;
+
+	/* Parameter 1: res (type: PT_ERRNO)*/
+	retval = (int64_t)syscall_get_return_value(current, args->regs);
+	res = val_to_ring(args, retval, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: dirfd (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd = (s32)val;
+
+	if ((int)fd == AT_FDCWD)
+		fd = PPM_AT_FDCWD;
+
+	res = val_to_ring(args, (s64)fd, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: pathname (type: PT_FSRELPATH) */
+	syscall_get_arguments_deprecated(current, args->regs, 1, 1, &val);
+
+	res = val_to_ring(args, val, 0, true, 0);
+	CHECK_RES(res);
+
+	/* Parameter 4: uid (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 5: gid (type: PT_UINT32) */
+	syscall_get_arguments_deprecated(current, args->regs, 3, 1, &val);
+
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 6: flags (type: PT_FLAGS32) */
+	syscall_get_arguments_deprecated(current, args->regs, 4, 1, &val);
+	res = val_to_ring(args, fchownat_flags_to_scap(val), 0, false, 0);
+	CHECK_RES(res);
 
 	return add_sentinel(args);
 }
@@ -6563,6 +6984,56 @@ out:
 	return res;
 }
 
+int f_sys_splice_e(struct event_filler_arguments *args)
+{
+	unsigned long val;
+ 	int32_t fd_in, fd_out;
+	int res;
+
+	/* Parameter 1: fd_in (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	fd_in = (int32_t)val;
+	res = val_to_ring(args, (int64_t)fd_in, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: fd_out (type: PT_FD) */
+	syscall_get_arguments_deprecated(current, args->regs, 2, 1, &val);
+	fd_out = (int32_t)val;
+	res = val_to_ring(args, (int64_t)fd_out, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 3: size (type: PT_UINT64) */
+	syscall_get_arguments_deprecated(current, args->regs, 4, 1, &val);
+	res = val_to_ring(args, val, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 4: flags (type: PT_FLAGS32) */
+	syscall_get_arguments_deprecated(current, args->regs, 5, 1, &val);
+	res = val_to_ring(args, splice_flags_to_scap(val), 0, false, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
+int f_sys_umount_x(struct event_filler_arguments *args)
+{
+	unsigned long val;
+	int res;
+	int64_t retval;
+
+	/* Parameter 1: res (type: PT_ERRNO) */
+	retval = (int64_t)syscall_get_return_value(current, args->regs);
+	res = val_to_ring(args, retval, 0, false, 0);
+	CHECK_RES(res);
+
+	/* Parameter 2: name (type: PT_FSPATH) */
+	syscall_get_arguments_deprecated(current, args->regs, 0, 1, &val);
+	res = val_to_ring(args, val, 0, true, 0);
+	CHECK_RES(res);
+
+	return add_sentinel(args);
+}
+
 #ifdef CAPTURE_SCHED_PROC_EXEC
 int f_sched_prog_exec(struct event_filler_arguments *args)
 {
@@ -6573,7 +7044,6 @@ int f_sched_prog_exec(struct event_filler_arguments *args)
 	int correctly_read = 0;
 	unsigned int exe_len = 0; /* the length of the executable string. */
 	int ptid = 0;
-	char *spwd = "";
 	long total_vm = 0;
 	long total_rss = 0;
 	long swap = 0;
@@ -6591,6 +7061,7 @@ int f_sched_prog_exec(struct event_filler_arguments *args)
 	uint64_t cap_inheritable = 0;
 	uint64_t cap_permitted = 0;
 	uint64_t cap_effective = 0;
+	uint64_t euid = 0;
 
 	/* Parameter 1: res (type: PT_ERRNO) */
 	/* Please note: if this filler is called the execve is correctly
@@ -6691,7 +7162,7 @@ int f_sched_prog_exec(struct event_filler_arguments *args)
 	 * cwd, pushed empty to avoid breaking compatibility
 	 * with the older event format
 	 */
-	res = val_to_ring(args, (uint64_t)(long)spwd, 0, false, 0);
+	res = push_empty_param(args);
 	if(unlikely(res != PPM_SUCCESS))
 	{
 		return res;
@@ -6937,6 +7408,16 @@ cgroups_error:
 	res = val_to_ring(args, mtime, 0, false, 0);
 	CHECK_RES(res);
 
+	/* Parameter 27: uid */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
+	euid = from_kuid_munged(current_user_ns(), current_euid());
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
+	euid = current_euid();
+#else
+	euid = current->euid;
+#endif
+	res = val_to_ring(args, euid, 0, false, 0);
+	CHECK_RES(res);
 	return add_sentinel(args);
 }
 #endif
@@ -6952,7 +7433,6 @@ int f_sched_prog_fork(struct event_filler_arguments *args)
 	int correctly_read = 0;
 	unsigned int exe_len = 0; /* the length of the executable string. */
 	int ptid = 0;
-	char *spwd = "";
 	long total_vm = 0;
 	long total_rss = 0;
 	long swap = 0;
@@ -7062,7 +7542,7 @@ int f_sched_prog_fork(struct event_filler_arguments *args)
 	 * cwd, pushed empty to avoid breaking compatibility
 	 * with the older event format
 	 */
-	res = val_to_ring(args, (uint64_t)(long)spwd, 0, false, 0);
+	res = push_empty_param(args);
 	if(unlikely(res != PPM_SUCCESS))
 	{
 		return res;

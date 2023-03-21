@@ -20,6 +20,8 @@ limitations under the License.
 #include <string>
 #include <vector>
 #include <list>
+#include <set>
+#include <unordered_set>
 #include <cctype>
 #include <algorithm>
 #include <locale>
@@ -429,3 +431,37 @@ inline void hash_combine(std::size_t &seed, const T& val)
 {
 	seed ^= std::hash<T>()(val) + 0x9e3779b9 + (seed<<6) + (seed>>2);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Log helpers
+///////////////////////////////////////////////////////////////////////////////
+void sinsp_scap_debug_log_fn(const char* msg);
+
+///////////////////////////////////////////////////////////////////////////////
+// Set operation functions.
+///////////////////////////////////////////////////////////////////////////////
+
+
+template<typename T>
+std::set<T> unordered_set_to_ordered(const std::unordered_set<T>& unordered_set);
+
+template<typename T>
+std::unordered_set<T> unordered_set_difference(const std::unordered_set<T>& a, const std::unordered_set<T>& b);
+
+template<typename T>
+std::set<T> set_difference(const std::set<T>& a, const std::set<T>& b);
+
+template<typename T>
+std::unordered_set<T> unordered_set_union(const std::unordered_set<T>& a, const std::unordered_set<T>& b);
+
+template<typename T>
+std::set<T> set_union(const std::set<T>& a, const std::set<T>& b);
+
+template<typename T>
+std::unordered_set<T> unordered_set_intersection(const std::unordered_set<T>& a, const std::unordered_set<T>& b);
+
+template<typename T>
+std::set<T> set_intersection(const std::set<T>& a, const std::set<T>& b);
+
+std::string concat_set_in_order(const std::unordered_set<std::string>& s, const std::string& delim = ", ");
+std::string concat_set_in_order(const std::set<std::string>& s, const std::string& delim = ", ");

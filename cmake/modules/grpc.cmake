@@ -132,9 +132,9 @@ else()
 			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_internal_randen.a"
 			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_internal_randen_hwaes.a"
 			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_internal_randen_hwaes_impl.a"
-			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_internal_platform.a"
 			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_internal_randen_slow.a"
 			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_internal_seed_material.a"
+			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_internal_platform.a"
 			"${GRPC_SRC}/third_party/abseil-cpp/absl/random/libabsl_random_seed_gen_exception.a"
 		)
 
@@ -194,6 +194,10 @@ else()
 		install(DIRECTORY "${GRPC_SRC}/target/include/" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${LIBS_PACKAGE_NAME}"
 				COMPONENT "libs-deps")
 	endif()
+endif()
+
+if(NOT TARGET grpc)
+	add_custom_target(grpc)
 endif()
 
 include_directories("${GRPC_INCLUDE}")

@@ -367,20 +367,6 @@ int32_t udig_start_dropping_mode(struct scap_engine_handle engine, uint32_t samp
 	struct udig_consumer_t* consumer = &(engine.m_handle->m_dev_set.m_devs[0].m_bufstatus->m_consumer);
 
 	consumer->dropping_mode = 1;
-
-	if(sampling_ratio != 1 &&
-		sampling_ratio != 2 &&
-		sampling_ratio != 4 &&
-		sampling_ratio != 8 &&
-		sampling_ratio != 16 &&
-		sampling_ratio != 32 &&
-		sampling_ratio != 64 &&
-		sampling_ratio != 128) 
-	{
-		snprintf(engine.m_handle->m_lasterr, SCAP_LASTERR_SIZE, "invalid sampling ratio %u\n", sampling_ratio);
-		return SCAP_FAILURE;
-	}
-
 	consumer->sampling_interval = 1000000000 / sampling_ratio;
 	consumer->sampling_ratio = sampling_ratio;
 
@@ -483,8 +469,8 @@ static int32_t configure(struct scap_engine_handle engine, enum scap_setting set
 		return SCAP_SUCCESS;
 	case SCAP_SNAPLEN:
 		return udig_set_snaplen(engine, arg1);
-	case SCAP_EVENTMASK:
-	case SCAP_TPMASK:
+	case SCAP_PPM_SC_MASK:
+	case SCAP_TP_MASK:
 	case SCAP_DYNAMIC_SNAPLEN:
 	case SCAP_STATSD_PORT:
 	case SCAP_FULLCAPTURE_PORT_RANGE:
@@ -498,11 +484,6 @@ static int32_t configure(struct scap_engine_handle engine, enum scap_setting set
 		return unsupported_config(engine, msg);
 	}
 	}
-}
-
-static bool match(scap_open_args* oargs)
-{
-	return strcmp(oargs->engine_name, UDIG_ENGINE) == 0;
 }
 
 static struct udig_engine* alloc_handle(scap_t* main_handle, char* lasterr_ptr)
@@ -598,7 +579,6 @@ const struct scap_vtable scap_udig_engine = {
 	.mode = SCAP_MODE_LIVE,
 	.savefile_ops = NULL,
 
-	.match = match,
 	.alloc_handle = alloc_handle,
 	.init = init,
 	.free_handle = free_handle,
@@ -615,4 +595,6 @@ const struct scap_vtable scap_udig_engine = {
 	.get_vpid = noop_get_vxid,
 	.get_vtid = noop_get_vxid,
 	.getpid_global = noop_getpid_global,
+	.get_api_version = NULL,
+	.get_schema_version = NULL,
 };

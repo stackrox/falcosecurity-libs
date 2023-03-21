@@ -24,9 +24,7 @@ limitations under the License.
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <sys/utsname.h>
-#ifndef MINIMAL_BUILD
 #include <gelf.h>
-#endif // MINIMAL_BUILD
 #include <fcntl.h>
 #include <errno.h>
 #include <ctype.h>
@@ -53,7 +51,6 @@ limitations under the License.
 #include "noop.h"
 #include "strerror.h"
 
-#ifndef MINIMAL_BUILD
 static inline scap_evt* scap_bpf_next_event(scap_device* dev)
 {
 	return scap_bpf_evt_from_perf_sample(dev->m_sn_next_event);
@@ -74,7 +71,6 @@ static inline void scap_bpf_advance_to_next_evt(scap_device* dev, scap_evt *even
 #define NEXT_EVENT scap_bpf_next_event
 
 #include "ringbuffer/ringbuffer.h"
-#endif
 
 static int32_t scap_bpf_handle_tp_mask(struct scap_engine_handle engine, uint32_t op, uint32_t tp);
 
@@ -93,11 +89,6 @@ struct bpf_map_data {
 	size_t elf_offset;
 	struct bpf_map_def def;
 };
-
-static bool match(scap_open_args* oargs)
-{
-	return strcmp(oargs->engine_name, BPF_ENGINE) == 0;
-}
 
 static struct bpf_engine* alloc_handle(scap_t* main_handle, char* lasterr_ptr)
 {
@@ -346,6 +337,11 @@ static int32_t load_elf_maps_section(struct bpf_engine *handle, struct bpf_map_d
 
 	*nr_maps = 0;
 	sym = calloc(BPF_MAPS_MAX + 1, sizeof(GElf_Sym));
+	if(sym == NULL)
+	{
+		return scap_errprintf(handle->m_lasterr, 0, "calloc(BPF_MAPS_MAX + 1) failed");
+	}
+
 	for(i = 0; i < symbols->d_size / sizeof(GElf_Sym); i++)
 	{
 		ASSERT(*nr_maps < BPF_MAPS_MAX + 1);
@@ -645,7 +641,7 @@ static int32_t load_tracepoint(struct bpf_engine* handle, const char *event, str
 
 static bool is_tp_enabled(interesting_tp_set *tp_of_interest, const char *shname)
 {
-	tp_values val = tp_from_name(shname);
+	ppm_tp_code val = tp_from_name(shname);
 	if(!tp_of_interest || val == -1)
 	{
 		// Null tp set? Enable everything!
@@ -655,10 +651,7 @@ static bool is_tp_enabled(interesting_tp_set *tp_of_interest, const char *shname
 	return tp_of_interest->tp[val];
 }
 
-static int32_t load_bpf_file(
-	struct bpf_engine *handle,
-	uint64_t *api_version_p,
-	uint64_t *schema_version_p)
+static int32_t load_bpf_file(struct bpf_engine *handle)
 {
 	int j;
 	int maps_shndx = 0;
@@ -736,12 +729,12 @@ static int32_t load_bpf_file(
 			else if(strcmp(shname, "api_version") == 0)
 			{
 				got_api_version = true;
-				memcpy(api_version_p, data->d_buf, sizeof(*api_version_p));
+				memcpy(&handle->m_api_version, data->d_buf, sizeof(handle->m_api_version));
 			}
 			else if(strcmp(shname, "schema_version") == 0)
 			{
 				got_schema_version = true;
-				memcpy(schema_version_p, data->d_buf, sizeof(*schema_version_p));
+				memcpy(&handle->m_schema_version, data->d_buf, sizeof(handle->m_schema_version));
 			}
 			else if(strcmp(shname, "license") == 0)
 			{
@@ -1029,7 +1022,7 @@ int32_t scap_bpf_start_capture(struct scap_engine_handle engine)
 	{
 		if (handle->open_tp_set.tp[i])
 		{
-			ret = scap_bpf_handle_tp_mask(engine, SCAP_TPMASK_SET, i);
+			ret = scap_bpf_handle_tp_mask(engine, SCAP_TP_MASK_SET, i);
 		}
 	}
 	if (ret != SCAP_SUCCESS)
@@ -1053,7 +1046,7 @@ int32_t scap_bpf_stop_capture(struct scap_engine_handle engine)
 	int ret = SCAP_SUCCESS;
 	for (int i = 0; i < TP_VAL_MAX && ret == SCAP_SUCCESS; i++)
 	{
-		ret = scap_bpf_handle_tp_mask(engine, SCAP_TPMASK_UNSET, i);
+		ret = scap_bpf_handle_tp_mask(engine, SCAP_TP_MASK_UNSET, i);
 	}
 	return ret;
 }
@@ -1152,21 +1145,6 @@ int32_t scap_bpf_disable_dynamic_snaplen(struct scap_engine_handle engine)
 int32_t scap_bpf_start_dropping_mode(struct scap_engine_handle engine, uint32_t sampling_ratio)
 {
 	struct bpf_engine *handle = engine.m_handle;
-	switch(sampling_ratio)
-	{
-		case 1:
-		case 2:
-		case 4:
-		case 8:
-		case 16:
-		case 32:
-		case 64:
-		case 128:
-			break;
-		default:
-			return scap_errprintf(handle->m_lasterr, 0, "invalid sampling ratio size");
-	}
-
 	struct scap_bpf_settings settings;
 	int k = 0;
 	int ret;
@@ -1401,8 +1379,6 @@ static int32_t set_default_settings(struct bpf_engine *handle)
 int32_t scap_bpf_load(
 	struct bpf_engine *handle,
 	const char *bpf_probe,
-	uint64_t *api_version_p,
-	uint64_t *schema_version_p,
 	scap_open_args *oargs)
 {
 	int online_cpu;
@@ -1434,7 +1410,7 @@ int32_t scap_bpf_load(
 
 	snprintf(handle->m_filepath, PATH_MAX, "%s", bpf_probe);
 
-	if(load_bpf_file(handle, api_version_p, schema_version_p) != SCAP_SUCCESS)
+	if(load_bpf_file(handle) != SCAP_SUCCESS)
 	{
 		return SCAP_FAILURE;
 	}
@@ -1660,7 +1636,7 @@ static int32_t scap_bpf_handle_tp_mask(struct scap_engine_handle engine, uint32_
 	int prg_idx = -1;
 	for (int i = 0; i < handle->m_bpf_prog_cnt; i++)
 	{
-		const tp_values val = tp_from_name(handle->m_bpf_progs[i].name);
+		const ppm_tp_code val = tp_from_name(handle->m_bpf_progs[i].name);
 		if (val == tp)
 		{
 			prg_idx = i;
@@ -1669,17 +1645,17 @@ static int32_t scap_bpf_handle_tp_mask(struct scap_engine_handle engine, uint32_
 	}
 
 	// We want to unload a never loaded tracepoint
-	if (prg_idx == -1 && op != SCAP_TPMASK_SET)
+	if (prg_idx == -1 && op != SCAP_TP_MASK_SET)
 	{
 		return SCAP_SUCCESS;
 	}
 	// We want to load an already loaded tracepoint
-	if (prg_idx >= 0 && op != SCAP_TPMASK_UNSET)
+	if (prg_idx >= 0 && op != SCAP_TP_MASK_UNSET)
 	{
 		return SCAP_SUCCESS;
 	}
 
-	if (op == SCAP_TPMASK_UNSET)
+	if (op == SCAP_TP_MASK_UNSET)
 	{
 		// Algo:
 		// Close the event and tracepoint fds,
@@ -1707,13 +1683,6 @@ static int32_t scap_bpf_handle_event_mask(struct scap_engine_handle engine, uint
 	int32_t ret = SCAP_SUCCESS;
 	switch(op)
 	{
-	case SCAP_PPM_SC_MASK_ZERO:
-		for(ppm_sc = 0; ppm_sc < PPM_SC_MAX && ret==SCAP_SUCCESS; ppm_sc++)
-		{
-			ret = update_interesting_syscalls_map(engine, SCAP_PPM_SC_MASK_UNSET, ppm_sc);
-		}
-		break;
-
 	case SCAP_PPM_SC_MASK_SET:
 	case SCAP_PPM_SC_MASK_UNSET:
 		ret = update_interesting_syscalls_map(engine, op, ppm_sc);
@@ -1747,9 +1716,9 @@ static int32_t configure(struct scap_engine_handle engine, enum scap_setting set
 		return scap_bpf_enable_tracers_capture(engine);
 	case SCAP_SNAPLEN:
 		return scap_bpf_set_snaplen(engine, arg1);
-	case SCAP_EVENTMASK:
+	case SCAP_PPM_SC_MASK:
 		return scap_bpf_handle_event_mask(engine, arg1, arg2);
-	case SCAP_TPMASK:
+	case SCAP_TP_MASK:
 		return scap_bpf_handle_tp_mask(engine, arg1, arg2);
 	case SCAP_DYNAMIC_SNAPLEN:
 		if(arg1 == 0)
@@ -1809,13 +1778,7 @@ static int32_t init(scap_t* handle, scap_open_args *oargs)
 		return rc;
 	}
 
-	rc = scap_bpf_load(engine.m_handle, bpf_probe_buf, &handle->m_api_version, &handle->m_schema_version, oargs);
-	if(rc != SCAP_SUCCESS)
-	{
-		return rc;
-	}
-
-	rc = check_api_compatibility(handle, handle->m_lasterr);
+	rc = scap_bpf_load(engine.m_handle, bpf_probe_buf, oargs);
 	if(rc != SCAP_SUCCESS)
 	{
 		return rc;
@@ -1844,13 +1807,21 @@ static uint64_t get_max_buf_used(struct scap_engine_handle engine)
 	return max;
 }
 
+uint64_t scap_bpf_get_api_version(struct scap_engine_handle engine)
+{
+	return engine.m_handle->m_api_version;
+}
+
+uint64_t scap_bpf_get_schema_version(struct scap_engine_handle engine)
+{
+	return engine.m_handle->m_schema_version;
+}
 
 const struct scap_vtable scap_bpf_engine = {
 	.name = BPF_ENGINE,
 	.mode = SCAP_MODE_LIVE,
 	.savefile_ops = NULL,
 
-	.match = match,
 	.alloc_handle = alloc_handle,
 	.init = init,
 	.free_handle = free_handle,
@@ -1867,4 +1838,6 @@ const struct scap_vtable scap_bpf_engine = {
 	.get_vpid = noop_get_vxid,
 	.get_vtid = noop_get_vxid,
 	.getpid_global = scap_os_getpid_global,
+	.get_api_version = scap_bpf_get_api_version,
+	.get_schema_version = scap_bpf_get_schema_version,
 };

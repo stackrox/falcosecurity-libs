@@ -180,6 +180,7 @@ static int32_t next(struct scap_engine_handle engine, OUT scap_evt** pevent, OUT
 		}
 		else
 		{
+			free(handle->m_input_plugin_evt_storage);
 			snprintf(lasterr, SCAP_LASTERR_SIZE, "%s", "failed to alloc space for plugin storage");
 			ASSERT(false);
 			return SCAP_FAILURE;
@@ -249,4 +250,6 @@ const struct scap_vtable scap_source_plugin_engine = {
 	.get_vpid = noop_get_vxid,
 	.get_vtid = noop_get_vxid,
 	.getpid_global = noop_getpid_global,
+	.get_api_version = NULL,
+	.get_schema_version = NULL,
 };

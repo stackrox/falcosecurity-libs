@@ -50,6 +50,8 @@ extern "C" {
 }
 #endif
 
+using namespace std;
+
 extern vector<chiseldir_info>* g_chisel_dirs;
 extern sinsp_filter_check_list g_filterlist;
 extern sinsp_evttables g_infotables;
@@ -770,6 +772,11 @@ int lua_cbacks::get_thread_table_int(lua_State *ls, bool include_fds, bool bareb
 		// If not, skip this thread
 		//
 		sinsp_fdtable* fdtable = tinfo.get_fd_table();
+		if(fdtable == nullptr)
+		{
+			// If no fdtable is available we can't do anything
+			return true;
+		}
 
 		if(filter != NULL)
 		{

@@ -42,4 +42,10 @@ else()
             COMPONENT "libs-deps")
 endif()
 
+# We add a custom target, in this way we can always depend on `libelf`
+# without distinguishing between "bundled" and "not-bundled" case
+if(NOT TARGET libelf)
+    add_custom_target(libelf)
+endif()
+
 include_directories(${LIBELF_INCLUDE})

@@ -34,6 +34,8 @@ limitations under the License.
 
 #include "strlcpy.h"
 
+using namespace std;
+
 extern sinsp_evttables g_infotables;
 int32_t g_screen_w = -1;
 bool g_filterchecks_force_raw_times = false;
@@ -67,7 +69,7 @@ bool g_filterchecks_force_raw_times = false;
 int32_t gmt2local(time_t t)
 {
 	int dt, dir;
-	struct tm *gmt, *loc;
+	struct tm *gmt, *tmp_gmt, *loc;
 	struct tm sgmt;
 
 	if(t == 0)
@@ -76,8 +78,17 @@ int32_t gmt2local(time_t t)
 	}
 
 	gmt = &sgmt;
-	*gmt = *gmtime(&t);
+	tmp_gmt = gmtime(&t);
+	if (tmp_gmt == NULL)
+	{
+		throw sinsp_exception("cannot get gmtime");
+	}
+	*gmt = *tmp_gmt;
 	loc = localtime(&t);
+	if(loc == NULL)
+	{
+		throw sinsp_exception("cannot get localtime");
+	}
 
 	dt = (loc->tm_hour - gmt->tm_hour) * 60 * 60 + (loc->tm_min - gmt->tm_min) * 60;
 
@@ -1866,6 +1877,10 @@ const filtercheck_field_info sinsp_filter_check_thread_fields[] =
 	{PT_CHARBUF, EPF_NONE, PF_NA, "proc.pcmdline", "Parent Command Line", "the full command line (proc.name + proc.args) of the parent of the process generating the event."},
 	{PT_INT64, EPF_NONE, PF_ID, "proc.apid", "Ancestor Process ID", "the pid of one of the process ancestors. E.g. proc.apid[1] returns the parent pid, proc.apid[2] returns the grandparent pid, and so on. proc.apid[0] is the pid of the current process. proc.apid without arguments can be used in filters only and matches any of the process ancestors, e.g. proc.apid=1234."},
 	{PT_CHARBUF, EPF_NONE, PF_NA, "proc.aname", "Ancestor Name", "the name (excluding the path) of one of the process ancestors. E.g. proc.aname[1] returns the parent name, proc.aname[2] returns the grandparent name, and so on. proc.aname[0] is the name of the current process. proc.aname without arguments can be used in filters only and matches any of the process ancestors, e.g. proc.aname=bash."},
+	{PT_CHARBUF, EPF_NONE, PF_NA, "proc.pexe", "Parent First Argument", "The first command line argument (usually the executable name or a custom one) of the parent process."},
+	{PT_CHARBUF, EPF_NONE, PF_NA, "proc.aexe", "Ancestor First Argument", "The first command line argument (usually the executable name or a custom one) of one of the process ancestors. E.g. proc.aexe[1] returns the parent first argument, proc.aexe[2] returns the grandparent first argument, and so on. proc.aexe[0] is the first argument of the current process. proc.aexe without arguments can be used in filters only and matches any of the process ancestors, e.g. proc.aexe endswith java."},
+	{PT_CHARBUF, EPF_NONE, PF_NA, "proc.pexepath", "Parent Process Executable Path", "The full executable path of the parent process."},
+	{PT_CHARBUF, EPF_NONE, PF_NA, "proc.aexepath", "Ancestor Executable Path", "The full executable path of one of the process ancestors. E.g. proc.aexepath[1] returns the parent full executable path, proc.aexepath[2] returns the grandparent full executable path, and so on. proc.aexepath[0] is the full executable path of the current process. proc.aexepath without arguments can be used in filters only and matches any of the process ancestors, e.g. proc.aexepath contains java."},
 	{PT_INT64, EPF_NONE, PF_ID, "proc.loginshellid", "Login Shell ID", "the pid of the oldest shell among the ancestors of the current process, if there is one. This field can be used to separate different user sessions, and is useful in conjunction with chisels like spy_user."},
 	{PT_RELTIME, EPF_NONE, PF_DEC, "proc.duration", "Duration", "number of nanoseconds since the process started."},
 	{PT_UINT64, EPF_NONE, PF_DEC, "proc.fdopencount", "FD Count", "number of open FDs for the process"},
@@ -1940,7 +1955,7 @@ int32_t sinsp_filter_check_thread::extract_arg(string fldname, string val, OUT c
 	//
 	// 'arg' and 'resarg' are handled in a custom way
 	//
-	if(m_field_id == TYPE_APID || m_field_id == TYPE_ANAME)
+	if(m_field_id == TYPE_APID || m_field_id == TYPE_ANAME || m_field_id == TYPE_AEXE || m_field_id == TYPE_AEXEPATH)
 	{
 		if(val[fldname.size()] == '[')
 		{
@@ -2027,6 +2042,51 @@ int32_t sinsp_filter_check_thread::parse_field_name(const char* str, bool alloc_
 		catch(...)
 		{
 			if(val == "proc.aname")
+			{
+				m_argid = -1;
+				res = (int32_t)val.size();
+			}
+		}
+
+		return res;
+	}
+	else if(STR_MATCH("proc.aexepath"))
+	{
+		m_field_id = TYPE_AEXEPATH;
+		m_field = &m_info.m_fields[m_field_id];
+
+		int32_t res = 0;
+
+		try
+		{
+			res = extract_arg("proc.aexepath", val, NULL);
+		}
+		catch(...)
+		{
+			if(val == "proc.aexepath")
+			{
+				m_argid = -1;
+				res = (int32_t)val.size();
+			}
+		}
+
+		return res;
+	}
+	/* note: because of str similarity of proc.aexe to proc.aexepath, this needs to be placed after proc.aexepath*/
+	else if(STR_MATCH("proc.aexe"))
+	{
+		m_field_id = TYPE_AEXE;
+		m_field = &m_info.m_fields[m_field_id];
+
+		int32_t res = 0;
+
+		try
+		{
+			res = extract_arg("proc.aexe", val, NULL);
+		}
+		catch(...)
+		{
+			if(val == "proc.aexe")
 			{
 				m_argid = -1;
 				res = (int32_t)val.size();
@@ -2487,6 +2547,98 @@ uint8_t* sinsp_filter_check_thread::extract(sinsp_evt *evt, OUT uint32_t* len, b
 			m_tstr = mt->get_comm();
 			RETURN_EXTRACT_STRING(m_tstr);
 		}
+	case TYPE_PEXE:
+		{
+			sinsp_threadinfo* ptinfo =
+				m_inspector->get_thread_ref(tinfo->m_ptid, false, true).get();
+
+			if(ptinfo != NULL)
+			{
+				m_tstr = ptinfo->get_exe();
+				RETURN_EXTRACT_STRING(m_tstr);
+			}
+			else
+			{
+				return NULL;
+			}
+		}
+	case TYPE_AEXE:
+		{
+			sinsp_threadinfo* mt = NULL;
+
+			if(tinfo->is_main_thread())
+			{
+				mt = tinfo;
+			}
+			else
+			{
+				mt = tinfo->get_main_thread();
+
+				if(mt == NULL)
+				{
+					return NULL;
+				}
+			}
+
+			for(int32_t j = 0; j < m_argid; j++)
+			{
+				mt = mt->get_parent_thread();
+
+				if(mt == NULL)
+				{
+					return NULL;
+				}
+			}
+
+			m_tstr = mt->get_exe();
+			RETURN_EXTRACT_STRING(m_tstr);
+		}
+	case TYPE_PEXEPATH:
+		{
+			sinsp_threadinfo* ptinfo =
+				m_inspector->get_thread_ref(tinfo->m_ptid, false, true).get();
+
+			if(ptinfo != NULL)
+			{
+				m_tstr = ptinfo->get_exepath();
+				RETURN_EXTRACT_STRING(m_tstr);
+			}
+			else
+			{
+				return NULL;
+			}
+		}
+	case TYPE_AEXEPATH:
+		{
+			sinsp_threadinfo* mt = NULL;
+
+			if(tinfo->is_main_thread())
+			{
+				mt = tinfo;
+			}
+			else
+			{
+				mt = tinfo->get_main_thread();
+
+				if(mt == NULL)
+				{
+					return NULL;
+				}
+			}
+
+			for(int32_t j = 0; j < m_argid; j++)
+			{
+				mt = mt->get_parent_thread();
+
+				if(mt == NULL)
+				{
+					return NULL;
+				}
+			}
+
+			m_tstr = mt->get_exepath();
+			RETURN_EXTRACT_STRING(m_tstr);
+		}
 	case TYPE_LOGINSHELLID:
 		{
 			sinsp_threadinfo* mt = NULL;
@@ -2938,6 +3090,112 @@ bool sinsp_filter_check_thread::compare_full_aname(sinsp_evt *evt)
 	return found;
 }
 
+bool sinsp_filter_check_thread::compare_full_aexe(sinsp_evt *evt)
+{
+	sinsp_threadinfo* tinfo = evt->get_thread_info();
+
+	if(tinfo == NULL)
+	{
+		return false;
+	}
+
+	sinsp_threadinfo* mt = NULL;
+
+	if(tinfo->is_main_thread())
+	{
+		mt = tinfo;
+	}
+	else
+	{
+		mt = tinfo->get_main_thread();
+
+		if(mt == NULL)
+		{
+			return false;
+		}
+	}
+
+	//
+	// No id specified, search in all of the ancestors
+	//
+	bool found = false;
+	sinsp_threadinfo::visitor_func_t visitor = [this, &found] (sinsp_threadinfo *pt)
+	{
+		bool res;
+
+		res = flt_compare(m_cmpop,
+				  PT_CHARBUF,
+				  (void*)pt->m_exe.c_str());
+
+		if(res == true)
+		{
+			found = true;
+
+			// Can stop traversing parent state
+			return false;
+		}
+
+		return true;
+	};
+
+	mt->traverse_parent_state(visitor);
+
+	return found;
+}
+
+bool sinsp_filter_check_thread::compare_full_aexepath(sinsp_evt *evt)
+{
+	sinsp_threadinfo* tinfo = evt->get_thread_info();
+
+	if(tinfo == NULL)
+	{
+		return false;
+	}
+
+	sinsp_threadinfo* mt = NULL;
+
+	if(tinfo->is_main_thread())
+	{
+		mt = tinfo;
+	}
+	else
+	{
+		mt = tinfo->get_main_thread();
+
+		if(mt == NULL)
+		{
+			return false;
+		}
+	}
+
+	//
+	// No id specified, search in all of the ancestors
+	//
+	bool found = false;
+	sinsp_threadinfo::visitor_func_t visitor = [this, &found] (sinsp_threadinfo *pt)
+	{
+		bool res;
+
+		res = flt_compare(m_cmpop,
+				  PT_CHARBUF,
+				  (void*)pt->m_exepath.c_str());
+
+		if(res == true)
+		{
+			found = true;
+
+			// Can stop traversing parent state
+			return false;
+		}
+
+		return true;
+	};
+
+	mt->traverse_parent_state(visitor);
+
+	return found;
+}
+
 bool sinsp_filter_check_thread::compare(sinsp_evt *evt)
 {
 	if(m_field_id == TYPE_APID)
@@ -2952,6 +3210,20 @@ bool sinsp_filter_check_thread::compare(sinsp_evt *evt)
 		if(m_argid == -1)
 		{
 			return compare_full_aname(evt);
+		}
+	}
+	else if(m_field_id == TYPE_AEXE)
+	{
+		if(m_argid == -1)
+		{
+			return compare_full_aexe(evt);
+		}
+	}
+	else if(m_field_id == TYPE_AEXEPATH)
+	{
+		if(m_argid == -1)
+		{
+			return compare_full_aexepath(evt);
 		}
 	}
 
@@ -3559,6 +3831,11 @@ uint8_t *sinsp_filter_check_event::extract_abspath(sinsp_evt *evt, OUT uint32_t 
 		dirfdarg = "dirfd";
 		patharg = "filename";
 	}
+	else if(etype == PPME_SYSCALL_FCHOWNAT_X)
+	{
+		dirfdarg = "dirfd";
+		patharg = "pathname";
+	}
 
 	if(!dirfdarg || !patharg)
 	{
@@ -3982,8 +4259,8 @@ uint8_t* sinsp_filter_check_event::extract(sinsp_evt *evt, OUT uint32_t* len, bo
 	case TYPE_SYSCALL_TYPE:
 		{
 			uint8_t* evname;
-			uint16_t etype = evt->m_pevt->type;
-			if(!sinsp::is_syscall_event(etype))
+			ppm_event_code etype = (ppm_event_code)evt->m_pevt->type;
+			if(!libsinsp::events::is_syscall_event(etype))
 			{
 				return NULL;
 			}
@@ -5233,7 +5510,12 @@ uint8_t* sinsp_filter_check_tracer::extract_args(sinsp_partial_tracer* pae, OUT 
 
 	if(m_storage_size < encoded_args_len)
 	{
-		m_storage = (char*)realloc(m_storage, encoded_args_len);
+		char *new_storage = (char*)realloc(m_storage, encoded_args_len);
+		if(new_storage == NULL)
+		{
+			return NULL;
+		}
+		m_storage = new_storage;
 		m_storage_size = encoded_args_len;
 	}
 
@@ -5388,7 +5670,12 @@ uint8_t* sinsp_filter_check_tracer::extract(sinsp_evt *evt, OUT uint32_t* len, b
 
 			if(m_storage_size < encoded_tags_len)
 			{
-				m_storage = (char*)realloc(m_storage, encoded_tags_len);
+				char *new_storage = (char*)realloc(m_storage, encoded_tags_len);
+				if(new_storage == NULL)
+				{
+					return NULL;
+				}
+				m_storage = new_storage;
 				m_storage_size = encoded_tags_len;
 			}
 
@@ -5872,7 +6159,12 @@ inline uint8_t* sinsp_filter_check_evtin::extract_tracer(sinsp_evt *evt, sinsp_p
 
 		if(m_storage_size < encoded_tags_len)
 		{
-			m_storage = (char*)realloc(m_storage, encoded_tags_len);
+			char *new_storage = (char*)realloc(m_storage, encoded_tags_len);
+			if(new_storage == NULL)
+			{
+				return NULL;
+			}
+			m_storage = new_storage;
 			m_storage_size = encoded_tags_len;
 		}
 
@@ -5933,7 +6225,12 @@ inline uint8_t* sinsp_filter_check_evtin::extract_tracer(sinsp_evt *evt, sinsp_p
 
 		if(m_storage_size < encoded_args_len)
 		{
-			m_storage = (char*)realloc(m_storage, encoded_args_len);
+			char *new_storage = (char*)realloc(m_storage, encoded_args_len);
+			if(new_storage == NULL)
+			{
+				return NULL;
+			}
+			m_storage = new_storage;
 			m_storage_size = encoded_args_len;
 		}
 
@@ -6285,6 +6582,8 @@ const filtercheck_field_info sinsp_filter_check_container_fields[] =
 	{PT_CHARBUF, EPF_NONE, PF_NA, "container.readiness_probe", "Readiness", "The container's readiness probe. Will be the null value (\"N/A\") if no readiness probe configured, the readiness probe command line otherwise"},
 	{PT_UINT64, EPF_NONE, PF_DEC, "container.start_ts", "Container start ts (epoch in ns)", "Approximate container start ts (epoch in ns) based on proc.pidns_init_start_ts."},
 	{PT_RELTIME, EPF_NONE, PF_DEC, "container.duration", "Number of nanoseconds since container.start_ts", "Number of nanoseconds since container.start_ts."},
+	{PT_CHARBUF, EPF_NONE, PF_NA, "container.ip", "Container ip address", "The container's / pod's primary ip address as retrieved from the container engine. Only ipv4 addresses are tracked. Consider container.cni.json (CRI use case) for logging ip addresses for each network interface."},
+	{PT_CHARBUF, EPF_NONE, PF_NA, "container.cni.json", "Container's / pod's CNI result json", "The container's / pod's CNI result field from the respective pod status info. It contains ip addresses for each network interface exposed as unparsed escaped JSON string. Supported for CRI container engine (containerd, cri-o runtimes), optimized for containerd (some non-critical JSON keys removed). Useful for tracking ips (ipv4 and ipv6, dual-stack support) for each network interface (multi-interface support)."},
 };
 
 sinsp_filter_check_container::sinsp_filter_check_container()
@@ -6405,10 +6704,19 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 		return NULL;
 	}
 
+	sinsp_container_info::ptr_t container_info = NULL;
+	bool is_host = true;
+
+	if(!tinfo->m_container_id.empty())
+	{
+		is_host = false;
+		container_info = m_inspector->m_container_manager.get_container(tinfo->m_container_id);
+	}
+
 	switch(m_field_id)
 	{
 	case TYPE_CONTAINER_ID:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			m_tstr = "host";
 		}
@@ -6419,14 +6727,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 
 		RETURN_EXTRACT_STRING(m_tstr);
 	case TYPE_CONTAINER_NAME:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			m_tstr = "host";
 		}
 		else
 		{
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6442,14 +6748,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 
 		RETURN_EXTRACT_STRING(m_tstr);
 	case TYPE_CONTAINER_IMAGE:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			return NULL;
 		}
 		else
 		{
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6468,14 +6772,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 	case TYPE_CONTAINER_IMAGE_REPOSITORY:
 	case TYPE_CONTAINER_IMAGE_TAG:
 	case TYPE_CONTAINER_IMAGE_DIGEST:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			return NULL;
 		}
 		else
 		{
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6510,14 +6812,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 
 		RETURN_EXTRACT_STRING(m_tstr);
 	case TYPE_CONTAINER_TYPE:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			m_tstr = "host";
 		}
 		else
 		{
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6558,14 +6858,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 		}
 		RETURN_EXTRACT_STRING(m_tstr);
 	case TYPE_CONTAINER_PRIVILEGED:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			return NULL;
 		}
 		else
 		{
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6585,14 +6883,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 		RETURN_EXTRACT_VAR(m_u32val);
 		break;
 	case TYPE_CONTAINER_MOUNTS:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			return NULL;
 		}
 		else
 		{
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6619,15 +6915,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 
 		break;
 	case TYPE_CONTAINER_MOUNT:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			return NULL;
 		}
 		else
 		{
-
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6662,15 +6955,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 	case TYPE_CONTAINER_MOUNT_MODE:
 	case TYPE_CONTAINER_MOUNT_RDWR:
 	case TYPE_CONTAINER_MOUNT_PROPAGATION:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			return NULL;
 		}
 		else
 		{
-
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6724,14 +7014,12 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 	case TYPE_CONTAINER_HEALTHCHECK:
 	case TYPE_CONTAINER_LIVENESS_PROBE:
 	case TYPE_CONTAINER_READINESS_PROBE:
-		if(tinfo->m_container_id.empty())
+		if(is_host)
 		{
 			return NULL;
 		}
 		else
 		{
-			const sinsp_container_info::ptr_t container_info =
-				m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 			if(!container_info)
 			{
 				return NULL;
@@ -6764,20 +7052,55 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 			m_tstr = "NONE";
 			RETURN_EXTRACT_STRING(m_tstr);
 		}
+		break;
 	case TYPE_CONTAINER_START_TS:
-		if(tinfo->m_container_id.empty() || tinfo->m_pidns_init_start_ts == 0)
+		if(is_host || tinfo->m_pidns_init_start_ts == 0)
 		{
 			return NULL;
 		}
 		RETURN_EXTRACT_VAR(tinfo->m_pidns_init_start_ts);
+		break;
 	case TYPE_CONTAINER_DURATION:
-		if(tinfo->m_container_id.empty() || tinfo->m_clone_ts == 0)
+		if(is_host || tinfo->m_clone_ts == 0)
 		{
 			return NULL;
 		}
 		m_s64val = evt->get_ts() - tinfo->m_pidns_init_start_ts;
 		ASSERT(m_s64val > 0);
 		RETURN_EXTRACT_VAR(m_s64val);
+		break;
+	case TYPE_CONTAINER_IP_ADDR:
+		if(is_host)
+		{
+			return NULL;
+		}
+		else
+		{
+			if(!container_info)
+			{
+				return NULL;
+			}
+			m_u32val = htonl(container_info->m_container_ip);
+			char addrbuff[100];
+			inet_ntop(AF_INET, &m_u32val, addrbuff, sizeof(addrbuff));
+			m_tstr = addrbuff;
+			RETURN_EXTRACT_STRING(m_tstr);
+		}
+		break;
+	case TYPE_CONTAINER_CNIRESULT:
+		if(is_host)
+		{
+			return NULL;
+		}
+		else
+		{
+			if(!container_info)
+			{
+				return NULL;
+			}
+			RETURN_EXTRACT_STRING(container_info->m_pod_cniresult);
+		}
+		break;
 	default:
 		ASSERT(false);
 		break;
@@ -7437,6 +7760,8 @@ const filtercheck_field_info sinsp_filter_check_k8s_fields[] =
 	{PT_CHARBUF, EPF_NONE, PF_NA, "k8s.pod.id", "Pod ID", "Kubernetes pod id."},
 	{PT_CHARBUF, EPF_ARG_REQUIRED, PF_NA, "k8s.pod.label", "Pod Label", "Kubernetes pod label. E.g. 'k8s.pod.label.foo'."},
 	{PT_CHARBUF, EPF_NONE, PF_NA, "k8s.pod.labels", "Pod Labels", "Kubernetes pod comma-separated key/value labels. E.g. 'foo1:bar1,foo2:bar2'."},
+	{PT_CHARBUF, EPF_NONE, PF_NA, "k8s.pod.ip", "Pod Ip", "Kubernetes pod ip, same as container.ip field as each container in a pod shares the network stack of the sandbox / pod. Only ipv4 addresses are tracked. Consider k8s.pod.cni.json for logging ip addresses for each network interface."},
+	{PT_CHARBUF, EPF_NONE, PF_NA, "k8s.pod.cni.json", "Pod CNI result json", "Kubernetes pod CNI result field from the respective pod status info, same as container.cni.json field. It contains ip addresses for each network interface exposed as unparsed escaped JSON string. Supported for CRI container engine (containerd, cri-o runtimes), optimized for containerd (some non-critical JSON keys removed). Useful for tracking ips (ipv4 and ipv6, dual-stack support) for each network interface (multi-interface support)."},
 	{PT_CHARBUF, EPF_NONE, PF_NA, "k8s.rc.name", "Replication Controller Name", "Kubernetes replication controller name."},
 	{PT_CHARBUF, EPF_NONE, PF_NA, "k8s.rc.id", "Replication Controller ID", "Kubernetes replication controller id."},
 	{PT_CHARBUF, EPF_ARG_REQUIRED, PF_NA, "k8s.rc.label", "Replication Controller Label", "Kubernetes replication controller label. E.g. 'k8s.rc.label.foo'."},
@@ -7806,6 +8131,19 @@ uint8_t* sinsp_filter_check_k8s::extract(sinsp_evt *evt, OUT uint32_t* len, bool
 				}
 
 			}
+			break;
+		case TYPE_K8S_POD_IP:
+			m_u32val = htonl(container_info->m_container_ip);
+			char addrbuff[100];
+			inet_ntop(AF_INET, &m_u32val, addrbuff, sizeof(addrbuff));
+			m_tstr = addrbuff;
+			RETURN_EXTRACT_STRING(m_tstr);
+			break;
+		case TYPE_K8S_POD_CNIRESULT:
+			RETURN_EXTRACT_STRING(container_info->m_pod_cniresult);
+			break;
+		default:
+			ASSERT(false);
 			break;
 		}
 	}

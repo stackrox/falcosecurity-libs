@@ -52,7 +52,7 @@ struct event_filler_arguments {
 	u32 nargs;
 	u32 arg_data_offset;
 	u32 arg_data_size;
-	enum ppm_event_type event_type;	/* the event type */
+	ppm_event_code event_type;	/* the event type */
 	/* Eventually convert this to an event_info union and move all the
 	 * below per-event params in this union, it's not good to waste kernel
 	 * stack since all this stuff is always exclusive
@@ -107,6 +107,7 @@ extern const struct ppm_event_entry g_ppm_events[];
  * Functions
  */
 int32_t dpi_lookahead_init(void);
+int32_t push_empty_param(struct event_filler_arguments *args);
 int32_t val_to_ring(struct event_filler_arguments *args, u64 val, u32 val_len, bool fromuser, u8 dyn_idx);
 u16 pack_addr(struct sockaddr *usrsockaddr, int ulen, char *targetbuf, u16 targetbufsize);
 u16 fd_to_socktuple(int fd, struct sockaddr *usrsockaddr, int ulen, bool use_userdata, bool is_inbound, char *targetbuf, u16 targetbufsize);

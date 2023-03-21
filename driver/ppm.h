@@ -40,6 +40,14 @@ typedef u64 nanoseconds;
 #include <linux/pid_namespace.h>
 /* End StackRox Section */
 
+/* This is an auxiliary struct we use in setsockopt
+ * when `__kernel_timex_timeval` struct is not defined.
+ */
+struct __aux_timeval {
+	long long int tv_sec;
+	long long int tv_usec;
+};
+
 /*
  * The ring descriptor.
  * We have one of these for each CPU.
@@ -137,4 +145,6 @@ extern void ppm_syscall_get_arguments(struct task_struct *task, struct pt_regs *
 #define SECOND_IN_NS 1000000000
 #define NS_TO_SEC(_ns) ((_ns) / SECOND_IN_NS)
 #define MORE_THAN_ONE_SECOND_AHEAD(_ns1, _ns2) ((_ns1) - (_ns2) > SECOND_IN_NS)
+#define USECOND_IN_NS 1000
+
 #endif /* PPM_H_ */

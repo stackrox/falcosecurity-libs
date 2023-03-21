@@ -125,7 +125,7 @@ sinsp_threadinfo::~sinsp_threadinfo()
 
 void sinsp_threadinfo::fix_sockets_coming_from_proc()
 {
-	unordered_map<int64_t, sinsp_fdinfo_t>::iterator it;
+	std::unordered_map<int64_t, sinsp_fdinfo_t>::iterator it;
 
 	for(it = m_fdtable.m_table.begin(); it != m_fdtable.m_table.end(); it++)
 	{
@@ -373,7 +373,7 @@ void sinsp_threadinfo::add_fd_from_scap(scap_fdinfo *fdi, OUT sinsp_fdinfo_t *re
 	// Call the protocol decoder callbacks associated to notify them about this FD
 	//
 	ASSERT(m_inspector != NULL);
-	vector<sinsp_protodecoder*>::iterator it;
+	std::vector<sinsp_protodecoder*>::iterator it;
 
 	for(it = m_inspector->m_parser->m_open_callbacks.begin();
 		it != m_inspector->m_parser->m_open_callbacks.end(); ++it)
@@ -480,7 +480,7 @@ void sinsp_threadinfo::init(scap_threadinfo* pi)
 	{
 		add_fd_from_scap(fdi, &tfdinfo);
 
-		if(m_inspector->m_filter != NULL && m_inspector->m_filter_proc_table_when_saving)
+		if(m_inspector->m_filter != NULL && m_inspector->is_capture())
 		{
 			tevt.m_tinfo = this;
 			tevt.m_fdinfo = &tfdinfo;
@@ -506,7 +506,7 @@ void sinsp_threadinfo::init(scap_threadinfo* pi)
 
 	m_lastevent_data = NULL;
 
-	if(m_inspector->m_filter != NULL && m_inspector->m_filter_proc_table_when_saving)
+	if(m_inspector->m_filter != NULL && m_inspector->is_capture())
 	{
 		if(!match)
 		{
@@ -632,6 +632,10 @@ void sinsp_threadinfo::set_env(const char* env, size_t len)
 		{
 			size_t sz = len - offset;
 			void* zero = calloc(sz, sizeof(char));
+			if(zero == NULL)
+			{
+				throw sinsp_exception("memory allocation error in sinsp_threadinfo::set_env");
+			}
 			if(!memcmp(left, zero, sz))
 			{
 				free(zero);
@@ -646,9 +650,9 @@ void sinsp_threadinfo::set_env(const char* env, size_t len)
 }
 
 bool sinsp_threadinfo::set_env_from_proc() {
-	string environ_path = string(scap_get_host_root()) + "/proc/" + to_string(m_pid) + "/environ";
+	std::string environ_path = std::string(scap_get_host_root()) + "/proc/" + std::to_string(m_pid) + "/environ";
 
-	ifstream environment(environ_path);
+	std::ifstream environment(environ_path);
 	if (!environment)
 	{
 		// failed to read the environment from /proc, work with what we have
@@ -657,7 +661,7 @@ bool sinsp_threadinfo::set_env_from_proc() {
 
 	m_env.clear();
 	while (environment) {
-		string env;
+		std::string env;
 		getline(environment, env, '\0');
 		if (!env.empty())
 		{
@@ -668,7 +672,7 @@ bool sinsp_threadinfo::set_env_from_proc() {
 	return true;
 }
 
-const vector<string>& sinsp_threadinfo::get_env()
+const std::vector<std::string>& sinsp_threadinfo::get_env()
 {
 	if(is_main_thread())
 	{
@@ -692,7 +696,7 @@ const vector<string>& sinsp_threadinfo::get_env()
 }
 
 // Return value string for the exact environment variable name given
-string sinsp_threadinfo::get_env(const string& name)
+std::string sinsp_threadinfo::get_env(const std::string& name)
 {
 	size_t nlen = name.length();
 	for(const auto& env_var : get_env())
@@ -702,7 +706,7 @@ string sinsp_threadinfo::get_env(const string& name)
 		{
 			// Stripping spaces, not sure if we really should or need to
 			size_t first = env_var.find_first_not_of(' ', nlen + 1);
-			if (first == string::npos)
+			if (first == std::string::npos)
 				return "";
 			size_t last = env_var.find_last_not_of(' ');
 
@@ -728,12 +732,12 @@ void sinsp_threadinfo::set_cgroups(const char* cgroups, size_t len)
 			return;
 		}
 
-		string subsys(str, sep - str);
-		string cgroup(sep + 1);
+		std::string subsys(str, sep - str);
+		std::string cgroup(sep + 1);
 
 		size_t subsys_length = subsys.length();
 		size_t pos = subsys.find("_cgroup");
-		if(pos != string::npos)
+		if(pos != std::string::npos)
 		{
 			subsys.erase(pos, sizeof("_cgroup") - 1);
 		}
@@ -771,7 +775,13 @@ sinsp_threadinfo* sinsp_threadinfo::get_parent_thread()
 
 sinsp_fdinfo_t* sinsp_threadinfo::add_fd(int64_t fd, sinsp_fdinfo_t *fdinfo)
 {
-	sinsp_fdinfo_t* res = get_fd_table()->add(fd, fdinfo);
+	sinsp_fdtable* fd_table_ptr = get_fd_table();
+	if(fd_table_ptr == NULL)
+	{
+		ASSERT(false);
+		return NULL;
+	}
+	sinsp_fdinfo_t* res = fd_table_ptr->add(fd, fdinfo);
 
 	//
 	// Update the last event fd. It's needed by the filtering engine
@@ -783,14 +793,25 @@ sinsp_fdinfo_t* sinsp_threadinfo::add_fd(int64_t fd, sinsp_fdinfo_t *fdinfo)
 
 void sinsp_threadinfo::remove_fd(int64_t fd)
 {
-	get_fd_table()->erase(fd);
+	sinsp_fdtable* fd_table_ptr = get_fd_table();
+	if(fd_table_ptr == NULL)
+	{
+		ASSERT(false);
+		return;
+	}
+	fd_table_ptr->erase(fd);
 }
 
 bool sinsp_threadinfo::is_bound_to_port(uint16_t number)
 {
-	unordered_map<int64_t, sinsp_fdinfo_t>::iterator it;
+	std::unordered_map<int64_t, sinsp_fdinfo_t>::iterator it;
 
 	sinsp_fdtable* fdt = get_fd_table();
+	if(fdt == NULL)
+	{
+		ASSERT(false);
+		return false;
+	}
 
 	for(it = fdt->m_table.begin(); it != fdt->m_table.end(); ++it)
 	{
@@ -815,9 +836,14 @@ bool sinsp_threadinfo::is_bound_to_port(uint16_t number)
 
 bool sinsp_threadinfo::uses_client_port(uint16_t number)
 {
-	unordered_map<int64_t, sinsp_fdinfo_t>::iterator it;
+	std::unordered_map<int64_t, sinsp_fdinfo_t>::iterator it;
 
 	sinsp_fdtable* fdt = get_fd_table();
+	if(fdt == NULL)
+	{
+		ASSERT(false);
+		return false;
+	}
 
 	for(it = fdt->m_table.begin();
 		it != fdt->m_table.end(); ++it)
@@ -851,7 +877,7 @@ sinsp_threadinfo* sinsp_threadinfo::get_cwd_root()
 	}
 }
 
-string sinsp_threadinfo::get_cwd()
+std::string sinsp_threadinfo::get_cwd()
 {
 	// Ideally we should use get_cwd_root()
 	// but scap does not read CLONE_FS from /proc
@@ -909,11 +935,15 @@ void sinsp_threadinfo::allocate_private_state()
 	{
 		m_private_state.clear();
 
-		vector<uint32_t>* sizes = &m_inspector->m_thread_privatestate_manager.m_memory_sizes;
+		std::vector<uint32_t>* sizes = &m_inspector->m_thread_privatestate_manager.m_memory_sizes;
 
 		for(j = 0; j < sizes->size(); j++)
 		{
 			void* newbuf = malloc(sizes->at(j));
+			if(newbuf == NULL)
+			{
+				throw sinsp_exception("memory allocation error in sinsp_threadinfo::allocate_private_state.");
+			}
 			memset(newbuf, 0, sizes->at(j));
 			m_private_state.push_back(newbuf);
 		}
@@ -925,7 +955,7 @@ void* sinsp_threadinfo::get_private_state(uint32_t id)
 	if(id >= m_private_state.size())
 	{
 		ASSERT(false);
-		throw sinsp_exception("invalid thread state ID" + to_string((long long) id));
+		throw sinsp_exception("invalid thread state ID" + std::to_string((long long) id));
 	}
 
 	return m_private_state[id];
@@ -1036,7 +1066,7 @@ void sinsp_threadinfo::traverse_parent_state(visitor_func_t &visitor)
 				// Note we only log a loop once for a given main thread, to avoid flooding logs.
 				if(!m_parent_loop_detected)
 				{
-					g_logger.log(string("Loop in parent thread state detected for pid ") +
+					g_logger.log(std::string("Loop in parent thread state detected for pid ") +
 						     std::to_string(m_pid) +
 						     ". stopped at tid= " + std::to_string(slow->m_tid) +
 						     " ptid=" + std::to_string(slow->m_ptid),
@@ -1071,7 +1101,7 @@ void sinsp_threadinfo::clear_exec_enter_tid()
 	m_exec_enter_tid = NULL;
 }
 
-void sinsp_threadinfo::populate_cmdline(string &cmdline, const sinsp_threadinfo *tinfo)
+void sinsp_threadinfo::populate_cmdline(std::string &cmdline, const sinsp_threadinfo *tinfo)
 {
 	cmdline = tinfo->get_comm();
 
@@ -1089,7 +1119,7 @@ bool sinsp_threadinfo::is_health_probe()
 	        m_category == sinsp_threadinfo::CAT_READINESS_PROBE);
 }
 
-string sinsp_threadinfo::get_path_for_dir_fd(int64_t dir_fd)
+std::string sinsp_threadinfo::get_path_for_dir_fd(int64_t dir_fd)
 {
 	sinsp_fdinfo_t* dir_fdinfo = get_fd(dir_fd);
 	if (!dir_fdinfo || dir_fdinfo->m_name.empty())
@@ -1131,7 +1161,7 @@ string sinsp_threadinfo::get_path_for_dir_fd(int64_t dir_fd)
 	return dir_fdinfo->m_name;
 }
 
-shared_ptr<sinsp_threadinfo> sinsp_threadinfo::lookup_thread() const
+std::shared_ptr<sinsp_threadinfo> sinsp_threadinfo::lookup_thread() const
 {
 	return m_inspector->get_thread_ref(m_pid, true, true, true);
 }
@@ -1179,7 +1209,7 @@ void sinsp_threadinfo::env_to_iovec(struct iovec **iov, int *iovcnt,
 // won't, copy the portion that will fit to rem and set the iovec to
 // rem. Updates alen with the new total length and possibly sets rem
 // to any truncated string.
-void sinsp_threadinfo::add_to_iovec(const string &str,
+void sinsp_threadinfo::add_to_iovec(const std::string &str,
 				    const bool include_trailing_null,
 				    struct iovec &iov,
 				    uint32_t &alen,
@@ -1209,12 +1239,16 @@ void sinsp_threadinfo::cgroups_to_iovec(struct iovec **iov, int *iovcnt,
 				       std::string &rem, const cgroups_t& cgroups) const
 {
 	uint32_t alen = SCAP_MAX_ARGS_SIZE;
-	static const string eq = "=";
+	static const std::string eq = "=";
 
 	// We allocate an iovec big enough to hold all the cgroups and
 	// intermediate '=' signs. Based on alen, we might not use all
 	// of the iovec.
 	*iov = (struct iovec *) malloc((3 * cgroups.size()) * sizeof(struct iovec));
+	if(iov == NULL)
+	{
+		throw sinsp_exception("memory allocation error in sinsp_threadinfo::cgroups_to_iovec.");
+	}
 
 	*iovcnt = 0;
 
@@ -1233,7 +1267,7 @@ void sinsp_threadinfo::cgroups_to_iovec(struct iovec **iov, int *iovcnt,
 	}
 }
 
-size_t sinsp_threadinfo::strvec_len(const vector<string> &strs) const
+size_t sinsp_threadinfo::strvec_len(const std::vector<std::string> &strs) const
 {
 	size_t totlen = 0;
 
@@ -1248,7 +1282,7 @@ size_t sinsp_threadinfo::strvec_len(const vector<string> &strs) const
 
 // iov will be allocated and must be freed. rem is used to hold a
 // possibly truncated final argument.
-void sinsp_threadinfo::strvec_to_iovec(const vector<string> &strs,
+void sinsp_threadinfo::strvec_to_iovec(const std::vector<std::string> &strs,
 				       struct iovec **iov, int *iovcnt,
 				       std::string &rem) const
 {
@@ -1257,6 +1291,10 @@ void sinsp_threadinfo::strvec_to_iovec(const vector<string> &strs,
 	// We allocate an iovec big enough to hold all the entries in
 	// strs. Based on alen, we might not use all of the iovec.
 	*iov = (struct iovec *) malloc(strs.size() * sizeof(struct iovec));
+	if(iov == NULL)
+	{
+		throw sinsp_exception("memory allocation error in sinsp_threadinfo::strvec_to_iovec.");
+	}
 
 	*iovcnt = 0;
 
@@ -1373,7 +1411,7 @@ void sinsp_thread_manager::increment_mainthread_childcount(sinsp_threadinfo* thr
 		//
 		ASSERT(threadinfo->m_pid != threadinfo->m_tid);
 
-		sinsp_threadinfo* main_thread = m_inspector->get_thread_ref(threadinfo->m_pid, true, true).get();
+		sinsp_threadinfo* main_thread = m_inspector->get_thread_ref(threadinfo->m_pid, create_if_needed, true).get();
 		if(main_thread)
 		{
 			++main_thread->m_nchilds;
@@ -1489,8 +1527,15 @@ void sinsp_thread_manager::remove_thread(int64_t tid, bool force)
 		//
 		if((tinfo->m_pid == tinfo->m_tid) || tinfo->m_flags & PPM_CL_IS_MAIN_THREAD)
 		{
-			unordered_map<int64_t, sinsp_fdinfo_t>* fdtable = &(tinfo->get_fd_table()->m_table);
-			unordered_map<int64_t, sinsp_fdinfo_t>::iterator fdit;
+			sinsp_fdtable* fd_table_ptr = tinfo->get_fd_table();
+			if(fd_table_ptr == NULL)
+			{
+				ASSERT(false);
+				return;
+			}
+			std::unordered_map<int64_t, sinsp_fdinfo_t>* fdtable = &(fd_table_ptr->m_table);
+
+			std::unordered_map<int64_t, sinsp_fdinfo_t>::iterator fdit;
 
 			erase_fd_params eparams;
 			eparams.m_remove_from_table = false;
@@ -1600,12 +1645,18 @@ void sinsp_thread_manager::update_statistics()
 	m_inspector->m_stats.m_n_fds = 0;
 	for(threadinfo_map_iterator_t it = m_threadtable.begin(); it != m_threadtable.end(); it++)
 	{
-		m_inspector->m_stats.m_n_fds += it->second.get_fd_table()->size();
+		sinsp_fdtable* fd_table_ptr = it->second.get_fd_table();
+		if(fd_table_ptr == NULL)
+		{
+			ASSERT(false);
+			return;
+		}
+		m_inspector->m_stats.m_n_fds += fd_table_ptr->size();
 	}
 #endif
 }
 
-void sinsp_thread_manager::free_dump_fdinfos(vector<scap_fdinfo*>* fdinfos_to_free)
+void sinsp_thread_manager::free_dump_fdinfos(std::vector<scap_fdinfo*>* fdinfos_to_free)
 {
 	for(uint32_t j = 0; j < fdinfos_to_free->size(); j++)
 	{
@@ -1655,14 +1706,18 @@ void sinsp_thread_manager::dump_threads_to_file(scap_dumper_t* dumper)
 		return;
 	}
 
-	scap_dumper_t *proclist_dumper = scap_write_proclist_begin(m_inspector->m_h);
+	scap_dumper_t *proclist_dumper = scap_write_proclist_begin();
+	if(proclist_dumper == nullptr)
+	{
+			throw sinsp_exception("Failed to create proclist dumper");
+	}
 
 	uint32_t totlen = 0;
 	m_threadtable.loop([&] (sinsp_threadinfo& tinfo) {
 		scap_threadinfo *sctinfo;
 		struct iovec *args_iov, *envs_iov, *cgroups_iov;
 		int argscnt, envscnt, cgroupscnt;
-		string argsrem, envsrem, cgroupsrem;
+		std::string argsrem, envsrem, cgroupsrem;
 		uint32_t entrylen = 0;
 		auto cg = tinfo.cgroups();
 
@@ -1677,7 +1732,7 @@ void sinsp_thread_manager::dump_threads_to_file(scap_dumper_t* dumper)
 		tinfo.env_to_iovec(&envs_iov, &envscnt, envsrem);
 		tinfo.cgroups_to_iovec(&cgroups_iov, &cgroupscnt, cgroupsrem, cg);
 
-		if(scap_write_proclist_entry_bufs(m_inspector->m_h, proclist_dumper, sctinfo, &entrylen,
+		if(scap_write_proclist_entry_bufs(proclist_dumper, sctinfo, &entrylen,
 						  tinfo.m_comm.c_str(),
 						  tinfo.m_exe.c_str(),
 						  tinfo.m_exepath.c_str(),
@@ -1687,8 +1742,9 @@ void sinsp_thread_manager::dump_threads_to_file(scap_dumper_t* dumper)
 						  cgroups_iov, cgroupscnt,
 						  tinfo.m_root.c_str()) != SCAP_SUCCESS)
 		{
+			sinsp_exception exc(scap_dump_getlasterr(proclist_dumper));
 			scap_dump_close(proclist_dumper);
-			throw sinsp_exception(scap_getlasterr(m_inspector->m_h));
+			throw exc;
 		}
 
 		totlen += entrylen;
@@ -1701,9 +1757,9 @@ void sinsp_thread_manager::dump_threads_to_file(scap_dumper_t* dumper)
 		return true;
 	});
 
-	if(scap_write_proclist_end(m_inspector->m_h, dumper, proclist_dumper, totlen) != SCAP_SUCCESS)
+	if(scap_write_proclist_end(dumper, proclist_dumper, totlen) != SCAP_SUCCESS)
 	{
-		throw sinsp_exception(scap_getlasterr(m_inspector->m_h));
+		throw sinsp_exception(scap_dump_getlasterr(dumper));
 	}
 
 	//
@@ -1728,7 +1784,15 @@ void sinsp_thread_manager::dump_threads_to_file(scap_dumper_t* dumper)
 			//
 			// Add the FDs
 			//
-			unordered_map<int64_t, sinsp_fdinfo_t>& fdtable = tinfo.get_fd_table()->m_table;
+			sinsp_fdtable* fd_table_ptr = tinfo.get_fd_table();
+			if(fd_table_ptr == NULL)
+			{
+				scap_proc_free(m_inspector->m_h, sctinfo);
+				return false;
+			}
+
+			std::unordered_map<int64_t, sinsp_fdinfo_t>& fdtable = fd_table_ptr->m_table;
+
 			for(auto it = fdtable.begin(); it != fdtable.end(); ++it)
 			{
 				//
@@ -1738,7 +1802,7 @@ void sinsp_thread_manager::dump_threads_to_file(scap_dumper_t* dumper)
 				if(scfdinfo == NULL)
 				{
 					scap_proc_free(m_inspector->m_h, sctinfo);
-					throw sinsp_exception("thread memory allocation error in sinsp_thread_manager::to_scap");
+					return false;
 				}
 
 				//
@@ -1753,7 +1817,7 @@ void sinsp_thread_manager::dump_threads_to_file(scap_dumper_t* dumper)
 				if(scap_fd_add(m_inspector->m_h, sctinfo, it->first, scfdinfo) != SCAP_SUCCESS)
 				{
 					scap_proc_free(m_inspector->m_h, sctinfo);
-					throw sinsp_exception("error calling scap_fd_add in sinsp_thread_manager::to_scap (" + string(scap_getlasterr(m_inspector->m_h)) + ")");
+					throw sinsp_exception("error calling scap_fd_add in sinsp_thread_manager::to_scap (" + std::string(scap_getlasterr(m_inspector->m_h)) + ")");
 				}
 			}
 		}
@@ -1761,10 +1825,10 @@ void sinsp_thread_manager::dump_threads_to_file(scap_dumper_t* dumper)
 		//
 		// Dump the thread to disk
 		//
-		if(scap_write_proc_fds(m_inspector->m_h, sctinfo, dumper) != SCAP_SUCCESS)
+		if(scap_write_proc_fds(dumper, sctinfo) != SCAP_SUCCESS)
 		{
 			scap_proc_free(m_inspector->m_h, sctinfo);
-			throw sinsp_exception("error calling scap_proc_add in sinsp_thread_manager::to_scap (" + string(scap_getlasterr(m_inspector->m_h)) + ")");
+			throw sinsp_exception("error calling scap_proc_add in sinsp_thread_manager::to_scap (" + std::string(scap_dump_getlasterr(dumper)) + ")");
 		}
 
 		scap_proc_free(m_inspector->m_h, sctinfo);

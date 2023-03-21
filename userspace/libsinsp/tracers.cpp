@@ -40,12 +40,12 @@ sinsp_tracerparser::~sinsp_tracerparser()
 
 void sinsp_tracerparser::set_storage_size(uint32_t newsize)
 {
-	m_storage = (char*)realloc(m_storage, newsize);
-	if(m_storage == NULL)
+	char *tmp_storage = (char*)realloc(m_storage, newsize);
+	if(tmp_storage == NULL)
 	{
 		throw sinsp_exception("memory allocation error in sinsp_tracerparser::process_event_data.");
 	}
-
+	m_storage = tmp_storage;
 	m_storage_size = newsize;
 }
 
@@ -184,8 +184,8 @@ sinsp_tracerparser::parse_result sinsp_tracerparser::process_event_data(char *da
 			// the entries will be stuck there forever. Better clean the list, miss the 128
 			// events it contains, and start fresh.
 			//
-			list<sinsp_partial_tracer*>* partial_tracers_list = &m_inspector->m_partial_tracers_list;
-			list<sinsp_partial_tracer*>::iterator it;
+			std::list<sinsp_partial_tracer*>* partial_tracers_list = &m_inspector->m_partial_tracers_list;
+			std::list<sinsp_partial_tracer*>::iterator it;
 
 			for(it = partial_tracers_list->begin(); it != partial_tracers_list->end(); ++it)
 			{
@@ -204,8 +204,8 @@ sinsp_tracerparser::parse_result sinsp_tracerparser::process_event_data(char *da
 	}
 	else
 	{
-		list<sinsp_partial_tracer*>* partial_tracers_list = &m_inspector->m_partial_tracers_list;
-		list<sinsp_partial_tracer*>::iterator it;
+		std::list<sinsp_partial_tracer*>* partial_tracers_list = &m_inspector->m_partial_tracers_list;
+		std::list<sinsp_partial_tracer*>::iterator it;
 
 		init_partial_tracer(&m_exit_pae);
 
@@ -240,8 +240,8 @@ sinsp_tracerparser::parse_result sinsp_tracerparser::process_event_data(char *da
 
 sinsp_partial_tracer* sinsp_tracerparser::find_parent_enter_pae()
 {
-	list<sinsp_partial_tracer*>* partial_tracers_list = &m_inspector->m_partial_tracers_list;
-	list<sinsp_partial_tracer*>::iterator it;
+	std::list<sinsp_partial_tracer*>* partial_tracers_list = &m_inspector->m_partial_tracers_list;
+	std::list<sinsp_partial_tracer*>::iterator it;
 
 	char* tse = m_enter_pae->m_tags_storage + m_tot_taglens;
 	if(*tse == 0 && tse > m_enter_pae->m_tags_storage)
@@ -1204,8 +1204,8 @@ inline sinsp_tracerparser::parse_result sinsp_tracerparser::parsenumber_colend(c
 
 inline void sinsp_tracerparser::init_partial_tracer(sinsp_partial_tracer* pae)
 {
-	vector<char*>::iterator it;
-	vector<uint32_t>::iterator sit;
+	std::vector<char*>::iterator it;
+	std::vector<uint32_t>::iterator sit;
 
 	ASSERT(m_tinfo != NULL);
 	pae->m_tid = m_tinfo->m_tid;
@@ -1229,7 +1229,13 @@ inline void sinsp_tracerparser::init_partial_tracer(sinsp_partial_tracer* pae)
 
 	if(pae->m_tags_storage_size < encoded_tags_len)
 	{
-		pae->m_tags_storage = (char*)realloc(pae->m_tags_storage, encoded_tags_len);
+		char *new_tags_storage = (char*)realloc(pae->m_tags_storage, encoded_tags_len);
+		if(new_tags_storage == NULL)
+		{
+			free(pae->m_tags_storage);
+			throw sinsp_exception("memory reallocation error in sinsp_tracerparser::init_partial_tracer.");
+		}
+		pae->m_tags_storage = new_tags_storage;
 		pae->m_tags_storage_size = encoded_tags_len;
 	}
 
@@ -1256,7 +1262,13 @@ inline void sinsp_tracerparser::init_partial_tracer(sinsp_partial_tracer* pae)
 
 	if(pae->m_argnames_storage_size < encoded_argnames_len)
 	{
-		pae->m_argnames_storage = (char*)realloc(pae->m_argnames_storage, encoded_argnames_len);
+		char *new_argnames_storage = (char*)realloc(pae->m_argnames_storage, encoded_argnames_len);
+		if(new_argnames_storage == NULL)
+		{
+			free(pae->m_argnames_storage);
+			throw sinsp_exception("memory reallocation error in sinsp_tracerparser::init_partial_tracer.");
+		}
+		pae->m_argnames_storage = new_argnames_storage;
 		pae->m_argnames_storage_size = encoded_argnames_len;
 	}
 
@@ -1282,7 +1294,13 @@ inline void sinsp_tracerparser::init_partial_tracer(sinsp_partial_tracer* pae)
 
 	if(pae->m_argvals_storage_size < encoded_argvals_len)
 	{
-		pae->m_argvals_storage = (char*)realloc(pae->m_argvals_storage, encoded_argvals_len);
+		char *new_argvals_storage = (char*)realloc(pae->m_argvals_storage, encoded_argvals_len);
+		if(new_argvals_storage == NULL)
+		{
+			free(pae->m_argvals_storage);
+			throw sinsp_exception("memory reallocation error in sinsp_tracerparser::init_partial_tracer.");
+		}
+		pae->m_argvals_storage = new_argvals_storage;
 		pae->m_argvals_storage_size = encoded_argvals_len;
 	}
 

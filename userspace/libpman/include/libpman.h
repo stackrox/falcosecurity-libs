@@ -66,6 +66,13 @@ extern "C"
 	 */
 	int pman_get_required_buffers(void);
 
+	/**
+	 * @brief Return whether modern bpf is supported by running kernel.
+	 *
+	 * @return supported true or false.
+	 */
+	bool pman_check_support();
+
 	/////////////////////////////
 	// PROBE LIFECYCLE
 	/////////////////////////////
@@ -174,6 +181,7 @@ extern "C"
 	 */
 	int pman_detach_sched_switch(void);
 
+#ifdef CAPTURE_SCHED_PROC_EXEC
 	/**
 	 * @brief Attach only the sched_proc_exec tracepoint
 	 *
@@ -187,7 +195,9 @@ extern "C"
 	 * @return `0` on success, `errno` in case of error.
 	 */
 	int pman_detach_sched_proc_exec(void);
+#endif
 
+#ifdef CAPTURE_SCHED_PROC_FORK
 	/**
 	 * @brief Attach only the sched_proc_fork tracepoint
 	 *
@@ -201,6 +211,51 @@ extern "C"
 	 * @return `0` on success, `errno` in case of error.
 	 */
 	int pman_detach_sched_proc_fork(void);
+#endif
+
+#ifdef CAPTURE_PAGE_FAULTS
+	/**
+	 * @brief Attach only the page_fault_user tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_attach_page_fault_user(void);
+
+	/**
+	 * @brief Detach only the page_fault_user tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_detach_page_fault_user(void);
+
+	/**
+	 * @brief Attach only the page_fault_kernel tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_attach_page_fault_kernel(void);
+
+	/**
+	 * @brief Detach only the page_fault_kernel tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_detach_page_fault_kernel(void);
+#endif
+
+	/**
+	 * @brief Attach only the signal_deliver tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_attach_signal_deliver(void);
+
+	/**
+	 * @brief Detach only the signal_deliver tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_detach_signal_deliver(void);
 
 	/////////////////////////////
 	// MANAGE RINGBUFFERS
@@ -293,6 +348,10 @@ extern "C"
 	 */
 	void pman_set_boot_time(uint64_t boot_time);
 
+	void pman_set_dropping_mode(bool value);
+
+	void pman_set_sampling_ratio(uint32_t value);
+
 	/**
 	 * @brief Get API version to check it a runtime.
 	 *
@@ -373,67 +432,6 @@ extern "C"
 	 * @brief Mark all syscalls as uninteresting.
 	 */
 	void pman_clean_all_64bit_interesting_syscalls(void);
-
-	/////////////////////////////
-	// TEST HELPERS
-	/////////////////////////////
-#ifdef TEST_HELPERS
-
-	/**
-	 * @brief Search for one event to read in all the ringbufs.
-	 *
-	 * @param event_ptr in case of success return a pointer
-	 * to the event, otherwise return NULL.
-	 * @param cpu_id in case of success returns the id of the CPU
-	 * on which we have found the event, otherwise return NULL
-	 * @return `0` if an event is found otherwise returns `-1`
-	 */
-	int pman_consume_one_from_buffers(void** event_ptr, uint16_t* cpu_id);
-
-	/**
-	 * @brief Print some statistics about events captured and
-	 * events dropped
-	 *
-	 * @return `0` on success, `errno` in case of error.
-	 */
-	int pman_print_stats(void);
-
-	/**
-	 * @brief Given the event type, returns the number of params
-	 * for that event.
-	 *
-	 * @param event_type event type
-	 * @return number of params associated with the event type
-	 */
-	uint8_t pman_get_event_params(int event_type);
-
-	/**
-	 * @brief Given the event type, returns the name of the BPF
-	 * program associated with that event.
-	 *
-	 * @param event_type event type
-	 * @return name of the BPF program associated with the event type
-	 */
-	const char* pman_get_event_prog_name(int event_type);
-
-	/**
-	 * @brief Return `true` if all ring buffers are full. To state
-	 * that a ring buffer is full we check that the free space is less
-	 * than the `threshold`
-	 *
-	 * @param threshold used to check if a buffer is full
-	 * @return `true` if all buffers are full, otherwise `false`
-	 */
-	bool pman_are_all_ringbuffers_full(unsigned long threshold);
-
-	/**
-	 * @brief Get the producer pos for the required ring
-	 *
-	 * @param ring_num ring for which we want to obtain the producer pos
-	 * @return producer pos as an unsigned long
-	 */
-	unsigned long pman_get_producer_pos(int ring_num);
-#endif
 
 #ifdef __cplusplus
 }

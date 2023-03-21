@@ -17,7 +17,6 @@ EXPORTS
 		scap_dump_flush
 		scap_dump_ftell
 		scap_dump
-		scap_event_reset_count
 		scap_event_get_num
 		scap_get_proc_table
 		scap_event_getinfo
@@ -36,10 +35,8 @@ EXPORTS
 		scap_free_userlist
 		scap_set_snaplen
 		scap_get_readfile_offset
-		scap_clear_ppm_sc_mask
 		scap_set_ppm_sc
-		scap_set_tpmask
-		scap_number_of_bytes_to_write
+		scap_set_tp
 		scap_event_get_dump_flags
 		scap_enable_dynamic_snaplen
 		scap_disable_dynamic_snaplen

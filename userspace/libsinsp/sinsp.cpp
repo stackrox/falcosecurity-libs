@@ -60,7 +60,7 @@ limitations under the License.
 #include "tracer_emitter.h"
 #endif
 
-void on_new_entry_from_proc(void* context, scap_t* handle, int64_t tid, scap_threadinfo* tinfo,
+void on_new_entry_from_proc(void* context, int64_t tid, scap_threadinfo* tinfo,
 							scap_fdinfo* fdinfo);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -98,7 +98,7 @@ sinsp::sinsp(bool static_container, const std::string &static_id, const std::str
 	m_cycle_writer = NULL;
 	m_write_cycling = false;
 	m_filter = NULL;
-	m_fds_to_remove = new vector<int64_t>;
+	m_fds_to_remove = new std::vector<int64_t>;
 	m_machine_info = NULL;
 #ifdef SIMULATE_DROP_MODE
 	m_isdropping = false;
@@ -131,6 +131,9 @@ sinsp::sinsp(bool static_container, const std::string &static_id, const std::str
 	m_self_pid = getpid();
 #endif
 
+	m_proc_scan_timeout_ms = SCAP_PROC_SCAN_TIMEOUT_NONE;
+	m_proc_scan_log_interval_ms = SCAP_PROC_SCAN_LOG_NONE;
+
 	uint32_t evlen = sizeof(scap_evt) + 2 * sizeof(uint16_t) + 2 * sizeof(uint64_t);
 	m_meinfo.m_piscapevt = (scap_evt*)new char[evlen];
 	m_meinfo.m_piscapevt->type = PPME_PROCINFO_E;
@@ -162,8 +165,6 @@ sinsp::sinsp(bool static_container, const std::string &static_id, const std::str
 	m_mesos_client = NULL;
 	m_mesos_last_watch_time_ns = 0;
 #endif // !defined(CYGWING_AGENT) && !defined(MINIMAL_BUILD)
-
-	m_filter_proc_table_when_saving = false;
 
 	m_replay_scap_evt = NULL;
 
@@ -229,11 +230,6 @@ sinsp::~sinsp()
 void sinsp::add_protodecoders()
 {
 	m_parser->add_protodecoder("syslog");
-}
-
-void sinsp::filter_proc_table_when_saving(bool filter)
-{
-	m_filter_proc_table_when_saving = filter;
 }
 
 void sinsp::enable_tracers_capture()
@@ -379,7 +375,7 @@ void sinsp::init()
 		consume_initialstate_events();
 	}
 
-	if(is_capture() || m_filter_proc_table_when_saving == true)
+	if(is_capture())
 	{
 		import_thread_table();
 	}
@@ -451,7 +447,6 @@ void sinsp::set_import_users(bool import_users)
 
 void sinsp::open_common(scap_open_args* oargs)
 {
-	char error[SCAP_LASTERR_SIZE] = {0};
 	g_logger.log("Trying to open the right engine!");
 
 	/* Reset the thread manager */
@@ -460,7 +455,7 @@ void sinsp::open_common(scap_open_args* oargs)
 	/* We need to save the actual mode and the engine used by the inspector. */
 	m_mode = oargs->mode;
 
-	if(!m_filter_proc_table_when_saving)
+	if(oargs->mode != SCAP_MODE_CAPTURE)
 	{
 		oargs->proc_callback = ::on_new_entry_from_proc;
 		oargs->proc_callback_context = this;
@@ -472,10 +467,22 @@ void sinsp::open_common(scap_open_args* oargs)
 
 	add_suppressed_comms(oargs);
 
-	int32_t scap_rc = 0;
-	m_h = scap_open(oargs, error, &scap_rc);
+	oargs->debug_log_fn = &sinsp_scap_debug_log_fn;
+	oargs->proc_scan_timeout_ms = m_proc_scan_timeout_ms;
+	oargs->proc_scan_log_interval_ms = m_proc_scan_log_interval_ms;
+
+	m_h = scap_alloc();
 	if(m_h == NULL)
 	{
+		throw scap_open_exception("failed to allocate scap handle", SCAP_FAILURE);
+	}
+
+	int32_t scap_rc = scap_init(m_h, oargs);
+	if(scap_rc != SCAP_SUCCESS)
+	{
+		std::string error = scap_getlasterr(m_h);
+		scap_close(m_h);
+		m_h = NULL;
 		throw scap_open_exception(error, scap_rc);
 	}
 
@@ -490,7 +497,72 @@ scap_open_args sinsp::factory_open_args(const char* engine_name, scap_mode_t sca
 	return oargs;
 }
 
-void sinsp::open_kmod(unsigned long driver_buffer_bytes_dim, const std::unordered_set<uint32_t> &ppm_sc_of_interest, const std::unordered_set<uint32_t> &tp_of_interest)
+void sinsp::mark_ppm_sc_of_interest(ppm_sc_code ppm_sc, bool enable)
+{
+	/* This API must be used only after the initialization phase. */
+	if (!m_inited)
+	{
+		throw sinsp_exception("you cannot use this method before opening the inspector!");
+	}
+	if (ppm_sc >= PPM_SC_MAX)
+	{
+		throw sinsp_exception("inexistent ppm_sc code: " + std::to_string(ppm_sc));
+	}
+	int ret = scap_set_ppm_sc(m_h, ppm_sc, enable);
+	if (ret != SCAP_SUCCESS)
+	{
+		throw sinsp_exception(scap_getlasterr(m_h));
+	}
+}
+
+
+void sinsp::mark_tp_of_interest(ppm_tp_code tp, bool enable)
+{
+	/* This API must be used only after the initialization phase. */
+	if (!m_inited)
+	{
+		throw sinsp_exception("you cannot use this method before opening the inspector!");
+	}
+	int ret = scap_set_tp(m_h, tp, enable);
+	if (ret != SCAP_SUCCESS)
+	{
+		throw sinsp_exception(scap_getlasterr(m_h));
+	}
+}
+
+static void fill_ppm_sc_of_interest(scap_open_args *oargs, const libsinsp::events::set<ppm_sc_code> &ppm_sc_of_interest)
+{
+	for (int i = 0; i < PPM_SC_MAX; i++)
+	{
+		/* If the set is empty, fallback to all interesting syscalls */
+		if (ppm_sc_of_interest.empty())
+		{
+			oargs->ppm_sc_of_interest.ppm_sc[i] = true;
+		}
+		else
+		{
+			oargs->ppm_sc_of_interest.ppm_sc[i] = ppm_sc_of_interest.contains((ppm_sc_code)i);
+		}
+	}
+}
+
+static void fill_tp_of_interest(scap_open_args *oargs, const libsinsp::events::set<ppm_tp_code> &tp_of_interest)
+{
+	for(int i = 0; i < TP_VAL_MAX; i++)
+	{
+		/* If the set is empty, fallback to all interesting tracepoints */
+		if (tp_of_interest.empty())
+		{
+			oargs->tp_of_interest.tp[i] = true;
+		}
+		else
+		{
+			oargs->tp_of_interest.tp[i] = tp_of_interest.contains((ppm_tp_code)i);
+		}
+	}
+}
+
+void sinsp::open_kmod(unsigned long driver_buffer_bytes_dim, const libsinsp::events::set<ppm_sc_code> &ppm_sc_of_interest, const libsinsp::events::set<ppm_tp_code> &tp_of_interest)
 {
 	scap_open_args oargs = factory_open_args(KMOD_ENGINE, SCAP_MODE_LIVE);
 
@@ -505,7 +577,7 @@ void sinsp::open_kmod(unsigned long driver_buffer_bytes_dim, const std::unordere
 	open_common(&oargs);
 }
 
-void sinsp::open_bpf(const std::string& bpf_path, unsigned long driver_buffer_bytes_dim, const std::unordered_set<uint32_t> &ppm_sc_of_interest, const std::unordered_set<uint32_t> &tp_of_interest)
+void sinsp::open_bpf(const std::string& bpf_path, unsigned long driver_buffer_bytes_dim, const libsinsp::events::set<ppm_sc_code> &ppm_sc_of_interest, const libsinsp::events::set<ppm_tp_code> &tp_of_interest)
 {
 	/* Validate the BPF path. */
 	if(bpf_path.empty())
@@ -543,8 +615,6 @@ void sinsp::open_savefile(const std::string& filename, int fd)
 {
 	scap_open_args oargs = factory_open_args(SAVEFILE_ENGINE, SCAP_MODE_CAPTURE);
 	struct scap_savefile_engine_params params;
-
-	m_filter_proc_table_when_saving = true;
 
 	m_input_filename = filename;
 	m_input_fd = fd; /* default is 0. */
@@ -608,7 +678,7 @@ void sinsp::open_gvisor(const std::string& config_path, const std::string& root_
 	set_get_procs_cpu_from_driver(false);
 }
 
-void sinsp::open_modern_bpf(unsigned long driver_buffer_bytes_dim, uint16_t cpus_for_each_buffer, bool online_only, const std::unordered_set<uint32_t> &ppm_sc_of_interest, const std::unordered_set<uint32_t> &tp_of_interest)
+void sinsp::open_modern_bpf(unsigned long driver_buffer_bytes_dim, uint16_t cpus_for_each_buffer, bool online_only, const libsinsp::events::set<ppm_sc_code> &ppm_sc_of_interest, const libsinsp::events::set<ppm_tp_code> &tp_of_interest)
 {
 	scap_open_args oargs = factory_open_args(MODERN_BPF_ENGINE, SCAP_MODE_LIVE);
 
@@ -654,7 +724,7 @@ std::string sinsp::generate_gvisor_config(std::string socket_path)
 
 int64_t sinsp::get_file_size(const std::string& fname, char *error)
 {
-	static string err_str = "Could not determine capture file size: ";
+	static std::string err_str = "Could not determine capture file size: ";
 	std::string errdesc;
 #ifdef _WIN32
 	LARGE_INTEGER li = { 0 };
@@ -698,9 +768,9 @@ unsigned sinsp::num_possible_cpus()
 	return m_num_possible_cpus;
 }
 
-vector<long> sinsp::get_n_tracepoint_hit()
+std::vector<long> sinsp::get_n_tracepoint_hit()
 {
-	vector<long> ret(num_possible_cpus(), 0);
+	std::vector<long> ret(num_possible_cpus(), 0);
 	if(scap_get_n_tracepoint_hit(m_h, ret.data()) != SCAP_SUCCESS)
 	{
 		throw sinsp_exception(scap_getlasterr(m_h));
@@ -772,7 +842,7 @@ void sinsp::deinit_state()
 	m_thread_manager->clear();
 }
 
-void sinsp::autodump_start(const string& dump_filename, bool compress)
+void sinsp::autodump_start(const std::string& dump_filename, bool compress)
 {
 	if(NULL == m_h)
 	{
@@ -823,20 +893,17 @@ void sinsp::autodump_stop()
 }
 
 void sinsp::on_new_entry_from_proc(void* context,
-								   scap_t* handle,
 								   int64_t tid,
 								   scap_threadinfo* tinfo,
 								   scap_fdinfo* fdinfo)
 {
 	ASSERT(tinfo != NULL);
 
-	m_h = handle;
-
 	//
 	// Retrieve machine information if we don't have it yet
 	//
 	{
-		m_machine_info = scap_get_machine_info(handle);
+		m_machine_info = scap_get_machine_info(m_h);
 		if(m_machine_info != NULL)
 		{
 			m_num_cpus = m_machine_info->num_cpus;
@@ -897,13 +964,12 @@ void sinsp::on_new_entry_from_proc(void* context,
 }
 
 void on_new_entry_from_proc(void* context,
-							scap_t* handle,
 							int64_t tid,
 							scap_threadinfo* tinfo,
 							scap_fdinfo* fdinfo)
 {
 	sinsp* _this = (sinsp*)context;
-	_this->on_new_entry_from_proc(context, handle, tid, tinfo, fdinfo);
+	_this->on_new_entry_from_proc(context, tid, tinfo, fdinfo);
 }
 
 void sinsp::import_thread_table()
@@ -1044,7 +1110,7 @@ void sinsp::restart_capture()
 	// scap's internal state.
 	if (scap_restart_capture(m_h) != SCAP_SUCCESS)
 	{
-		throw sinsp_exception(string("scap error: ") + scap_getlasterr(m_h));
+		throw sinsp_exception(std::string("scap error: ") + scap_getlasterr(m_h));
 	}
 
 	// Re-initialize the internal state
@@ -1094,7 +1160,7 @@ void sinsp::get_procs_cpu_from_driver(uint64_t ts)
 	m_meinfo.m_pli = scap_get_threadlist(m_h);
 	if(m_meinfo.m_pli == NULL)
 	{
-		throw sinsp_exception(string("scap error: ") + scap_getlasterr(m_h));
+		throw sinsp_exception(std::string("scap error: ") + scap_getlasterr(m_h));
 	}
 
 	m_meinfo.m_n_procinfo_evts = m_meinfo.m_pli->n_entries;
@@ -1143,7 +1209,7 @@ int32_t sinsp::next(OUT sinsp_evt **puevt)
 		//
 		if(m_decoders_reset_list.size() != 0)
 		{
-			vector<sinsp_protodecoder*>::iterator it;
+			std::vector<sinsp_protodecoder*>::iterator it;
 			for(it = m_decoders_reset_list.begin(); it != m_decoders_reset_list.end(); ++it)
 			{
 				(*it)->on_reset(evt);
@@ -1222,7 +1288,7 @@ int32_t sinsp::next(OUT sinsp_evt **puevt)
 	}
 
 	/* Here we shouldn't receive unknown events */
-	ASSERT(!sinsp::is_unknown_event(evt->get_type()))
+	ASSERT(!libsinsp::events::is_unknown_event((ppm_event_code)evt->get_type()))
 
 	uint64_t ts = evt->get_ts();
 
@@ -1405,7 +1471,7 @@ int32_t sinsp::next(OUT sinsp_evt **puevt)
 	{
 		scap_dump_flags dflags;
 
-		bool do_drop;
+		bool do_drop = false;
 		dflags = evt->get_dump_flags(&do_drop);
 		if(do_drop)
 		{
@@ -1434,11 +1500,11 @@ int32_t sinsp::next(OUT sinsp_evt **puevt)
 
 		scap_evt* pdevt = (evt->m_poriginal_evt)? evt->m_poriginal_evt : evt->m_pevt;
 
-		res = scap_dump(m_h, m_dumper, pdevt, evt->m_cpuid, dflags);
+		res = scap_dump(m_dumper, pdevt, evt->m_cpuid, dflags);
 
 		if(SCAP_SUCCESS != res)
 		{
-			throw sinsp_exception(scap_getlasterr(m_h));
+			throw sinsp_exception(scap_dump_getlasterr(m_dumper));
 		}
 	}
 
@@ -1592,12 +1658,6 @@ void sinsp::set_cri_async(bool async)
 	m_container_manager.set_cri_async(async);
 }
 
-void sinsp::set_cri_delay(uint64_t)
-{
-	g_logger.format(sinsp_logger::SEV_WARNING, "%s is deprecated", __FUNCTION__);
-	ASSERT(false);
-}
-
 void sinsp::set_container_labels_max_len(uint32_t max_label_len)
 {
 	m_container_manager.set_container_labels_max_len(max_label_len);
@@ -1670,7 +1730,7 @@ void sinsp::set_statsd_port(const uint16_t port)
 
 std::shared_ptr<sinsp_plugin> sinsp::register_plugin(const std::string& filepath)
 {
-	string errstr;
+	std::string errstr;
 	std::shared_ptr<sinsp_plugin> plugin = sinsp_plugin::create(filepath, errstr);
 	if (!plugin)
 	{
@@ -1689,7 +1749,7 @@ std::shared_ptr<sinsp_plugin> sinsp::register_plugin(const std::string& filepath
 	return plugin;
 }
 
-void sinsp::set_input_plugin(const string& name, const string& params)
+void sinsp::set_input_plugin(const std::string& name, const std::string& params)
 {
 	for(auto& it : m_plugin_manager->plugins())
 	{
@@ -1767,7 +1827,7 @@ void sinsp::set_filter(sinsp_filter* filter)
 	m_filter = filter;
 }
 
-void sinsp::set_filter(const string& filter)
+void sinsp::set_filter(const std::string& filter)
 {
 	if(m_filter != NULL)
 	{
@@ -1778,11 +1838,17 @@ void sinsp::set_filter(const string& filter)
 	sinsp_filter_compiler compiler(this, filter);
 	m_filter = compiler.compile();
 	m_filterstring = filter;
+	m_internal_flt_ast = compiler.get_filter_ast();
 }
 
-const string sinsp::get_filter()
+const std::string sinsp::get_filter()
 {
 	return m_filterstring;
+}
+
+std::shared_ptr<libsinsp::filter::ast::expr> sinsp::get_filter_ast()
+{
+	return m_internal_flt_ast;
 }
 
 bool sinsp::run_filters_on_evt(sinsp_evt *evt)
@@ -1803,7 +1869,7 @@ const scap_machine_info* sinsp::get_machine_info()
 	return m_machine_info;
 }
 
-void sinsp::get_filtercheck_fields_info(OUT vector<const filter_check_info*>& list)
+void sinsp::get_filtercheck_fields_info(OUT std::vector<const filter_check_info*>& list)
 {
 	sinsp_utils::get_filtercheck_fields_info(list);
 }
@@ -1883,7 +1949,7 @@ void sinsp::set_log_callback(sinsp_logger_callback cb)
 	}
 }
 
-void sinsp::set_log_file(string filename)
+void sinsp::set_log_file(std::string filename)
 {
 	g_logger.add_file_log(filename);
 }
@@ -1906,11 +1972,6 @@ sinsp_evttables* sinsp::get_event_info_tables()
 void sinsp::set_buffer_format(sinsp_evt::param_fmt format)
 {
 	m_buffer_format = format;
-}
-
-void sinsp::set_drop_event_flags(ppm_event_flags flags)
-{
-	m_parser->m_drop_event_flags = flags;
 }
 
 sinsp_evt::param_fmt sinsp::get_buffer_format()
@@ -1953,7 +2014,7 @@ void sinsp::set_max_evt_output_len(uint32_t len)
 	m_max_evt_output_len = len;
 }
 
-sinsp_protodecoder* sinsp::require_protodecoder(string decoder_name)
+sinsp_protodecoder* sinsp::require_protodecoder(std::string decoder_name)
 {
 	return m_parser->add_protodecoder(decoder_name);
 }
@@ -1968,7 +2029,7 @@ sinsp_parser* sinsp::get_parser()
 	return m_parser;
 }
 
-bool sinsp::setup_cycle_writer(string base_file_name, int rollover_mb, int duration_seconds, int file_limit, unsigned long event_limit, bool compress)
+bool sinsp::setup_cycle_writer(std::string base_file_name, int rollover_mb, int duration_seconds, int file_limit, unsigned long event_limit, bool compress)
 {
 	m_compress = compress;
 
@@ -2015,7 +2076,7 @@ void sinsp::set_metadata_download_params(uint32_t data_max_b,
 	m_metadata_download_params.m_data_watch_freq_sec = data_watch_freq_sec;
 }
 
-void sinsp::get_read_progress_plugin(OUT double* nres, string* sres)
+void sinsp::get_read_progress_plugin(OUT double* nres, std::string* sres)
 {
 	ASSERT(nres != NULL);
 	ASSERT(sres != NULL);
@@ -2052,11 +2113,11 @@ double sinsp::get_read_progress()
 	}
 }
 
-double sinsp::get_read_progress_with_str(OUT string* progress_str)
+double sinsp::get_read_progress_with_str(OUT std::string* progress_str)
 {
 	if(is_plugin())
 	{
-		double res;
+		double res = 0;
 		get_read_progress_plugin(&res, progress_str);
 		return res;
 	}
@@ -2073,7 +2134,7 @@ bool sinsp::remove_inactive_threads()
 }
 
 #if !defined(CYGWING_AGENT) && !defined(MINIMAL_BUILD)
-void sinsp::init_mesos_client(string* api_server, bool verbose)
+void sinsp::init_mesos_client(std::string* api_server, bool verbose)
 {
 	m_verbose_json = verbose;
 	if(m_mesos_client == NULL)
@@ -2103,7 +2164,7 @@ void sinsp::init_mesos_client(string* api_server, bool verbose)
 	}
 }
 
-void sinsp::init_k8s_ssl(const string *ssl_cert)
+void sinsp::init_k8s_ssl(const std::string *ssl_cert)
 {
 #ifdef HAS_CAPTURE
 	if(ssl_cert != nullptr && !ssl_cert->empty()
@@ -2125,7 +2186,7 @@ void sinsp::init_k8s_ssl(const string *ssl_cert)
 			cert = ssl_cert->substr(0, pos);
 			if(cert.empty())
 			{
-				throw sinsp_exception(string("Invalid K8S SSL entry: ") + *ssl_cert);
+				throw sinsp_exception(std::string("Invalid K8S SSL entry: ") + *ssl_cert);
 			}
 
 			// pos < ssl_cert->length() so it's safe to take
@@ -2143,7 +2204,7 @@ void sinsp::init_k8s_ssl(const string *ssl_cert)
 			}
 			if(key.empty())
 			{
-				throw sinsp_exception(string("Invalid K8S SSL entry: ") + *ssl_cert);
+				throw sinsp_exception(std::string("Invalid K8S SSL entry: ") + *ssl_cert);
 			}
 
 			// Parse the password if it exists
@@ -2207,7 +2268,7 @@ void sinsp::make_k8s_client()
 	);
 }
 
-void sinsp::init_k8s_client(string* api_server, string* ssl_cert, string* node_name, bool verbose)
+void sinsp::init_k8s_client(std::string* api_server, std::string* ssl_cert, std::string* node_name, bool verbose)
 {
 	ASSERT(api_server);
 	m_verbose_json = verbose;
@@ -2534,6 +2595,16 @@ void sinsp::set_thread_timeout_s(uint32_t val)
 	m_thread_timeout_ns = (uint64_t)val * ONE_SECOND_IN_NS;
 }
 
+void sinsp::set_proc_scan_timeout_ms(uint64_t val)
+{
+	m_proc_scan_timeout_ms = val;
+}
+
+void sinsp::set_proc_scan_log_interval_ms(uint64_t val)
+{
+	m_proc_scan_log_interval_ms = val;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Note: this is defined here so we can inline it in sinso::next
 ///////////////////////////////////////////////////////////////////////////////
@@ -2612,9 +2683,9 @@ bool sinsp_thread_manager::remove_inactive_threads()
 }
 
 #if defined(HAS_CAPTURE) && !defined(_WIN32)
-std::shared_ptr<std::string> sinsp::lookup_cgroup_dir(const string& subsys)
+std::shared_ptr<std::string> sinsp::lookup_cgroup_dir(const std::string& subsys)
 {
-	shared_ptr<string> cgroup_dir;
+	std::shared_ptr<std::string> cgroup_dir;
 	static std::unordered_map<std::string, std::shared_ptr<std::string>> cgroup_dir_cache;
 
 	const auto& it = cgroup_dir_cache.find(subsys);

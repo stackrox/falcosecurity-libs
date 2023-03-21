@@ -56,6 +56,8 @@ limitations under the License.
 #define PATH_MAX 4096
 #endif
 
+using namespace std;
+
 const chiseldir_info g_chisel_dirs_array[] =
 	{
 		{false, ""}, // file as is
@@ -92,7 +94,7 @@ static std::string realpath_ex(const std::string& path)
 	}
 	std::string ret = resolved;
 	free(resolved);
-	return resolved;
+	return ret;
 }
 #endif
 

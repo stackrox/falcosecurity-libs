@@ -55,7 +55,7 @@ protected:
 		m_inspector.open_test_input(m_test_data.get());
 	}
 
-	scap_evt* add_event(uint64_t ts, uint64_t tid, enum ppm_event_type event_type, uint32_t n, ...)
+	scap_evt* add_event(uint64_t ts, uint64_t tid, ppm_event_code event_type, uint32_t n, ...)
 	{
 		va_list args;
 		va_start(args, n);
@@ -78,7 +78,7 @@ protected:
 	}
 
 	// adds an event and advances the inspector to the new timestamp
-	sinsp_evt* add_event_advance_ts(uint64_t ts, uint64_t tid, enum ppm_event_type event_type, uint32_t n, ...)
+	sinsp_evt* add_event_advance_ts(uint64_t ts, uint64_t tid, ppm_event_code event_type, uint32_t n, ...)
 	{
 		va_list args;
 		va_start(args, n);
@@ -90,10 +90,10 @@ protected:
 			return sinsp_event;
 		}
 
-		throw std::runtime_error("could not retrieve last event or internal error (event vector size: " + m_events.size() + std::string(")"));
+		throw std::runtime_error("could not retrieve last event or internal error (event vector size: " + std::to_string(m_events.size()) + std::string(")"));
 	}
 
-	scap_evt* add_event_v(uint64_t ts, uint64_t tid, enum ppm_event_type event_type, uint32_t n, va_list args)
+	scap_evt* add_event_v(uint64_t ts, uint64_t tid, ppm_event_code event_type, uint32_t n, va_list args)
 	{
 		struct scap_sized_buffer event_buf = {NULL, 0};
 		size_t event_size;
@@ -102,12 +102,14 @@ protected:
 		va_copy(args2, args);
 
 		if (ts <= m_last_recorded_timestamp) {
+			va_end(args2);
 			throw std::runtime_error("the test framework does not currently support equal timestamps or out of order events");
 		}
 
 		int32_t ret = scap_event_encode_params_v(event_buf, &event_size, error, event_type, n, args);
 
 		if(ret != SCAP_INPUT_TOO_SMALL) {
+			va_end(args2);
 			return nullptr;
 		}
 
@@ -115,6 +117,7 @@ protected:
 		event_buf.size = event_size;
 
 		if(event_buf.buf == NULL) {
+			va_end(args2);
 			return nullptr;
 		}
 
@@ -123,6 +126,7 @@ protected:
 		if(ret != SCAP_SUCCESS) {
 			free(event_buf.buf);
 			event_buf.size = 0;
+			va_end(args2);
 			return nullptr;
 		}
 
@@ -136,6 +140,7 @@ protected:
 		m_test_data->event_count = m_events.size() - evtoffset;
 		m_last_recorded_timestamp = ts;
 
+		va_end(args2);
 		return event;
 	}
 

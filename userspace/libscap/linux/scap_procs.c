@@ -34,7 +34,8 @@ limitations under the License.
 #include "scap-int.h"
 #include "scap_linux_int.h"
 #include "strerror.h"
-
+#include "clock_helpers.h"
+#include "debug_log_helpers.h"
 
 int32_t scap_proc_fill_cwd(char* error, char* procdirname, struct scap_threadinfo* tinfo)
 {
@@ -374,7 +375,7 @@ static int32_t scap_proc_fill_flimit(uint64_t tid, struct scap_threadinfo* tinfo
 }
 #endif
 
-int32_t scap_proc_fill_cgroups_pidns_start_ts(char* error, int cgroup_version, struct scap_threadinfo* tinfo, const char* procdirname)
+int32_t scap_proc_fill_cgroups(char* error, int cgroup_version, struct scap_threadinfo* tinfo, const char* procdirname)
 {
 	char filename[SCAP_MAX_PATH_SIZE];
 	char line[SCAP_MAX_CGROUPS_SIZE];
@@ -403,8 +404,6 @@ int32_t scap_proc_fill_cgroups_pidns_start_ts(char* error, int cgroup_version, s
 		// Default subsys list for cgroups v2 unified hierarchy.
 		// These are the ones we actually use in cri container engine.
 		char default_subsys_list[] = "cpu,memory,cpuset";
-		char cgroup_sys_fs_dir[PPM_MAX_PATH_SIZE];
-		struct stat targetstat = {0};
 
 		// id
 		token = strtok_r(line, ":", &scratch);
@@ -422,37 +421,6 @@ int32_t scap_proc_fill_cgroups_pidns_start_ts(char* error, int cgroup_version, s
 			ASSERT(false);
 			fclose(f);
 			return scap_errprintf(error, 0, "Did not find subsys in cgroup file %s", filename);
-		}
-
-		//
-		// Approx pid namespace start ts through cgroup file creation ts only when vpid != pid
-		// Works for container and non container pid namespaces
-		// Modifying content of files below cgroup_sys_fs_dir does not change ctime of dir
-		//
-
-		if (tinfo->pid != tinfo->vpid)
-		{
-			snprintf(cgroup_sys_fs_dir, sizeof(cgroup_sys_fs_dir), "%s/sys/fs/cgroup%s", scap_get_host_root(), subsys_list);
-			size_t cgroup_sys_fs_dir_len = strlen(cgroup_sys_fs_dir);
-			if(cgroup_sys_fs_dir[cgroup_sys_fs_dir_len - 1] == '\n')
-			{
-				cgroup_sys_fs_dir[cgroup_sys_fs_dir_len - 1] = '/'; // replace \n with /
-			} else if (cgroup_sys_fs_dir[cgroup_sys_fs_dir_len - 1] != '/' && cgroup_sys_fs_dir_len < PPM_MAX_PATH_SIZE - 1)
-			{
-				cgroup_sys_fs_dir[cgroup_sys_fs_dir_len] = '/';
-			}
-
-			if (stat(cgroup_sys_fs_dir, &targetstat) == 0)
-			{
-				tinfo->pidns_init_start_ts = targetstat.st_ctim.tv_sec * (uint64_t) 1000000000 + targetstat.st_ctim.tv_nsec;
-			}
-		} else
-		{
-			snprintf(cgroup_sys_fs_dir, sizeof(cgroup_sys_fs_dir), "%s/proc/1/", scap_get_host_root());
-			if (stat(cgroup_sys_fs_dir, &targetstat) == 0)
-			{
-				tinfo->pidns_init_start_ts = targetstat.st_ctim.tv_sec * (uint64_t) 1000000000 + targetstat.st_ctim.tv_nsec;
-			}
 		}
 
 		// Hack to detect empty fields, because strtok does not support it
@@ -529,6 +497,24 @@ int32_t scap_proc_fill_cgroups_pidns_start_ts(char* error, int cgroup_version, s
 
 	fclose(f);
 	return SCAP_SUCCESS;
+}
+
+int32_t scap_proc_fill_pidns_start_ts(char* error, struct scap_threadinfo* tinfo, const char* procdirname)
+{
+	char filename[SCAP_MAX_PATH_SIZE];
+	struct stat targetstat = {0};
+
+	snprintf(filename, sizeof(filename), "%sroot/proc/1", procdirname);
+	if(stat(filename, &targetstat) == 0)
+	{
+		tinfo->pidns_init_start_ts = targetstat.st_ctim.tv_sec * (uint64_t) 1000000000 + targetstat.st_ctim.tv_nsec;
+		return SCAP_SUCCESS;
+	}
+	else
+	{
+		tinfo->pidns_init_start_ts = 0;
+		return SCAP_FAILURE;
+	}
 }
 
 static int32_t scap_get_vtid(scap_t* handle, uint64_t tid, int64_t *vtid)
@@ -712,7 +698,7 @@ static int scap_get_cgroup_version(const char* procdirname)
 //
 // Add a process to the list by parsing its entry under /proc
 //
-static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procdirname, struct scap_ns_socket_list** sockets_by_ns, scap_threadinfo** procinfo, char *error)
+static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procdirname, struct scap_ns_socket_list** sockets_by_ns, scap_threadinfo** procinfo, uint64_t* num_fds_ret, char *error)
 {
 	char dir_name[256];
 	char target_name[SCAP_MAX_PATH_SIZE];
@@ -946,11 +932,17 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 			 dir_name, handle->m_lasterr);
 	}
 
-	if(scap_proc_fill_cgroups_pidns_start_ts(handle->m_lasterr, handle->m_cgroup_version, tinfo, dir_name) == SCAP_FAILURE)
+	if(scap_proc_fill_cgroups(handle->m_lasterr, handle->m_cgroup_version, tinfo, dir_name) == SCAP_FAILURE)
 	{
 		free(tinfo);
 		return scap_errprintf(error, 0, "can't fill cgroups for %s (%s)",
 			 dir_name, handle->m_lasterr);
+	}
+
+	if(scap_proc_fill_pidns_start_ts(handle->m_lasterr, tinfo, dir_name) == SCAP_FAILURE)
+	{
+		// ignore errors
+		// the thread may not have /proc visible so we shouldn't kill the scan if this fails
 	}
 
 	// These values should be read already from /status file, leave these
@@ -1039,8 +1031,7 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 		else
 		{
 			handle->m_proclist.m_proc_callback(
-				handle->m_proclist.m_proc_callback_context,
-				handle->m_proclist.m_main_handle, tinfo->tid, tinfo, NULL);
+				handle->m_proclist.m_proc_callback_context, tinfo->tid, tinfo, NULL);
 			free_tinfo = true;
 		}
 	}
@@ -1055,7 +1046,7 @@ static int32_t scap_proc_add_from_proc(scap_t* handle, uint32_t tid, char* procd
 	if(tinfo->pid == tinfo->tid)
 	{
 		/* Begin StackRox Section */
-		if((res = scap_fd_scan_fd_dir(handle, dir_name, tinfo, sockets_by_ns, error)) != SCAP_SUCCESS)
+		if((res = scap_fd_scan_fd_dir(handle, dir_name, tinfo, sockets_by_ns, num_fds_ret, error)) != SCAP_SUCCESS)
 		{
 			// Ensure tinfo is not free'd twice
 			if (procinfo && *procinfo == tinfo)
@@ -1091,7 +1082,7 @@ int32_t scap_proc_read_thread(scap_t* handle, char* procdirname, uint64_t tid, s
 		sockets_by_ns = (void*)-1;
 	}
 
-	res = scap_proc_add_from_proc(handle, tid, procdirname, &sockets_by_ns, pi, add_error);
+	res = scap_proc_add_from_proc(handle, tid, procdirname, &sockets_by_ns, pi, NULL, add_error);
 	if(res != SCAP_SUCCESS)
 	{
 		scap_errprintf(error, 0, "cannot add proc tid = %"PRIu64", dirname = %s, error=%s", tid, procdirname, add_error);
@@ -1117,6 +1108,9 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 	int32_t res = SCAP_SUCCESS;
 	char childdir[SCAP_MAX_PATH_SIZE];
 
+	uint64_t num_procs_processed = 0;
+	uint64_t total_num_fds = 0;
+	uint64_t last_tid_processed = 0;
 	struct scap_ns_socket_list* sockets_by_ns = NULL;
 
 	dir_p = opendir(procdirname);
@@ -1127,8 +1121,36 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 		return SCAP_NOTFOUND;
 	}
 
-	while((dir_entry_p = readdir(dir_p)) != NULL)
+	// Do timing tracking only if:
+	// - this is the top-level call (parenttid == -1)
+	// - one or both of the timing parameters is configured to non-zero
+	bool do_timing = (parenttid == -1) &&
+	                 ((handle->m_proc_scan_timeout_ms != SCAP_PROC_SCAN_TIMEOUT_NONE) ||
+	                  (handle->m_proc_scan_log_interval_ms != SCAP_PROC_SCAN_LOG_NONE));
+	uint64_t monotonic_ts_context = SCAP_GET_CUR_TS_MS_CONTEXT_INIT;
+	uint64_t start_ts_ms = 0;
+	uint64_t last_log_ts_ms = 0;
+	uint64_t last_proc_ts_ms = 0;
+	uint64_t cur_ts_ms = 0;
+	uint64_t min_proc_time_ms = UINT64_MAX;
+	uint64_t max_proc_time_ms = 0;
+
+	if (do_timing)
 	{
+		start_ts_ms = scap_get_monotonic_ts_ms(&monotonic_ts_context);
+		last_log_ts_ms = start_ts_ms;
+		last_proc_ts_ms = start_ts_ms;
+	}
+
+	bool timeout_expired = false;
+	while (!timeout_expired)
+	{
+		dir_entry_p = readdir(dir_p);
+		if (dir_entry_p == NULL)
+		{
+			break;
+		}
+
 		if(strspn(dir_entry_p->d_name, "0123456789") != strlen(dir_entry_p->d_name))
 		{
 			continue;
@@ -1140,7 +1162,8 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 		tid = atoi(dir_entry_p->d_name);
 
 		//
-		// Skip the main thread entry
+		// If this is a recursive call for tasks of a parent process,
+		// skip the main thread entry
 		//
 		if(parenttid != -1 && tid == parenttid)
 		{
@@ -1165,7 +1188,8 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 		//
 		// We have a process that needs to be explored
 		//
-		res = scap_proc_add_from_proc(handle, tid, procdirname, &sockets_by_ns, NULL, add_error);
+		uint64_t num_fds_this_proc;
+		res = scap_proc_add_from_proc(handle, tid, procdirname, &sockets_by_ns, NULL, &num_fds_this_proc, add_error);
 		if(res != SCAP_SUCCESS)
 		{
 			//
@@ -1200,6 +1224,92 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 				break;
 			}
 		}
+
+		// TID successfully processed.
+		last_tid_processed = tid;
+		num_procs_processed++;
+		total_num_fds += num_fds_this_proc;
+
+		// After successful processing of a process at the top level,
+		// perform timing processing if configured.
+		if (do_timing)
+		{
+			cur_ts_ms = scap_get_monotonic_ts_ms(&monotonic_ts_context);
+			uint64_t total_elapsed_time_ms = cur_ts_ms - start_ts_ms;
+
+			uint64_t this_proc_elapsed_time_ms = cur_ts_ms - last_proc_ts_ms;
+			last_proc_ts_ms = cur_ts_ms;
+
+			if (this_proc_elapsed_time_ms < min_proc_time_ms)
+			{
+				min_proc_time_ms = this_proc_elapsed_time_ms;
+			}
+			if (this_proc_elapsed_time_ms > max_proc_time_ms)
+			{
+				max_proc_time_ms = this_proc_elapsed_time_ms;
+			}
+
+			if (handle->m_proc_scan_log_interval_ms != SCAP_PROC_SCAN_LOG_NONE)
+			{
+				uint64_t log_elapsed_time_ms = cur_ts_ms - last_log_ts_ms;
+				if (log_elapsed_time_ms >= handle->m_proc_scan_log_interval_ms)
+				{
+					scap_debug_log(handle,
+						"scap_proc_scan: %ld proc in %ld ms, avg=%ld/min=%ld/max=%ld, last pid %ld, num_fds %ld",
+						num_procs_processed,
+						total_elapsed_time_ms,
+						(total_elapsed_time_ms / (uint64_t)num_procs_processed),
+						min_proc_time_ms,
+						max_proc_time_ms,
+						last_tid_processed,
+						total_num_fds);
+					last_log_ts_ms = cur_ts_ms;
+				}
+			}
+
+			if (handle->m_proc_scan_timeout_ms != SCAP_PROC_SCAN_TIMEOUT_NONE)
+			{
+				if (total_elapsed_time_ms >= handle->m_proc_scan_timeout_ms)
+				{
+					timeout_expired = true;
+				}
+			}
+		}
+	}
+
+	if (do_timing)
+	{
+		cur_ts_ms = scap_get_monotonic_ts_ms(&monotonic_ts_context);
+		uint64_t total_elapsed_time_ms = cur_ts_ms - start_ts_ms;
+		uint64_t avg_proc_time_ms = (num_procs_processed != 0) ?
+			(total_elapsed_time_ms / num_procs_processed) : 0;
+
+		if (timeout_expired)
+		{
+			scap_debug_log(handle,
+				"scap_proc_scan TIMEOUT (%ld ms): %ld proc in %ld ms, avg=%ld/min=%ld/max=%ld, last pid %ld, num_fds %ld",
+				handle->m_proc_scan_timeout_ms,
+				num_procs_processed,
+				total_elapsed_time_ms,
+				avg_proc_time_ms,
+				min_proc_time_ms,
+				max_proc_time_ms,
+				last_tid_processed,
+				total_num_fds);
+		}
+		else if ((handle->m_proc_scan_log_interval_ms != SCAP_PROC_SCAN_LOG_NONE) &&
+			(num_procs_processed != 0))
+		{
+			scap_debug_log(handle,
+				"scap_proc_scan DONE: %ld proc in %ld ms, avg=%ld/min=%ld/max=%ld, last pid %ld, num_fds %ld",
+				num_procs_processed,
+				total_elapsed_time_ms,
+				avg_proc_time_ms,
+				min_proc_time_ms,
+				max_proc_time_ms,
+				last_tid_processed,
+				total_num_fds);
+		}
 	}
 
 	closedir(dir_p);
@@ -1210,8 +1320,11 @@ static int32_t _scap_proc_scan_proc_dir_impl(scap_t* handle, char* procdirname, 
 	return res;
 }
 
-int32_t scap_proc_scan_proc_dir(scap_t* handle, char* procdirname, char *error)
+int32_t scap_proc_scan_proc_dir(scap_t* handle, char *error)
 {
+	char procdirname[SCAP_MAX_PATH_SIZE];
+	snprintf(procdirname, sizeof(procdirname), "%s/proc", scap_get_host_root());
+
 	return _scap_proc_scan_proc_dir_impl(handle, procdirname, -1, error);
 }
 
@@ -1320,26 +1433,14 @@ bool scap_is_thread_alive(scap_t* handle, int64_t pid, int64_t tid, const char* 
 	return false;
 }
 
-int scap_proc_scan_proc_table(scap_t *handle)
-{
-	char filename[SCAP_MAX_PATH_SIZE];
-	//
-	// Create the process list
-	//
-	handle->m_lasterr[0] = '\0';
-
-	snprintf(filename, sizeof(filename), "%s/proc", scap_get_host_root());
-	return scap_proc_scan_proc_dir(handle, filename, handle->m_lasterr);
-}
-
-void scap_refresh_proc_table(scap_t* handle)
+int32_t scap_refresh_proc_table(scap_t* handle)
 {
 	if(handle->m_proclist.m_proclist)
 	{
 		scap_proc_free_table(&handle->m_proclist);
 		handle->m_proclist.m_proclist = NULL;
 	}
-	scap_proc_scan_proc_table(handle);
+	return scap_proc_scan_proc_dir(handle, handle->m_lasterr);
 }
 
 int32_t scap_procfs_get_threadlist(struct scap_engine_handle engine, struct ppm_proclist_info **procinfo_p, char *lasterr)

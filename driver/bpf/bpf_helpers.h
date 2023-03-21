@@ -71,6 +71,27 @@ static int (*bpf_xdp_adjust_head)(void *ctx, int offset) =
 	(void *)BPF_FUNC_xdp_adjust_head;
 static int (*bpf_probe_read_str)(void *dst, u64 size, const void *unsafe_ptr) =
 	(void *)BPF_FUNC_probe_read_str;
+
+#if defined(USE_BPF_PROBE_KERNEL_USER_VARIANTS)
+static int (*bpf_probe_read_user)(void *dst, u32 size, const void *unsafe_ptr) =
+	(void *)BPF_FUNC_probe_read_user;
+static int (*bpf_probe_read_kernel)(void *dst, u32 size, const void *unsafe_ptr) =
+	(void *)BPF_FUNC_probe_read_kernel;
+static int (*bpf_probe_read_user_str)(void *dst, u32 size, const void *unsafe_ptr) =
+	(void *)BPF_FUNC_probe_read_user_str;
+static int (*bpf_probe_read_kernel_str)(void *dst, u32 size, const void *unsafe_ptr) =
+	(void *)BPF_FUNC_probe_read_kernel_str;
+#else
+static int (*bpf_probe_read_user)(void *dst, u32 size, const void *unsafe_ptr) =
+	(void *)BPF_FUNC_probe_read;
+static int (*bpf_probe_read_kernel)(void *dst, u32 size, const void *unsafe_ptr) =
+	(void *)BPF_FUNC_probe_read;
+static int (*bpf_probe_read_user_str)(void *dst, u32 size, const void *unsafe_ptr) =
+	(void *)BPF_FUNC_probe_read_str;
+static int (*bpf_probe_read_kernel_str)(void *dst, u32 size, const void *unsafe_ptr) =
+	(void *)BPF_FUNC_probe_read_str;
+#endif
+
 static u64 (*bpf_get_current_task)(void) =
 	(void *)BPF_FUNC_get_current_task;
 static int (*bpf_skb_load_bytes)(void *ctx, int off, void *to, int len) =

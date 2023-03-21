@@ -641,6 +641,34 @@ done:
 }
 #endif // UDIG
 
+int push_empty_param(struct event_filler_arguments *args)
+{
+	u16 *psize = (u16 *)(args->buffer + args->curarg * sizeof(u16));
+
+	if (unlikely(args->curarg >= args->nargs))
+	{
+#ifndef UDIG
+		pr_err("(%u)val_to_ring: too many arguments for event #%u, type=%u, curarg=%u, nargs=%u tid:%u\n",
+			smp_processor_id(),
+			args->nevents,
+			(u32)args->event_type,
+			args->curarg,
+			args->nargs,
+			current->pid);
+		memory_dump(args->buffer - sizeof(struct ppm_evt_hdr), 32);
+#endif
+		ASSERT(0);
+		return PPM_FAILURE_BUG;
+	}
+
+	/* We push 0 in the length array */
+	*psize = 0;
+
+	/* We increment the current argument */
+	args->curarg++;
+	return PPM_SUCCESS;
+}
+
 /*
  * NOTES:
  * - val_len is ignored for everything other than PT_BYTEBUF.
@@ -1249,8 +1277,19 @@ u16 fd_to_socktuple(int fd,
 			usrsockaddr_in = (struct sockaddr_in *)usrsockaddr;
 
 			if (is_inbound) {
-				sip = usrsockaddr_in->sin_addr.s_addr;
-				sport = ntohs(usrsockaddr_in->sin_port);
+				/* To take inbound info we cannot use the `src_addr` obtained from the syscall
+				 * it could be empty!
+				 * From kernel 3.13 we can take both ipv4 and ipv6 info from here
+				 * https://elixir.bootlin.com/linux/v3.13/source/include/net/sock.h#L164
+				 */
+				#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+					sip = sock->sk->__sk_common.skc_daddr;
+					sport = ntohs(sock->sk->__sk_common.skc_dport);
+				#else
+					/* this is probably wrong, we need to find an alternative in old kernels */
+					sip = ((struct sockaddr_in *) &sock_address)->sin_addr.s_addr;
+					sport = ntohs(usrsockaddr_in->sin_port);
+				#endif
 				dip = ((struct sockaddr_in *) &sock_address)->sin_addr.s_addr;
 				dport = ntohs(((struct sockaddr_in *) &sock_address)->sin_port);
 			} else {
@@ -1301,8 +1340,14 @@ u16 fd_to_socktuple(int fd,
 			usrsockaddr_in6 = (struct sockaddr_in6 *)usrsockaddr;
 
 			if (is_inbound) {
-				sip6 = usrsockaddr_in6->sin6_addr.s6_addr;
-				sport = ntohs(usrsockaddr_in6->sin6_port);
+				#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+					sip6 = sock->sk->__sk_common.skc_v6_daddr.in6_u.u6_addr8;
+					sport = ntohs(sock->sk->__sk_common.skc_dport);
+				#else
+					/* this is probably wrong, we need to find an alternative in old kernels */
+					sip6 = usrsockaddr_in6->sin6_addr.s6_addr;
+					sport = ntohs(usrsockaddr_in6->sin6_port);
+				#endif
 				dip6 = ((struct sockaddr_in6 *) &sock_address)->sin6_addr.s6_addr;
 				dport = ntohs(((struct sockaddr_in6 *) &sock_address)->sin6_port);
 			} else {

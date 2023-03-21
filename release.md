@@ -1,6 +1,6 @@
 # Release Process
 
-As per the [Versioning and release process of the libs artifacts](https://github.com/falcosecurity/libs/blob/master/proposals/20210524-versioning-and-release-of-the-libs-artifacts.md), this repository includes different components which are versioned (see the [Driver SemVer](https://github.com/falcosecurity/libs/blob/master/proposals/20210818-driver-semver.md) and [Versioning schema](https://github.com/falcosecurity/libs/blob/master/proposals/20220203-versioning-schema-amendment.md)) proposals) and released individually.
+As per the [Versioning and release process of the libs artifacts](https://github.com/falcosecurity/libs/blob/master/proposals/20210524-versioning-and-release-of-the-libs-artifacts.md), this repository includes different components which are versioned (see the [Driver SemVer](https://github.com/falcosecurity/libs/blob/master/proposals/20210818-driver-semver.md) and [Versioning schema](https://github.com/falcosecurity/libs/blob/master/proposals/20220203-versioning-schema-amendment.md) proposals) and released individually.
 
 The two releases, which may occur either concurrently or independently of each other, are: 
 
@@ -57,7 +57,11 @@ At this point, no new-feature PRs are allowed to be merged ([exceptions](#except
 
 During the code freeze period, a *release branch* is created once the [release team](#release-team) ensures the code is in a good shape and reasonably no bugs are detected.
 
-The naming convention for the release branch is `release/x.y.z`, where `x.y.z` is the [version](Versioning) number of the release. Only the libs version number is used if the process consists of both drivers and libs releases.
+The naming convention for the release branch is `release/M.m.x`, where `M.m` is the Major, minor [version](Versioning) number of the release. Only the libs version number is used if the process consists of both drivers and libs releases.  
+All patch releases for the `M.m` version will be tagged directly in the corresponding `release/M.m.x` branch.
+New commits are added to the branch via cherry picking.
+
+For example, a `release/0.10.x` is created; it will host tags `0.10.0`, `0.10.1`, `0.10.2` and so on. `0.10.1` will be made of some cherry picked commits on top of `0.10.0`.
 
 Once the release brach has been created:
 
@@ -134,4 +138,4 @@ The *libs version number* represents a software version of the user-space librar
 
 - Since our userspace APIs are not yet stable, the major version number MUST be `0` (see the SemVer section about the [initial development phase](https://semver.org/spec/v2.0.0.html#how-should-i-deal-with-revisions-in-the-0yz-initial-development-phase)).
 
-- The [Plugin API](./userspace/libscap/plugin_info.h) is versioned in the code and follow a semver-like numbering scheme. If any changes have been made to the Plugin API since the last release, you MUST ensure the Plugin API version is updated accordingly. If not, open a PR to fix it.
+- The [Plugin API](./userspace/libscap/engine/source_plugin/plugin_info.h) is versioned in the code and follow a semver-like numbering scheme. If any changes have been made to the Plugin API since the last release, you MUST ensure the Plugin API version is updated accordingly. If not, open a PR to fix it.

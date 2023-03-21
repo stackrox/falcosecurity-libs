@@ -36,11 +36,6 @@ limitations under the License.
 //#define NDEBUG
 #include <assert.h>
 
-static bool match(scap_open_args* oargs)
-{
-	return strcmp(oargs->engine_name, KMOD_ENGINE) == 0;
-}
-
 static struct kmod_engine* alloc_handle(scap_t* main_handle, char* lasterr_ptr)
 {
 	struct kmod_engine *engine = calloc(1, sizeof(struct kmod_engine));
@@ -134,67 +129,33 @@ static int32_t enforce_into_kmod_buffer_bytes_dim(scap_t *handle, unsigned long 
 int32_t scap_kmod_handle_tp_mask(struct scap_engine_handle engine, uint32_t op, uint32_t tp)
 {
 	struct scap_device_set *devset = &engine.m_handle->m_dev_set;
-
-	uint32_t curr_set;
-	if(ioctl(devset->m_devs[0].m_fd, PPM_IOCTL_GET_TPMASK, &curr_set))
-	{
-		ASSERT(false);
-		return scap_errprintf(engine.m_handle->m_lasterr, errno, "%s(%d) failed", __FUNCTION__, op);
-	}
-
-	uint32_t new_set;
-	if (op == SCAP_TPMASK_SET)
-	{
-		new_set = curr_set | (1 << tp);
-	}
-	else
-	{
-		new_set = curr_set & ~(1 << tp);
-	}
-	if(new_set == curr_set)
-	{
-		return SCAP_SUCCESS;
-	}
-
-	if(ioctl(devset->m_devs[0].m_fd, PPM_IOCTL_MANAGE_TP, new_set))
+	uint32_t ioctl_op = op == SCAP_TP_MASK_SET ? PPM_IOCTL_ENABLE_TP : PPM_IOCTL_DISABLE_TP;
+	if(ioctl(devset->m_devs[0].m_fd, ioctl_op, tp))
 	{
 		ASSERT(false);
 		return scap_errprintf(engine.m_handle->m_lasterr, errno,
-			 "%s(%d) failed for tpmask %d",
-			 __FUNCTION__, op, new_set);
+			 "%s(%d) failed for tp %d",
+			 __FUNCTION__, op, tp);
 	}
 	return SCAP_SUCCESS;
 }
 
-int32_t scap_kmod_handle_event_mask(struct scap_engine_handle engine, uint32_t op, uint32_t ppm_sc)
+int32_t scap_kmod_handle_ppm_sc_mask(struct scap_engine_handle engine, uint32_t op, uint32_t ppm_sc)
 {
 	struct scap_device_set *devset = &engine.m_handle->m_dev_set;
-	if (op != SCAP_PPM_SC_MASK_ZERO)
+	int ioctl_op = op == SCAP_PPM_SC_MASK_SET ? PPM_IOCTL_ENABLE_SYSCALL : PPM_IOCTL_DISABLE_SYSCALL;
+	// Find any syscall table entry that matches requested ppm_sc code
+	for (int i = 0; i < SYSCALL_TABLE_SIZE; i++)
 	{
-		int ioctl_op = op == SCAP_PPM_SC_MASK_SET ? PPM_IOCTL_ENABLE_SYSCALL : PPM_IOCTL_DISABLE_SYSCALL;
-		// Find any syscall table entry that matches requested ppm_sc code
-		for (int i = 0; i < SYSCALL_TABLE_SIZE; i++)
+		if (g_syscall_table[i].ppm_sc == ppm_sc)
 		{
-			if (g_syscall_table[i].ppm_sc == ppm_sc)
+			if(ioctl(devset->m_devs[0].m_fd, ioctl_op, i))
 			{
-				if(ioctl(devset->m_devs[0].m_fd, ioctl_op, i))
-				{
-					ASSERT(false);
-					return scap_errprintf(engine.m_handle->m_lasterr, errno,
-						 "%s(%d) failed for syscall %d",
-						 __FUNCTION__, op, i);
-				}
+				ASSERT(false);
+				return scap_errprintf(engine.m_handle->m_lasterr, errno,
+					 "%s(%d) failed for syscall %d",
+					 __FUNCTION__, op, i);
 			}
-		}
-	}
-	else
-	{
-		if(ioctl(devset->m_devs[0].m_fd, PPM_IOCTL_ZERO_SYSCALLS, 0))
-		{
-			ASSERT(false);
-			return scap_errprintf(engine.m_handle->m_lasterr, errno,
-				 "%s(%d) failed",
-				 __FUNCTION__, op);
 		}
 	}
 	return SCAP_SUCCESS;
@@ -300,7 +261,7 @@ int32_t scap_kmod_init(scap_t *handle, scap_open_args *oargs)
 			return scap_errprintf(handle->m_lasterr, err, "Kernel module does not support PPM_IOCTL_GET_API_VERSION");
 		}
 		// Make sure all devices report the same API version
-		if (handle->m_api_version != 0 && handle->m_api_version != api_version)
+		if (engine.m_handle->m_api_version != 0 && engine.m_handle->m_api_version != api_version)
 		{
 			int err = errno;
 			close(dev->m_fd);
@@ -309,14 +270,14 @@ int32_t scap_kmod_init(scap_t *handle, scap_open_args *oargs)
 				 PPM_API_VERSION_MAJOR(api_version),
 				 PPM_API_VERSION_MINOR(api_version),
 				 PPM_API_VERSION_PATCH(api_version),
-				 PPM_API_VERSION_MAJOR(handle->m_api_version),
-				 PPM_API_VERSION_MINOR(handle->m_api_version),
-				 PPM_API_VERSION_PATCH(handle->m_api_version)
+				 PPM_API_VERSION_MAJOR(engine.m_handle->m_api_version),
+				 PPM_API_VERSION_MINOR(engine.m_handle->m_api_version),
+				 PPM_API_VERSION_PATCH(engine.m_handle->m_api_version)
 			);
 		}
 		// Set the API version from the first device
 		// (for subsequent devices it's a no-op thanks to the check above)
-		handle->m_api_version = api_version;
+		engine.m_handle->m_api_version = api_version;
 
 		// Check the schema version reported
 		if (ioctl(dev->m_fd, PPM_IOCTL_GET_SCHEMA_VERSION, &schema_version) < 0)
@@ -326,21 +287,21 @@ int32_t scap_kmod_init(scap_t *handle, scap_open_args *oargs)
 			return scap_errprintf(handle->m_lasterr, err, "Kernel module does not support PPM_IOCTL_GET_SCHEMA_VERSION");
 		}
 		// Make sure all devices report the same schema version
-		if (handle->m_schema_version != 0 && handle->m_schema_version != schema_version)
+		if (engine.m_handle->m_schema_version != 0 && engine.m_handle->m_schema_version != schema_version)
 		{
 			return scap_errprintf(handle->m_lasterr, 0, "Schema version mismatch: device %s reports schema version %llu.%llu.%llu, expected %llu.%llu.%llu",
 				 filename,
 				 PPM_API_VERSION_MAJOR(schema_version),
 				 PPM_API_VERSION_MINOR(schema_version),
 				 PPM_API_VERSION_PATCH(schema_version),
-				 PPM_API_VERSION_MAJOR(handle->m_schema_version),
-				 PPM_API_VERSION_MINOR(handle->m_schema_version),
-				 PPM_API_VERSION_PATCH(handle->m_schema_version)
+				 PPM_API_VERSION_MAJOR(engine.m_handle->m_schema_version),
+				 PPM_API_VERSION_MINOR(engine.m_handle->m_schema_version),
+				 PPM_API_VERSION_PATCH(engine.m_handle->m_schema_version)
 			);
 		}
 		// Set the schema version from the first device
 		// (for subsequent devices it's a no-op thanks to the check above)
-		handle->m_schema_version = schema_version;
+		engine.m_handle->m_schema_version = schema_version;
 
 		//
 		// Map the ring buffer
@@ -392,7 +353,7 @@ int32_t scap_kmod_init(scap_t *handle, scap_open_args *oargs)
 	for(int ppm_sc = 0; ppm_sc < PPM_SC_MAX; ppm_sc++)
 	{
 		uint32_t op = oargs->ppm_sc_of_interest.ppm_sc[ppm_sc] ? SCAP_PPM_SC_MASK_SET : SCAP_PPM_SC_MASK_UNSET;
-		scap_kmod_handle_event_mask(engine, op, ppm_sc);
+		scap_kmod_handle_ppm_sc_mask(engine, op, ppm_sc);
 	}
 
 	/* Store interesting Tracepoints */
@@ -464,11 +425,18 @@ return SCAP_SUCCESS;
 //
 int32_t scap_kmod_stop_capture(struct scap_engine_handle engine)
 {
+	/* This could happen if we fail to instantiate `m_devs` in the init method */
+	struct scap_device_set *devset = &engine.m_handle->m_dev_set;
+	if(devset->m_devs == NULL)
+	{
+		return SCAP_SUCCESS;
+	}
+
 	/* Disable all tracepoints */
 	int ret = SCAP_SUCCESS;
 	for (int i = 0; i < TP_VAL_MAX && ret == SCAP_SUCCESS; i++)
 	{
-		ret = scap_kmod_handle_tp_mask(engine, SCAP_TPMASK_UNSET, i);
+		ret = scap_kmod_handle_tp_mask(engine, SCAP_TP_MASK_UNSET, i);
 	}
 	return ret;
 }
@@ -486,7 +454,7 @@ int32_t scap_kmod_start_capture(struct scap_engine_handle engine)
 	{
 		if (handle->open_tp_set.tp[i])
 		{
-			ret = scap_kmod_handle_tp_mask(engine, SCAP_TPMASK_SET, i);
+			ret = scap_kmod_handle_tp_mask(engine, SCAP_TP_MASK_SET, i);
 		}
 	}
 
@@ -725,9 +693,9 @@ static int32_t configure(struct scap_engine_handle engine, enum scap_setting set
 		return scap_kmod_enable_tracers_capture(engine);
 	case SCAP_SNAPLEN:
 		return scap_kmod_set_snaplen(engine, arg1);
-	case SCAP_EVENTMASK:
-		return scap_kmod_handle_event_mask(engine, arg1, arg2);
-	case SCAP_TPMASK:
+	case SCAP_PPM_SC_MASK:
+		return scap_kmod_handle_ppm_sc_mask(engine, arg1, arg2);
+	case SCAP_TP_MASK:
 		return scap_kmod_handle_tp_mask(engine, arg1, arg2);
 	case SCAP_DYNAMIC_SNAPLEN:
 		if(arg1 == 0)
@@ -827,12 +795,21 @@ int32_t scap_kmod_getpid_global(struct scap_engine_handle engine, int64_t* pid, 
 	return SCAP_SUCCESS;
 }
 
+uint64_t scap_kmod_get_api_version(struct scap_engine_handle engine)
+{
+	return engine.m_handle->m_api_version;
+}
+
+uint64_t scap_kmod_get_schema_version(struct scap_engine_handle engine)
+{
+	return engine.m_handle->m_schema_version;
+}
+
 struct scap_vtable scap_kmod_engine = {
 	.name = KMOD_ENGINE,
 	.mode = SCAP_MODE_LIVE,
 	.savefile_ops = NULL,
 
-	.match = match,
 	.alloc_handle = alloc_handle,
 	.init = scap_kmod_init,
 	.free_handle = free_handle,
@@ -849,4 +826,6 @@ struct scap_vtable scap_kmod_engine = {
 	.get_vpid = scap_kmod_get_vpid,
 	.get_vtid = scap_kmod_get_vtid,
 	.getpid_global = scap_kmod_getpid_global,
+	.get_api_version = scap_kmod_get_api_version,
+	.get_schema_version = scap_kmod_get_schema_version,
 };

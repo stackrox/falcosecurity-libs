@@ -214,7 +214,7 @@ const struct syscall_evt_pair g_syscall_table[SYSCALL_TABLE_SIZE] = {
 	[__NR_shutdown - SYSCALL_TABLE_ID0] =                   {UF_USED, PPME_SOCKET_SHUTDOWN_E, PPME_SOCKET_SHUTDOWN_X, PPM_SC_SHUTDOWN},
 #endif
 #ifdef __NR_setsockopt
-	[__NR_setsockopt - SYSCALL_TABLE_ID0] =                 {UF_USED | UF_ALWAYS_DROP, PPME_SOCKET_SETSOCKOPT_E, PPME_SOCKET_SETSOCKOPT_X, PPM_SC_SETSOCKOPT},
+	[__NR_setsockopt - SYSCALL_TABLE_ID0] =                 {UF_USED, PPME_SOCKET_SETSOCKOPT_E, PPME_SOCKET_SETSOCKOPT_X, PPM_SC_SETSOCKOPT},
 #endif
 #ifdef __NR_getsockopt
 	[__NR_getsockopt - SYSCALL_TABLE_ID0] =                 {UF_USED, PPME_SOCKET_GETSOCKOPT_E, PPME_SOCKET_GETSOCKOPT_X, PPM_SC_GETSOCKOPT},
@@ -421,6 +421,18 @@ const struct syscall_evt_pair g_syscall_table[SYSCALL_TABLE_SIZE] = {
 #ifdef __NR_epoll_create1
 	[__NR_epoll_create1 - SYSCALL_TABLE_ID0] = {UF_USED | UF_NEVER_DROP, PPME_SYSCALL_EPOLL_CREATE1_E, PPME_SYSCALL_EPOLL_CREATE1_X, PPM_SC_EPOLL_CREATE1},
 #endif
+#ifdef __NR_lstat64
+	[__NR_lstat64 - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_LSTAT64_E, PPME_SYSCALL_LSTAT64_X, PPM_SC_LSTAT64},
+#endif
+#ifdef __NR_umount
+	[__NR_umount - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_UMOUNT_1_E, PPME_SYSCALL_UMOUNT_1_X, PPM_SC_UMOUNT},
+#endif
+#ifdef __NR_recv
+	[__NR_recv - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SOCKET_RECV_E, PPME_SOCKET_RECV_X, PPM_SC_RECV},
+#endif
+#ifdef __NR_send
+	[__NR_send - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SOCKET_SEND_E, PPME_SOCKET_SEND_X, PPM_SC_SEND},
+#endif
 	[__NR_restart_syscall - SYSCALL_TABLE_ID0] = { .ppm_sc = PPM_SC_RESTART_SYSCALL },
 	[__NR_exit - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_EXIT},
 #ifdef __NR_time
@@ -499,9 +511,11 @@ const struct syscall_evt_pair g_syscall_table[SYSCALL_TABLE_SIZE] = {
 	[__NR_setregid - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SETREGID},
 	[__NR_getgroups - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_GETGROUPS},
 	[__NR_setgroups - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SETGROUPS},
-	[__NR_fchown - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_FCHOWN},
+#ifdef __NR_fchown
+	[__NR_fchown - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_FCHOWN_E, PPME_SYSCALL_FCHOWN_X, PPM_SC_FCHOWN},
+#endif
 #ifdef __NR_chown
-	[__NR_chown - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_CHOWN},
+	[__NR_chown - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_CHOWN_E, PPME_SYSCALL_CHOWN_X, PPM_SC_CHOWN},
 #endif
 	[__NR_setfsuid - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SETFSUID},
 	[__NR_setfsgid - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SETFSGID},
@@ -565,7 +579,9 @@ const struct syscall_evt_pair g_syscall_table[SYSCALL_TABLE_SIZE] = {
 	[__NR_inotify_add_watch - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_INOTIFY_ADD_WATCH},
 	[__NR_inotify_rm_watch - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_INOTIFY_RM_WATCH},
 	[__NR_mknodat - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_MKNODAT},
-	[__NR_fchownat - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_FCHOWNAT},
+#ifdef __NR_fchownat
+	[__NR_fchownat - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_FCHOWNAT_E, PPME_SYSCALL_FCHOWNAT_X, PPM_SC_FCHOWNAT},
+#endif
 #ifdef __NR_futimesat
 	[__NR_futimesat - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_FUTIMESAT},
 #endif
@@ -632,9 +648,6 @@ const struct syscall_evt_pair g_syscall_table[SYSCALL_TABLE_SIZE] = {
 #ifdef __NR_ipc
 	[__NR_ipc - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_IPC},
 #endif
-#ifdef __NR_lstat64
-	[__NR_lstat64 - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_LSTAT64},
-#endif
 #ifdef __NR__newselect
 	[__NR__newselect - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC__NEWSELECT},
 #endif
@@ -649,9 +662,6 @@ const struct syscall_evt_pair g_syscall_table[SYSCALL_TABLE_SIZE] = {
 #endif
 #ifdef __NR_olduname
 	[__NR_olduname - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_OLDUNAME},
-#endif
-#ifdef __NR_umount
-	[__NR_umount - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_UMOUNT},
 #endif
 #ifdef __NR_signal
 	[__NR_signal - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SIGNAL},
@@ -894,7 +904,7 @@ const struct syscall_evt_pair g_syscall_table[SYSCALL_TABLE_SIZE] = {
 	[__NR_uselib - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_USELIB},
 #endif
 #ifdef __NR_lchown
-	[__NR_lchown - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_LCHOWN},
+	[__NR_lchown - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_LCHOWN_E, PPME_SYSCALL_LCHOWN_X, PPM_SC_LCHOWN},
 #endif
 #ifdef __NR_alarm
 	[__NR_alarm - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_ALARM},
@@ -1224,6 +1234,18 @@ const struct syscall_evt_pair g_syscall_ia32_table[SYSCALL_TABLE_SIZE] = {
 #ifdef __NR_ia32_epoll_create1
 	[__NR_ia32_epoll_create1 - SYSCALL_TABLE_ID0] = {UF_USED | UF_NEVER_DROP, PPME_SYSCALL_EPOLL_CREATE1_E, PPME_SYSCALL_EPOLL_CREATE1_X, PPM_SC_EPOLL_CREATE1},
 #endif
+#ifdef __NR_ia32_lstat64
+	[__NR_ia32_lstat64 - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_LSTAT64_E, PPME_SYSCALL_LSTAT64_X, PPM_SC_LSTAT64},
+#endif
+#ifdef __NR_ia32_umount
+	[__NR_ia32_umount - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_UMOUNT_1_E, PPME_SYSCALL_UMOUNT_1_X, PPM_SC_UMOUNT},
+#endif
+#ifdef __NR_ia32_recv
+	[__NR_ia32_recv - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SOCKET_RECV_E, PPME_SOCKET_RECV_X, PPM_SC_RECV},
+#endif
+#ifdef __NR_ia32_send
+	[__NR_ia32_send - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SOCKET_SEND_E, PPME_SOCKET_SEND_X, PPM_SC_SEND},
+#endif
 	[__NR_ia32_restart_syscall - SYSCALL_TABLE_ID0] = { .ppm_sc = PPM_SC_RESTART_SYSCALL },
 	[__NR_ia32_exit - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_EXIT},
 #ifdef __NR_ia32_time
@@ -1302,9 +1324,11 @@ const struct syscall_evt_pair g_syscall_ia32_table[SYSCALL_TABLE_SIZE] = {
 	[__NR_ia32_setregid - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SETREGID},
 	[__NR_ia32_getgroups - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_GETGROUPS},
 	[__NR_ia32_setgroups - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SETGROUPS},
-	[__NR_ia32_fchown - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_FCHOWN},
+#ifdef __NR_ia32_fchown
+	[__NR_ia32_fchown - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_FCHOWN_E, PPME_SYSCALL_FCHOWN_X, PPM_SC_FCHOWN},
+#endif
 #ifdef __NR_ia32_chown
-	[__NR_ia32_chown - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_CHOWN},
+	[__NR_ia32_chown - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_CHOWN_E, PPME_SYSCALL_CHOWN_X, PPM_SC_CHOWN},
 #endif
 	[__NR_ia32_setfsuid - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SETFSUID},
 	[__NR_ia32_setfsgid - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SETFSGID},
@@ -1368,7 +1392,9 @@ const struct syscall_evt_pair g_syscall_ia32_table[SYSCALL_TABLE_SIZE] = {
 	[__NR_ia32_inotify_add_watch - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_INOTIFY_ADD_WATCH},
 	[__NR_ia32_inotify_rm_watch - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_INOTIFY_RM_WATCH},
 	[__NR_ia32_mknodat - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_MKNODAT},
-	[__NR_ia32_fchownat - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_FCHOWNAT},
+#ifdef __NR_ia32_fchownat
+	[__NR_ia32_fchownat - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_FCHOWNAT_E, PPME_SYSCALL_FCHOWNAT_X, PPM_SC_FCHOWNAT},
+#endif
 #ifdef __NR_ia32_futimesat
 	[__NR_ia32_futimesat - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_FUTIMESAT},
 #endif
@@ -1435,9 +1461,6 @@ const struct syscall_evt_pair g_syscall_ia32_table[SYSCALL_TABLE_SIZE] = {
 #ifdef __NR_ia32_ipc
 	[__NR_ia32_ipc - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_IPC},
 #endif
-#ifdef __NR_ia32_lstat64
-	[__NR_ia32_lstat64 - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_LSTAT64},
-#endif
 #ifdef __NR_ia32__newselect
 	[__NR_ia32__newselect - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC__NEWSELECT},
 #endif
@@ -1452,9 +1475,6 @@ const struct syscall_evt_pair g_syscall_ia32_table[SYSCALL_TABLE_SIZE] = {
 #endif
 #ifdef __NR_ia32_olduname
 	[__NR_ia32_olduname - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_OLDUNAME},
-#endif
-#ifdef __NR_ia32_umount
-	[__NR_ia32_umount - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_UMOUNT},
 #endif
 #ifdef __NR_ia32_signal
 	[__NR_ia32_signal - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_SIGNAL},
@@ -1685,7 +1705,7 @@ const struct syscall_evt_pair g_syscall_ia32_table[SYSCALL_TABLE_SIZE] = {
 	[__NR_ia32_pselect6 - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_PSELECT6},
 #endif
 #ifdef __NR_ia32_lchown
-	[__NR_ia32_lchown - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_LCHOWN},
+	[__NR_ia32_lchown - SYSCALL_TABLE_ID0] = {UF_USED, PPME_SYSCALL_LCHOWN_E, PPME_SYSCALL_LCHOWN_X, PPM_SC_LCHOWN},
 #endif
 #ifdef __NR_ia32_alarm
 	[__NR_ia32_alarm - SYSCALL_TABLE_ID0] = {.ppm_sc = PPM_SC_ALARM},

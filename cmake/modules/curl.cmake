@@ -73,6 +73,7 @@ else()
 			--without-libpsl
 			--without-nghttp2
 			--without-libssh2
+			--with-ca-path=/etc/ssl/certs/
 			--disable-threaded-resolver
 			--without-brotli
 			--without-zstd
@@ -86,6 +87,10 @@ else()
 			COMPONENT "libs-deps"
 			FILES_MATCHING PATTERN "*.h")
 	endif()
+endif()
+
+if(NOT TARGET curl)
+	add_custom_target(curl)
 endif()
 
 include_directories("${CURL_INCLUDE_DIRS}")

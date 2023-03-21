@@ -394,12 +394,39 @@ void docker_async_source::fetch_image_info_from_list(const docker_lookup_request
 			"docker_async url: %s",
 			url.c_str());
 
-	if(!(m_connection.get_docker(request, url, img_json) == docker_connection::RESP_OK))
+	/*
+	* Apparently at least the RHEL9 version of podman doesn't properly respond
+	* to /images/json?digests=1, while it does return all the info we need
+	* without the query parameter.
+	*
+	* Since ?digests=1 is defined in the Docker API, prefer this as the default,
+	* but also try the podman variant.
+	* 
+	* Note: the API does not return an HTTP error but instead an empty 200 response,
+	* so checking the HTTP status is not enough.
+	*/
+	if(m_connection.get_docker(request, url, img_json) != docker_connection::RESP_OK
+		|| img_json.empty())
 	{
 		g_logger.format(sinsp_logger::SEV_ERROR,
-				"docker_async (%s): Could not fetch image list",
+				"docker_async (%s): Could not fetch image list; trying without ?digests=1",
 				request.container_id.c_str());
-		return;
+
+		std::string url = "/images/json";
+
+		g_logger.format(sinsp_logger::SEV_DEBUG,
+				"docker_async url: %s",
+				url.c_str());
+
+		if(m_connection.get_docker(request, url, img_json) != docker_connection::RESP_OK
+			|| img_json.empty())
+		{
+			g_logger.format(sinsp_logger::SEV_ERROR,
+					"docker_async (%s): Could not fetch image list",
+					request.container_id.c_str());
+
+			return;
+		}
 	}
 
 	g_logger.format(sinsp_logger::SEV_DEBUG,
@@ -599,7 +626,7 @@ void docker_async_source::get_image_info(const docker_lookup_request& request, s
 	}
 
 }
-void docker_async_source::parse_json_mounts(const Json::Value &mnt_obj, vector<sinsp_container_info::container_mount_info> &mounts)
+void docker_async_source::parse_json_mounts(const Json::Value &mnt_obj, std::vector<sinsp_container_info::container_mount_info> &mounts)
 {
 	if(!mnt_obj.isNull() && mnt_obj.isArray())
 	{
@@ -616,7 +643,7 @@ void docker_async_source::parse_json_mounts(const Json::Value &mnt_obj, vector<s
 
 bool docker_async_source::parse(const docker_lookup_request& request, sinsp_container_info& container)
 {
-	string json;
+	std::string json;
 
 	g_logger.format(sinsp_logger::SEV_DEBUG,
 			"docker_async (%s): Looking up info for container via socket %s",
@@ -702,12 +729,12 @@ bool docker_async_source::parse(const docker_lookup_request& request, sinsp_cont
 
 	const Json::Value& net_obj = root["NetworkSettings"];
 
-	string ip = net_obj["IPAddress"].asString();
+	std::string ip = net_obj["IPAddress"].asString();
 
 	if(ip.empty())
 	{
 		const Json::Value& hconfig_obj = root["HostConfig"];
-		string net_mode = hconfig_obj["NetworkMode"].asString();
+		std::string net_mode = hconfig_obj["NetworkMode"].asString();
 
 		if(strncmp(net_mode.c_str(), "container:", strlen("container:")) == 0)
 		{
@@ -755,11 +782,11 @@ bool docker_async_source::parse(const docker_lookup_request& request, sinsp_cont
 		container.m_container_ip = ntohl(container.m_container_ip);
 	}
 
-	vector<string> ports = net_obj["Ports"].getMemberNames();
-	for(vector<string>::const_iterator it = ports.begin(); it != ports.end(); ++it)
+	std::vector<std::string> ports = net_obj["Ports"].getMemberNames();
+	for(std::vector<std::string>::const_iterator it = ports.begin(); it != ports.end(); ++it)
 	{
 		size_t tcp_pos = it->find("/tcp");
-		if(tcp_pos == string::npos)
+		if(tcp_pos == std::string::npos)
 		{
 			continue;
 		}
@@ -774,7 +801,7 @@ bool docker_async_source::parse(const docker_lookup_request& request, sinsp_cont
 				sinsp_container_info::container_port_mapping port_mapping;
 
 				ip = v[j]["HostIp"].asString();
-				string port = v[j]["HostPort"].asString();
+				std::string port = v[j]["HostPort"].asString();
 
 				if(inet_pton(AF_INET, ip.c_str(), &port_mapping.m_host_ip) == -1)
 				{
@@ -792,10 +819,10 @@ bool docker_async_source::parse(const docker_lookup_request& request, sinsp_cont
 
 	/* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
 #if 0
-	vector<string> labels = config_obj["Labels"].getMemberNames();
-	for(vector<string>::const_iterator it = labels.begin(); it != labels.end(); ++it)
+	std::vector<std::string> labels = config_obj["Labels"].getMemberNames();
+	for(std::vector<std::string>::const_iterator it = labels.begin(); it != labels.end(); ++it)
 	{
-		string val = config_obj["Labels"][*it].asString();
+		std::string val = config_obj["Labels"][*it].asString();
 		if(val.length() <= sinsp_container_info::m_container_label_max_length ) {
 			container.m_labels[*it] = val;
 		}
@@ -809,7 +836,7 @@ bool docker_async_source::parse(const docker_lookup_request& request, sinsp_cont
 		}
 		else
 		{
-			container.m_labels["podman_owner_uid"] = to_string(request.uid);
+			container.m_labels["podman_owner_uid"] = std::to_string(request.uid);
 		}
 	}
 
@@ -855,7 +882,7 @@ bool docker_async_source::parse(const docker_lookup_request& request, sinsp_cont
 	 *
 	 * 2) When --cpu-quota and/or --cpu-period are used, the corresponding values are returned; NanoCpus is 0
 	 */
-	container.m_cpu_quota = max(host_config_obj["CpuQuota"].asInt64(), host_config_obj["NanoCpus"].asInt64()/10000);
+	container.m_cpu_quota = std::max(host_config_obj["CpuQuota"].asInt64(), host_config_obj["NanoCpus"].asInt64()/10000);
 	const auto cpu_period = host_config_obj["CpuPeriod"].asInt64();
 	if(cpu_period > 0)
 	{

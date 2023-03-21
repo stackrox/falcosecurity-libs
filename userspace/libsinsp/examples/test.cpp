@@ -23,6 +23,8 @@ limitations under the License.
 #include <sinsp.h>
 #include <functional>
 #include "util.h"
+#include "filter/ppm_codes.h"
+#include <unordered_set>
 
 #ifndef WIN32
 extern "C" {
@@ -40,6 +42,7 @@ void json_dump(sinsp& inspector);
 void json_dump_init(sinsp& inspector);
 void json_dump_reinit_evt_formatter(sinsp& inspector);
 
+std::unordered_set<std::string> extract_filter_events(sinsp& inspector);
 std::function<void(sinsp& inspector)> dump;
 static bool g_interrupted = false;
 static const uint8_t g_backoff_timeout_secs = 2;
@@ -83,6 +86,7 @@ Options:
   -s <path>, --scap_file <path>   			 Scap file
   -d <dim>, --buffer_dim <dim>               Dimension in bytes that every per-CPU buffer will have.
   -o <fields>, --output-fields-json <fields>    [JSON support only, can also use without -j] Output fields string (see <filter> for supported display fields) that overwrites JSON default output fields for all events. * at the beginning prints JSON keys with null values, else no null fields are printed.
+  -E, --exclude-users                        Don't create the user/group tables
 )";
 	cout << usage << endl;
 }
@@ -102,12 +106,13 @@ void parse_CLI_options(sinsp& inspector, int argc, char** argv)
 		{"scap_file", required_argument, 0, 's'},
 		{"buffer_dim", required_argument, 0, 'd'},
 		{"output-fields-json", required_argument, 0, 'o'},
+		{"exclude-users", no_argument, 0, 'E'},
 		{0, 0, 0, 0}};
 
 	int op;
 	int long_index = 0;
 	while((op = getopt_long(argc, argv,
-				"hf:jab:mks:d:o:",
+				"hf:jab:mks:d:o:E",
 				long_options, &long_index)) != -1)
 	{
 		switch(op)
@@ -146,6 +151,9 @@ void parse_CLI_options(sinsp& inspector, int argc, char** argv)
 			json_dump_init(inspector);
 			json_dump_reinit_evt_formatter(inspector);
 			break;
+		case 'E':
+			inspector.set_import_users(false);
+			break;
 		default:
 			break;
 		}
@@ -153,13 +161,25 @@ void parse_CLI_options(sinsp& inspector, int argc, char** argv)
 }
 #endif /* WIN32 */
 
+std::unordered_set<std::string> extract_filter_events(sinsp& inspector)
+{
+	auto ast = inspector.get_filter_ast();
+	if(ast != nullptr)
+	{
+		auto codes = libsinsp::filter::ast::ppm_event_codes(ast.get());
+		return libsinsp::events::event_set_to_names(codes);
+	}
+
+	return {};
+}
+
 void open_engine(sinsp& inspector)
 {
 	std::cout << "-- Try to open: '" + engine_string + "' engine." << std::endl;
 
 	/* Get only necessary tracepoints. */
-	std::unordered_set<uint32_t> tp_set = inspector.enforce_sinsp_state_tp();
-	std::unordered_set<uint32_t> ppm_sc;
+	auto tp_set = libsinsp::events::enforce_simple_tp_set();
+	libsinsp::events::set<ppm_sc_code> ppm_sc;
 
 	if(!engine_string.compare(KMOD_ENGINE))
 	{
@@ -235,6 +255,7 @@ static bool insert_module()
 		goto error;
 
 	atexit(remove_module);
+	close(fd);
 
 	return true;
 
@@ -280,8 +301,6 @@ int main(int argc, char** argv)
 
 	open_engine(inspector);
 
-	std::cout << "-- Start capture" << std::endl;
-
 	if(!filter_string.empty())
 	{
 		try
@@ -293,6 +312,14 @@ int main(int argc, char** argv)
 			cerr << "[ERROR] Unable to set filter: " << e.what() << endl;
 		}
 	}
+
+	auto event_names = extract_filter_events(inspector);
+	if(!event_names.empty())
+	{
+		printf("-- Filter event types names: %s\n", concat_set_in_order(event_names).c_str());
+	}
+
+	std::cout << "-- Start capture" << std::endl;
 
 	inspector.start_capture();
 	while(!g_interrupted)

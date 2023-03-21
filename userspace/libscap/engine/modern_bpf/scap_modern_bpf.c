@@ -68,12 +68,6 @@ static int32_t check_modern_probe_support(char* last_err)
 
 /*=============================== UTILS ===============================*/
 
-/* Right now this is not used */
-bool scap_modern_bpf__match(scap_open_args* oargs)
-{
-	return strcmp(oargs->engine_name, MODERN_BPF_ENGINE) == 0;
-}
-
 static struct modern_bpf_engine* scap_modern_bpf__alloc_engine(scap_t* main_handle, char* lasterr_ptr)
 {
 	struct modern_bpf_engine* engine = calloc(1, sizeof(struct modern_bpf_engine));
@@ -110,31 +104,48 @@ static int32_t scap_modern_bpf__next(struct scap_engine_handle engine, OUT scap_
 	return SCAP_SUCCESS;
 }
 
+static int32_t scap_modern_bpf_start_dropping_mode(struct scap_engine_handle engine, uint32_t sampling_ratio)
+{
+	pman_set_sampling_ratio(sampling_ratio);
+	pman_set_dropping_mode(true);
+	return SCAP_SUCCESS;
+}
+
+int32_t scap_modern_bpf_stop_dropping_mode()
+{
+	pman_set_sampling_ratio(1);
+	pman_set_dropping_mode(false);
+	return SCAP_SUCCESS;
+}
+
+
 static int32_t scap_modern_bpf__configure(struct scap_engine_handle engine, enum scap_setting setting, unsigned long arg1, unsigned long arg2)
 {
 	switch(setting)
 	{
 	case SCAP_SAMPLING_RATIO:
-		/* Not supported */
-		return SCAP_SUCCESS;
+		if(arg2 == 0)
+		{
+			return scap_modern_bpf_stop_dropping_mode();
+		}
+		else
+		{
+			return scap_modern_bpf_start_dropping_mode(engine, arg1);
+		}
 	case SCAP_TRACERS_CAPTURE:
 		/* Not supported */
 		return SCAP_SUCCESS;
 	case SCAP_SNAPLEN:
 		pman_set_snaplen(arg1);
-	case SCAP_EVENTMASK:
+	case SCAP_PPM_SC_MASK:
 		/* We use this setting just to modify the interesting syscalls. */
 		if(arg1 == SCAP_PPM_SC_MASK_SET || arg1 == SCAP_PPM_SC_MASK_UNSET)
 		{
 			update_single_64bit_syscall_of_interest(arg2, arg1 == SCAP_PPM_SC_MASK_SET);
 		}
-		else if(arg1 == SCAP_PPM_SC_MASK_ZERO)
-		{
-			pman_clean_all_64bit_interesting_syscalls();
-		}
 		return SCAP_SUCCESS;
-	case SCAP_TPMASK:
-		return pman_update_single_program(arg2, arg1 == SCAP_TPMASK_SET);
+	case SCAP_TP_MASK:
+		return pman_update_single_program(arg2, arg1 == SCAP_TP_MASK_SET);
 	case SCAP_DYNAMIC_SNAPLEN:
 		/* Not supported */
 		return SCAP_SUCCESS;
@@ -231,8 +242,8 @@ int32_t scap_modern_bpf__init(scap_t* handle, scap_open_args* oargs)
 	}
 	pman_set_boot_time(boot_time);
 
-	handle->m_api_version = pman_get_probe_api_ver();
-	handle->m_schema_version = pman_get_probe_schema_ver();
+	engine.m_handle->m_api_version = pman_get_probe_api_ver();
+	engine.m_handle->m_schema_version = pman_get_probe_schema_ver();
 
 	return SCAP_SUCCESS;
 }
@@ -266,12 +277,21 @@ int32_t scap_modern_bpf__get_n_tracepoint_hit(struct scap_engine_handle engine, 
 	return SCAP_SUCCESS;
 }
 
+uint64_t scap_modern_bpf__get_api_version(struct scap_engine_handle engine)
+{
+	return engine.m_handle->m_api_version;
+}
+
+uint64_t scap_modern_bpf__get_schema_version(struct scap_engine_handle engine)
+{
+	return engine.m_handle->m_schema_version;
+}
+
 struct scap_vtable scap_modern_bpf_engine = {
 	.name = MODERN_BPF_ENGINE,
 	.mode = SCAP_MODE_LIVE,
 	.savefile_ops = NULL,
 
-	.match = scap_modern_bpf__match,
 	.alloc_handle = scap_modern_bpf__alloc_engine,
 	.init = scap_modern_bpf__init,
 	.free_handle = scap_modern_bpf__free_engine,
@@ -288,4 +308,6 @@ struct scap_vtable scap_modern_bpf_engine = {
 	.get_vpid = noop_get_vxid,
 	.get_vtid = noop_get_vxid,
 	.getpid_global = scap_os_getpid_global,
+	.get_api_version = scap_modern_bpf__get_api_version,
+	.get_schema_version = scap_modern_bpf__get_schema_version,
 };

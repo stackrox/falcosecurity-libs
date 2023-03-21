@@ -23,6 +23,9 @@ limitations under the License.
 #include "sinsp.h"
 #include "sinsp_int.h"
 
+using namespace std;
+#define MAX_CNIRESULT_LENGTH 4096
+
 namespace {
 bool pod_uses_host_netns(const runtime::v1alpha2::PodSandboxStatusResponse& resp)
 {
@@ -115,7 +118,15 @@ bool cri_interface::parse_cri_image(const runtime::v1alpha2::ContainerStatus &st
 
 	bool have_digest = false;
 	const auto &image_ref = status.image_ref();
+	std::string image_name = status.image().image();
+	bool get_tag_from_image = false;
 	auto digest_start = image_ref.find("sha256:");
+
+	g_logger.format(sinsp_logger::SEV_DEBUG,
+			"cri (%s): parse_cri_image: image_ref=%s, digest_start=%d",
+			container.m_id.c_str(),
+			image_ref.c_str(), digest_start);
+
 	switch (digest_start)
 	{
 	case 0: // sha256:digest
@@ -125,18 +136,49 @@ bool cri_interface::parse_cri_image(const runtime::v1alpha2::ContainerStatus &st
 		break;
 	default: // host/image@sha256:digest
 		have_digest = image_ref[digest_start - 1] == '@';
+		if(have_digest)
+		{
+			image_name = image_ref.substr(0, digest_start - 1);
+			get_tag_from_image = true;
+		}
 	}
 
+	g_logger.format(sinsp_logger::SEV_DEBUG,
+			"cri (%s): parse_cri_image: have_digest=%d image_name=%s",
+			container.m_id.c_str(),
+			have_digest, image_name.c_str());
+
 	string hostname, port, digest;
-	sinsp_utils::split_container_image(status.image().image(),
+	sinsp_utils::split_container_image(image_name,
 					   hostname,
 					   port,
 					   container.m_imagerepo,
 					   container.m_imagetag,
 					   digest,
 					   false);
-	container.m_image = status.image().image();
 
+	if(get_tag_from_image)
+	{
+		g_logger.format(sinsp_logger::SEV_DEBUG,
+				"cri (%s): parse_cri_image: tag=%s, pulling tag from %s",
+				container.m_id.c_str(),
+				container.m_imagetag.c_str(),
+				status.image().image().c_str());
+
+		string digest2, repo;
+		sinsp_utils::split_container_image(status.image().image(),
+						   hostname,
+						   port,
+						   repo,
+						   container.m_imagetag,
+						   digest2,
+						   false);
+
+		image_name.push_back(':');
+		image_name.append(container.m_imagetag);
+	}
+
+	container.m_image = image_name;
 
 	if(have_digest)
 	{
@@ -146,6 +188,15 @@ bool cri_interface::parse_cri_image(const runtime::v1alpha2::ContainerStatus &st
 	{
 		container.m_imagedigest = digest;
 	}
+
+	g_logger.format(sinsp_logger::SEV_DEBUG,
+			"cri (%s): parse_cri_image: repo=%s tag=%s image=%s digest=%s",
+			container.m_id.c_str(),
+			container.m_imagerepo.c_str(),
+			container.m_imagetag.c_str(),
+			container.m_image.c_str(),
+			container.m_imagedigest.c_str());
+
 	return true;
 }
 
@@ -350,22 +401,72 @@ bool cri_interface::is_pod_sandbox(const std::string &container_id)
 	return status.ok();
 }
 
-uint32_t cri_interface::get_pod_sandbox_ip(const std::string &pod_sandbox_id)
+// TODO: Explore future schema standardizations, https://github.com/falcosecurity/falco/issues/2387
+void cri_interface::get_pod_info_cniresult(runtime::v1alpha2::PodSandboxStatusResponse &resp, std::string &cniresult)
+{
+	Json::Value root;
+	Json::Reader reader;
+	const auto &info_it = resp.info();
+	if(reader.parse(info_it.find("info")->second, root))
+	{
+		Json::Value jvalue;
+		/* Lookup approach is brute force "try all schemas" we know of, do not condition by container runtime for possible future "would just work" luck in case other runtimes standardize on one of the current schemas. */
+
+		jvalue = root["cniResult"]["Interfaces"];	/* pod info schema of CT_CONTAINERD runtime. */
+		if(!jvalue.isNull())
+		{
+			/* If applicable remove members / fields not needed for incident response. */
+			jvalue.removeMember("lo");
+			for (auto& key : jvalue.getMemberNames())
+			{
+				if (0 == strncmp(key.c_str(), "veth", 4))
+				{
+					jvalue.removeMember(key);
+				} else
+				{
+					jvalue[key].removeMember("Mac");
+					jvalue[key].removeMember("Sandbox");
+				}
+			}
+
+			Json::FastWriter fastWriter;
+			cniresult = fastWriter.write(jvalue);
+		}
+
+		if(jvalue.isNull())
+		{
+			jvalue = root["runtimeSpec"]["annotations"]["io.kubernetes.cri-o.CNIResult"];	/* pod info schema of CT_CRIO runtime. Note interfaces names are unknown here. */
+			if(!jvalue.isNull())
+			{
+				cniresult = jvalue.asString();
+			}
+		}
+
+		if(cniresult[cniresult.size() - 1] == '\n')		/* Make subsequent ETLs nicer w/ minor cleanups if applicable. */
+		{
+			cniresult.pop_back();
+		}
+
+		if (cniresult.size() > MAX_CNIRESULT_LENGTH)	/* Safety upper bound, should never happen. */
+		{
+			cniresult.resize(MAX_CNIRESULT_LENGTH);
+		}
+	}
+}
+
+void cri_interface::get_pod_sandbox_resp(const std::string &pod_sandbox_id, runtime::v1alpha2::PodSandboxStatusResponse &resp, grpc::Status &status)
 {
 	runtime::v1alpha2::PodSandboxStatusRequest req;
-	runtime::v1alpha2::PodSandboxStatusResponse resp;
 	req.set_pod_sandbox_id(pod_sandbox_id);
 	req.set_verbose(true);
 	grpc::ClientContext context;
 	auto deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(s_cri_timeout);
 	context.set_deadline(deadline);
-	grpc::Status status = m_cri->PodSandboxStatus(&context, req, &resp);
+	status = m_cri->PodSandboxStatus(&context, req, &resp);
+}
 
-	if(!status.ok())
-	{
-		return 0;
-	}
-
+uint32_t cri_interface::get_pod_sandbox_ip(runtime::v1alpha2::PodSandboxStatusResponse &resp)
+{
 	if(pod_uses_host_netns(resp))
 	{
 		return 0;
@@ -388,8 +489,10 @@ uint32_t cri_interface::get_pod_sandbox_ip(const std::string &pod_sandbox_id)
 	}
 }
 
-uint32_t cri_interface::get_container_ip(const std::string &container_id)
+void cri_interface::get_container_ip(const std::string &container_id, uint32_t &container_ip, std::string &cniresult)
 {
+	container_ip = 0;
+	cniresult = "";
 	runtime::v1alpha2::ListContainersRequest req;
 	runtime::v1alpha2::ListContainersResponse resp;
 	auto filter = req.mutable_filter();
@@ -407,14 +510,20 @@ uint32_t cri_interface::get_container_ip(const std::string &container_id)
 			break;
 		case 1: {
 			const auto& cri_container = resp.containers(0);
-			return ntohl(get_pod_sandbox_ip(cri_container.pod_sandbox_id()));
+			runtime::v1alpha2::PodSandboxStatusResponse resp_pod;
+			grpc::Status status_pod;
+			get_pod_sandbox_resp(cri_container.pod_sandbox_id(), resp_pod, status_pod);
+			if (status_pod.ok())
+			{
+				container_ip =  ntohl(get_pod_sandbox_ip(resp_pod));
+				get_pod_info_cniresult(resp_pod, cniresult);
+			}
 		}
 		default:
 			g_logger.format(sinsp_logger::SEV_WARNING, "Container id %s matches more than once in list from CRI", container_id.c_str());
 			ASSERT(false);
 			break;
 	}
-	return 0;
 }
 
 std::string cri_interface::get_container_image_id(const std::string &image_ref)

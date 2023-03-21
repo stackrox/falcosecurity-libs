@@ -33,6 +33,7 @@ limitations under the License.
 #include "sinsp.h"
 #include "sinsp_int.h"
 
+using namespace std;
 using namespace libsinsp::cri;
 using namespace libsinsp::container_engine;
 using namespace libsinsp::runc;
@@ -86,7 +87,14 @@ bool cri_async_source::parse_containerd(const runtime::v1alpha2::ContainerStatus
 	if(root.isMember("sandboxID") && root["sandboxID"].isString())
 	{
 		const auto pod_sandbox_id = root["sandboxID"].asString();
-		container.m_container_ip = ntohl(m_cri->get_pod_sandbox_ip(pod_sandbox_id));
+		runtime::v1alpha2::PodSandboxStatusResponse resp_pod;
+		grpc::Status status_pod;
+		m_cri->get_pod_sandbox_resp(pod_sandbox_id, resp_pod, status_pod);
+		if (status_pod.ok())
+		{
+			container.m_container_ip = ntohl(m_cri->get_pod_sandbox_ip(resp_pod));
+			m_cri->get_pod_info_cniresult(resp_pod, container.m_pod_cniresult);
+		}
 	}
 
 	return ret;
@@ -169,15 +177,32 @@ bool cri_async_source::parse(const key_type& key, sinsp_container_info& containe
 		// name stays at its default "<NA>" value.
 	}
 
+	g_logger.format(sinsp_logger::SEV_DEBUG,
+			"cri (%s): after parse_containerd: repo=%s tag=%s image=%s digest=%s",
+			container.m_id.c_str(),
+			container.m_imagerepo.c_str(),
+			container.m_imagetag.c_str(),
+			container.m_image.c_str(),
+			container.m_imagedigest.c_str());
+
+
 	if(s_cri_extra_queries)
 	{
 		if(!container.m_container_ip)
 		{
-			container.m_container_ip = m_cri->get_container_ip(container.m_id);
+			m_cri->get_container_ip(container.m_id, container.m_container_ip, container.m_pod_cniresult);
 		}
 		if(container.m_imageid.empty())
 		{
 			container.m_imageid = m_cri->get_container_image_id(resp_container.image_ref());
+			g_logger.format(sinsp_logger::SEV_DEBUG,
+					"cri (%s): after get_container_image_id: repo=%s tag=%s image=%s digest=%s",
+					container.m_id.c_str(),
+					container.m_imagerepo.c_str(),
+					container.m_imagetag.c_str(),
+					container.m_image.c_str(),
+					container.m_imagedigest.c_str());
+
 		}
 	}
 
@@ -188,9 +213,14 @@ cri::cri(container_cache_interface &cache) : container_engine_base(cache)
 {
 	if (s_cri_unix_socket_paths.empty())
 	{
-		// Default value when empty
+		// containerd as primary default value when empty
 		s_cri_unix_socket_paths.emplace_back("/run/containerd/containerd.sock");
+		// crio-o as secondary default value when empty
+		s_cri_unix_socket_paths.emplace_back("/run/crio/crio.sock");
+		// k3s containerd as third option when empty
+		s_cri_unix_socket_paths.emplace_back("/run/k3s/containerd/containerd.sock");
 	}
+
 
 	// Try all specified unix socket paths
 	// NOTE: having multiple container runtimes on the same host is a sporadic case,

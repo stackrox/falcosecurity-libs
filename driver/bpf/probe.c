@@ -10,6 +10,9 @@ or GPL2.txt for full copies of the license.
 
 #include <generated/utsrelease.h>
 #include <uapi/linux/bpf.h>
+#if __has_include(<asm/rwonce.h>)
+#include <asm/rwonce.h>
+#endif
 #include <linux/sched.h>
 
 #include "../driver_config.h"
@@ -36,7 +39,7 @@ int bpf_##event(struct type *ctx)
 BPF_PROBE("raw_syscalls/", sys_enter, sys_enter_args)
 {
 	const struct syscall_evt_pair *sc_evt;
-	enum ppm_event_type evt_type;
+	ppm_event_code evt_type;
 	int drop_flags;
 	long id;
 	bool enabled;
@@ -47,6 +50,13 @@ BPF_PROBE("raw_syscalls/", sys_enter, sys_enter_args)
 	id = bpf_syscall_get_nr(ctx);
 	if (id < 0 || id >= SYSCALL_TABLE_SIZE)
 		return 0;
+
+#if defined(CAPTURE_SOCKETCALL) && defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
+	if(id == __NR_socketcall)
+	{
+		id = convert_network_syscalls(ctx);
+	}
+#endif
 
 	enabled = is_syscall_interesting(id);
 	if (!enabled)
@@ -86,7 +96,7 @@ BPF_PROBE("raw_syscalls/", sys_enter, sys_enter_args)
 BPF_PROBE("raw_syscalls/", sys_exit, sys_exit_args)
 {
 	const struct syscall_evt_pair *sc_evt;
-	enum ppm_event_type evt_type;
+	ppm_event_code evt_type;
 	int drop_flags;
 	long id;
 	bool enabled;
@@ -97,6 +107,13 @@ BPF_PROBE("raw_syscalls/", sys_exit, sys_exit_args)
 	id = bpf_syscall_get_nr(ctx);
 	if (id < 0 || id >= SYSCALL_TABLE_SIZE)
 		return 0;
+
+#if defined(CAPTURE_SOCKETCALL) && defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
+	if(id == __NR_socketcall)
+	{
+		id = convert_network_syscalls(ctx);
+	}
+#endif
 
 	enabled = is_syscall_interesting(id);
 	if (!enabled)
@@ -118,13 +135,18 @@ BPF_PROBE("raw_syscalls/", sys_exit, sys_exit_args)
 		return 0;
 	}
 
+#if defined(CAPTURE_SCHED_PROC_FORK) || defined(CAPTURE_SCHED_PROC_EXEC)
+	if(bpf_drop_syscall_exit_events(ctx, evt_type))
+		return 0;
+#endif
+
 	call_filler(ctx, ctx, evt_type, drop_flags);
 	return 0;
 }
 
 BPF_PROBE("sched/", sched_process_exit, sched_process_exit_args)
 {
-	enum ppm_event_type evt_type;
+	ppm_event_code evt_type;
 	struct task_struct *task;
 	unsigned int flags;
 
@@ -143,7 +165,7 @@ BPF_PROBE("sched/", sched_process_exit, sched_process_exit_args)
 #if 0 /* StackRox: Drop switch, page fault, and signal events */
 BPF_PROBE("sched/", sched_switch, sched_switch_args)
 {
-	enum ppm_event_type evt_type;
+	ppm_event_code evt_type;
 
 	evt_type = PPME_SCHEDSWITCH_6_E;
 
@@ -154,7 +176,7 @@ BPF_PROBE("sched/", sched_switch, sched_switch_args)
 #ifdef CAPTURE_PAGE_FAULTS
 static __always_inline int bpf_page_fault(struct page_fault_args *ctx)
 {
-	enum ppm_event_type evt_type;
+	ppm_event_code evt_type;
 
 	evt_type = PPME_PAGE_FAULT_E;
 
@@ -175,7 +197,7 @@ BPF_PROBE("exceptions/", page_fault_kernel, page_fault_args)
 
 BPF_PROBE("signal/", signal_deliver, signal_deliver_args)
 {
-	enum ppm_event_type evt_type;
+	ppm_event_code evt_type;
 
 	evt_type = PPME_SIGNALDELIVER_E;
 
@@ -188,7 +210,7 @@ BPF_PROBE("signal/", signal_deliver, signal_deliver_args)
 __bpf_section(TP_NAME "sched/sched_process_fork")
 int bpf_sched_process_fork(struct sched_process_fork_args *ctx)
 {
-	enum ppm_event_type evt_type;
+	ppm_event_code evt_type;
 	struct sys_stash_args args;
 	unsigned long *argsp;
 
@@ -209,7 +231,7 @@ BPF_PROBE("sched/", sched_process_exec, sched_process_exec_args)
 {
 	struct scap_bpf_settings *settings;
 	/* We will always send an execve exit event. */
-	enum ppm_event_type event_type = PPME_SYSCALL_EXECVE_19_X;
+	ppm_event_code event_type = PPME_SYSCALL_EXECVE_19_X;
 
 	/* We are not interested in kernel threads. */
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -252,7 +274,7 @@ int bpf_sched_process_fork(struct sched_process_fork_raw_args *ctx)
 {
 	struct scap_bpf_settings *settings;
 	/* We will always send a clone exit event. */
-	enum ppm_event_type event_type = PPME_SYSCALL_CLONE_20_X;
+	ppm_event_code event_type = PPME_SYSCALL_CLONE_20_X;
 
 	/* We are not interested in kernel threads. */
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();

@@ -16,10 +16,18 @@ or GPL2.txt for full copies of the license.
 #include "types.h"
 #include "builtins.h"
 
-#define _READ(P) ({ typeof(P) _val;				\
-		    memset(&_val, 0, sizeof(_val));		\
-		    bpf_probe_read(&_val, sizeof(_val), &P);	\
-		    _val;					\
+#ifdef CAPTURE_SOCKETCALL
+#include <linux/net.h>
+#endif
+
+#define _READ(P) ({ typeof(P) _val;					\
+		    bpf_probe_read_kernel(&_val, sizeof(_val), &P);	\
+		    _val;						\
+		 })
+#define _READ_KERNEL(P) _READ(P)
+#define _READ_USER(P) ({ typeof(P) _val;				\
+			 bpf_probe_read_user(&_val, sizeof(_val), &P);	\
+			 _val;						\
 		 })
 
 #ifdef BPF_DEBUG
@@ -241,10 +249,31 @@ static __always_inline unsigned long bpf_syscall_get_argument_from_ctx(void *ctx
 	return arg;
 }
 
+#ifdef CAPTURE_SOCKETCALL
+static __always_inline unsigned long bpf_syscall_get_socketcall_arg(void *ctx, int idx)
+{
+	unsigned long arg = 0;
+	unsigned long args_pointer = 0;
+
+	args_pointer = bpf_syscall_get_argument_from_ctx(ctx, 1);
+	bpf_probe_read_user(&arg, sizeof(unsigned long), (void*)(args_pointer + (idx * sizeof(unsigned long))));
+
+	return arg;
+}
+#endif /* CAPTURE_SOCKETCALL */
+
 static __always_inline unsigned long bpf_syscall_get_argument(struct filler_data *data,
 							      int idx)
 {
 #ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
+
+/* We define it here because we support socket calls only on kernels with BPF_SUPPORTS_RAW_TRACEPOINTS */
+#ifdef CAPTURE_SOCKETCALL
+	if(bpf_syscall_get_nr(data->ctx) == __NR_socketcall)
+	{
+		return bpf_syscall_get_socketcall_arg(data->ctx, idx);
+	}
+#endif /* CAPTURE_SOCKETCALL */
 	return bpf_syscall_get_argument_from_ctx(data->ctx, idx);
 #else
 	return bpf_syscall_get_argument_from_args(data->args, idx);
@@ -297,7 +326,7 @@ static __always_inline bool is_syscall_interesting(int id)
 	return *enabled;
 }
 
-static __always_inline const struct ppm_event_info *get_event_info(enum ppm_event_type event_type)
+static __always_inline const struct ppm_event_info *get_event_info(ppm_event_code event_type)
 {
 	const struct ppm_event_info *e =
 		bpf_map_lookup_elem(&event_info_table, &event_type);
@@ -308,7 +337,7 @@ static __always_inline const struct ppm_event_info *get_event_info(enum ppm_even
 	return e;
 }
 
-static __always_inline const struct ppm_event_entry *get_event_filler_info(enum ppm_event_type event_type)
+static __always_inline const struct ppm_event_entry *get_event_filler_info(ppm_event_code event_type)
 {
 	const struct ppm_event_entry *e;
 
@@ -417,9 +446,50 @@ static __always_inline int bpf_test_bit(int nr, unsigned long *addr)
 	return 1UL & (_READ(addr[BIT_WORD(nr)]) >> (nr & (BITS_PER_LONG - 1)));
 }
 
+#if defined(CAPTURE_SCHED_PROC_FORK) || defined(CAPTURE_SCHED_PROC_EXEC)
+static __always_inline bool bpf_drop_syscall_exit_events(void *ctx, ppm_event_code evt_type)
+{
+	long ret = 0;
+	switch (evt_type)
+	{
+		/* On s390x, clone and fork child events will be generated but
+		 * due to page faults, no args/envp information will be collected.
+		 * Also no child events appear for clone3 syscall.
+		 *
+		 * Because child events are covered by CAPTURE_SCHED_PROC_FORK,
+		 * let proactively ignore them.
+		 */
+#ifdef CAPTURE_SCHED_PROC_FORK
+		case PPME_SYSCALL_CLONE_20_X:
+		case PPME_SYSCALL_FORK_20_X:
+		case PPME_SYSCALL_VFORK_20_X:
+		case PPME_SYSCALL_CLONE3_X:
+			ret = bpf_syscall_get_retval(ctx);
+			/* We ignore only child events, so ret == 0! */
+			return ret == 0;
+#endif
+
+		/* If `CAPTURE_SCHED_PROC_EXEC` logic is enabled we collect execve-family
+		 * exit events through a dedicated tracepoint so we can ignore them here.
+		 */
+#ifdef CAPTURE_SCHED_PROC_EXEC
+		case PPME_SYSCALL_EXECVE_19_X:
+		case PPME_SYSCALL_EXECVEAT_X:
+			ret = bpf_syscall_get_retval(ctx);
+			/* We ignore only successful events, so ret == 0! */
+			return ret == 0;
+#endif
+
+		default:
+			break;
+	}
+	return false;
+}
+#endif
+
 static __always_inline bool drop_event(void *ctx,
 				       struct scap_bpf_per_cpu_state *state,
-				       enum ppm_event_type evt_type,
+				       ppm_event_code evt_type,
 				       struct scap_bpf_settings *settings,
 				       enum syscall_flags drop_flags)
 {
@@ -514,7 +584,7 @@ static __always_inline bool drop_event(void *ctx,
 }
 
 static __always_inline void reset_tail_ctx(struct scap_bpf_per_cpu_state *state,
-					   enum ppm_event_type evt_type,
+					   ppm_event_code evt_type,
 					   unsigned long long ts)
 {
 	state->tail_ctx.evt_type = evt_type;
@@ -527,7 +597,7 @@ static __always_inline void reset_tail_ctx(struct scap_bpf_per_cpu_state *state,
 
 static __always_inline void call_filler(void *ctx,
 					void *stack_ctx,
-					enum ppm_event_type evt_type,
+					ppm_event_code evt_type,
 					enum syscall_flags drop_flags)
 {
 	struct scap_bpf_settings *settings;
@@ -576,5 +646,122 @@ static __always_inline void call_filler(void *ctx,
 cleanup:
 	release_local_state(state);
 }
+
+#if defined(CAPTURE_SOCKETCALL)  && defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
+static __always_inline long convert_network_syscalls(void *ctx)
+{
+	int socketcall_id = (int)bpf_syscall_get_argument_from_ctx(ctx, 0);
+
+	switch(socketcall_id)
+	{
+#ifdef __NR_socket
+	case SYS_SOCKET:
+		return __NR_socket;
+#endif
+
+#ifdef __NR_socketpair
+	case SYS_SOCKETPAIR:
+		return __NR_socketpair;
+#endif
+
+	case SYS_ACCEPT:
+#if defined(CONFIG_S390) && defined(__NR_accept4)
+		return __NR_accept4;
+#elif defined(__NR_ACCEPT)
+		return __NR_accept;
+#endif
+		break;
+
+#ifdef __NR_accept4
+	case SYS_ACCEPT4:
+		return __NR_accept4;
+#endif
+
+#ifdef __NR_bind
+	case SYS_BIND:
+		return __NR_bind;
+#endif
+
+#ifdef __NR_listen
+	case SYS_LISTEN:
+		return __NR_listen;
+#endif
+
+#ifdef __NR_connect
+	case SYS_CONNECT:
+		return __NR_connect;
+#endif
+
+#ifdef __NR_getsockname
+	case SYS_GETSOCKNAME:
+		return __NR_getsockname;
+#endif
+
+#ifdef __NR_getpeername
+	case SYS_GETPEERNAME:
+		return __NR_getpeername;
+#endif
+
+#ifdef __NR_getsockopt
+	case SYS_GETSOCKOPT:
+		return __NR_getsockopt;
+#endif
+
+#ifdef __NR_setsockopt
+	case SYS_SETSOCKOPT:
+		return __NR_setsockopt;
+#endif
+
+#ifdef __NR_recv
+	case SYS_RECV:
+		return __NR_recv;
+#endif
+
+#ifdef __NR_recvfrom
+	case SYS_RECVFROM:
+		return __NR_recvfrom;
+#endif
+
+#ifdef __NR_recvmsg
+	case SYS_RECVMSG:
+		return __NR_recvmsg;
+#endif
+
+#ifdef __NR_recvmmsg
+	case SYS_RECVMMSG:
+		return __NR_recvmmsg;
+#endif
+
+#ifdef __NR_send
+	case SYS_SEND:
+		return __NR_send;
+#endif
+
+#ifdef __NR_sendto
+	case SYS_SENDTO:
+		return __NR_sendto;
+#endif
+
+#ifdef __NR_sendmsg
+	case SYS_SENDMSG:
+		return __NR_sendmsg;
+#endif
+
+#ifdef __NR_sendmmsg
+	case SYS_SENDMMSG:
+		return __NR_sendmmsg;
+#endif
+
+#ifdef __NR_shutdown
+	case SYS_SHUTDOWN:
+		return __NR_shutdown;
+#endif
+	default:
+		break;
+	}
+
+	return 0;
+}
+#endif
 
 #endif

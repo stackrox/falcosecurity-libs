@@ -63,7 +63,8 @@ int32_t sandbox_entry::expand_buffer(size_t size)
 {
 	void* new_buf;
 
-	if (m_buf.buf == nullptr) {
+	if (m_buf.buf == nullptr)
+	{
 		new_buf = malloc(size);
 	} else
 	{
@@ -72,6 +73,8 @@ int32_t sandbox_entry::expand_buffer(size_t size)
 
 	if (new_buf == nullptr)
 	{
+		// no need to clean up existing buffers in case of failed realloc
+		// since they will be cleaned up by the destructor
 		return SCAP_FAILURE;
 	}
 

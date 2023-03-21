@@ -30,15 +30,15 @@ struct scap_stats;
 typedef struct scap scap_t;
 typedef struct ppm_evt_hdr scap_evt;
 
-enum scap_eventmask_op {
-	SCAP_PPM_SC_MASK_ZERO = 0, //< disable all syscalls
+enum scap_ppm_sc_mask_op {
+	// SCAP_PPM_SC_MASK_ZERO = 0, //< disable all syscalls - SUPPORT DROPPED
 	SCAP_PPM_SC_MASK_SET = 1, //< enable a syscall
 	SCAP_PPM_SC_MASK_UNSET = 2, //< disable a syscall
 };
 
-enum scap_tpmask_op {
-	SCAP_TPMASK_SET = 0, //< enable a tp
-	SCAP_TPMASK_UNSET = 1, //< disable a tp
+enum scap_tp_mask_op {
+	SCAP_TP_MASK_SET = 0, //< enable a tp
+	SCAP_TP_MASK_UNSET = 1, //< disable a tp
 };
 
 /**
@@ -63,10 +63,10 @@ enum scap_setting {
 	SCAP_SNAPLEN,
 	/**
 	 * @brief enable/disable individual syscalls
-	 * arg1: scap_eventmask_op
-	 * arg2: event id (ignored for SCAP_EVENTMASK_ZERO)
+	 * arg1: scap_ppm_sc_op
+	 * arg2: ppm_sc id
 	 */
-	SCAP_EVENTMASK,
+	SCAP_PPM_SC_MASK,
 	/**
 	 * @brief enable/disable dynamic snaplen
 	 * arg1: enabled?
@@ -85,10 +85,10 @@ enum scap_setting {
 	SCAP_STATSD_PORT,
 	/**
 	 * @brief enable/disable individual tracepoints
-	 * arg1: scap_tpmask_op
-	 * arg2: tp id
+	 * arg1: scap_tp_mask_op
+	 * arg2: tp id, see ppm_tp.h
 	 */
-	SCAP_TPMASK,
+	SCAP_TP_MASK,
 };
 
 struct scap_savefile_vtable {
@@ -141,17 +141,6 @@ struct scap_vtable {
 	scap_mode_t mode;
 
 	const struct scap_savefile_vtable *savefile_ops;
-
-	/**
-	 * @brief check whether `open_args` are compatible with this engine
-	 * @param open_args a scap open request structure
-	 * @return true if this engine can handle `open_args`, false otherwise
-	 *
-	 * If this field is NULL, only `open_args->mode` is checked against
-	 * the `mode` field. If it is *not* NULL, the mode is checked before
-	 * calling `match()`.
-	 */
-	bool (*match)(scap_open_args* open_args);
 
 	/**
 	 * @brief allocate an engine-specific handle
@@ -324,6 +313,20 @@ struct scap_vtable {
 	 * @return SCAP_SUCCESS or a failure code
 	 */
 	int32_t (*getpid_global)(struct scap_engine_handle engine, int64_t* pid, char* error);
+
+	/**
+	 * @brief get the API version
+	 * @param engine wraps the pointer to the engine-specific handle
+	 * @return the API version
+	 */
+	uint64_t (*get_api_version)(struct scap_engine_handle engine);
+
+	/**
+	 * @brief get the schema version
+	 * @param engine wraps the pointer to the engine-specific handle
+	 * @return the schema version
+	 */
+	uint64_t (*get_schema_version)(struct scap_engine_handle engine);
 };
 
 #ifdef __cplusplus

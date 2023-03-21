@@ -43,15 +43,15 @@ class operand_info
 public:
 	uint32_t m_id;
 	ppm_param_type m_type;
-	string m_name;
-	string m_description;
+	std::string m_name;
+	std::string m_description;
 };
 
 class check_extraction_cache_entry
 {
 public:
 	uint64_t m_evtnum = UINT64_MAX;
-	vector<extract_value_t> m_res;
+	std::vector<extract_value_t> m_res;
 };
 
 class check_eval_cache_entry
@@ -137,20 +137,20 @@ public:
 	// Extract the field from the event. In sanitize_strings is true, any
 	// string values are sanitized to remove nonprintable characters.
 	//
-	bool extract(gen_event *evt, OUT vector<extract_value_t>& values, bool sanitize_strings = true);
+	bool extract(gen_event *evt, OUT std::vector<extract_value_t>& values, bool sanitize_strings = true);
 
 	// Alias of extract that uses the sinsp_evt type.
 	// By default, this fills the vector with only one value, retireved by calling the single-result
 	// extract method.
 	// If a NULL value is returned by extract, the vector is emptied.
 	// Subclasses are meant to either override this, or the single-valued extract method.
-	virtual bool extract(sinsp_evt *evt, OUT vector<extract_value_t>& values, bool sanitize_strings = true);
+	virtual bool extract(sinsp_evt *evt, OUT std::vector<extract_value_t>& values, bool sanitize_strings = true);
 
 	//
 	// Wrapper for extract() that implements caching to speed up multiple extractions of the same value,
 	// which are common in Falco.
 	//
-	bool extract_cached(sinsp_evt *evt, OUT vector<extract_value_t>& values, bool sanitize_strings = true);
+	bool extract_cached(sinsp_evt *evt, OUT std::vector<extract_value_t>& values, bool sanitize_strings = true);
 
 	//
 	// Extract the field as json from the event (by default, fall
@@ -192,7 +192,7 @@ protected:
 	virtual uint8_t* extract(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings = true);
 	
 	bool flt_compare(cmpop op, ppm_param_type type, void* operand1, uint32_t op1_len = 0, uint32_t op2_len = 0);
-	bool flt_compare(cmpop op, ppm_param_type type, vector<extract_value_t>& values, uint32_t op2_len = 0);
+	bool flt_compare(cmpop op, ppm_param_type type, std::vector<extract_value_t>& values, uint32_t op2_len = 0);
 
 	char* rawval_to_string(uint8_t* rawval,
 			       ppm_param_type ptype,
@@ -202,11 +202,11 @@ protected:
 	void string_to_rawval(const char* str, uint32_t len, ppm_param_type ptype);
 
 	char m_getpropertystr_storage[1024];
-	vector<vector<uint8_t>> m_val_storages;
+	std::vector<std::vector<uint8_t>> m_val_storages;
 	inline uint8_t* filter_value_p(uint16_t i = 0) { return &m_val_storages[i][0]; }
-	inline vector<uint8_t>* filter_value(uint16_t i = 0) { return &m_val_storages[i]; }
+	inline std::vector<uint8_t>* filter_value(uint16_t i = 0) { return &m_val_storages[i]; }
 
-	unordered_set<filter_value_t,
+	std::unordered_set<filter_value_t,
 		g_hash_membuf,
 		g_equal_to_membuf> m_val_storages_members;
 
@@ -314,7 +314,7 @@ public:
 	sinsp_threadinfo* m_tinfo;
 	sinsp_fdinfo_t* m_fdinfo;
 	fd_type m_fd_type;
-	string m_tstr;
+	std::string m_tstr;
 	uint8_t m_tcstr[2];
 	uint32_t m_tbool;
 
@@ -333,68 +333,72 @@ public:
 	enum check_type
 	{
 		TYPE_PID = 0,
-		TYPE_EXE = 1,
-		TYPE_NAME = 2,
-		TYPE_ARGS = 3,
-		TYPE_ENV = 4,
-		TYPE_CMDLINE = 5,
-		TYPE_EXELINE = 6,
-		TYPE_CWD = 7,
-		TYPE_NTHREADS = 8,
-		TYPE_NCHILDS = 9,
-		TYPE_PPID = 10,
-		TYPE_PNAME = 11,
-		TYPE_PCMDLINE = 12,
-		TYPE_APID = 13,
-		TYPE_ANAME = 14,
-		TYPE_LOGINSHELLID = 15,
-		TYPE_DURATION = 16,
-		TYPE_FDOPENCOUNT = 17,
-		TYPE_FDLIMIT = 18,
-		TYPE_FDUSAGE = 19,
-		TYPE_VMSIZE = 20,
-		TYPE_VMRSS = 21,
-		TYPE_VMSWAP = 22,
-		TYPE_PFMAJOR = 23,
-		TYPE_PFMINOR = 24,
-		TYPE_TID = 25,
-		TYPE_ISMAINTHREAD = 26,
-		TYPE_EXECTIME = 27,
-		TYPE_TOTEXECTIME = 28,
-		TYPE_CGROUPS = 29,
-		TYPE_CGROUP = 30,
-		TYPE_VTID = 31,
-		TYPE_VPID = 32,
-		TYPE_THREAD_CPU = 33,
-		TYPE_THREAD_CPU_USER = 34,
-		TYPE_THREAD_CPU_SYSTEM = 35,
-		TYPE_THREAD_VMSIZE = 36,
-		TYPE_THREAD_VMRSS = 37,
-		TYPE_THREAD_VMSIZE_B = 38,
-		TYPE_THREAD_VMRSS_B = 39,
-		TYPE_SID = 40,
-		TYPE_SNAME = 41,
-		TYPE_TTY = 42,
-		TYPE_EXEPATH = 43,
-		TYPE_NAMETID = 44,
-		TYPE_VPGID = 45,
-		TYPE_IS_CONTAINER_HEALTHCHECK = 46,
-		TYPE_IS_CONTAINER_LIVENESS_PROBE = 47,
-		TYPE_IS_CONTAINER_READINESS_PROBE = 48,
-		TYPE_IS_EXE_WRITABLE = 49,
-		TYPE_CAP_PERMITTED = 50,
-		TYPE_CAP_INHERITABLE = 51,
-		TYPE_CAP_EFFECTIVE = 52,
-		TYPE_CMDNARGS = 53,
-		TYPE_CMDLENARGS = 54,
-		TYPE_PVPID = 55,
-		TYPE_IS_EXE_UPPER_LAYER = 56,
-		TYPE_EXE_INO = 57,
-		TYPE_EXE_INO_CTIME = 58,
-		TYPE_EXE_INO_MTIME = 59,
-		TYPE_EXE_INO_CTIME_DURATION_CLONE_TS = 60,
-		TYPE_EXE_INO_CTIME_DURATION_PIDNS_START = 61,
-		TYPE_PIDNS_INIT_START_TS = 62,
+		TYPE_EXE,
+		TYPE_NAME,
+		TYPE_ARGS,
+		TYPE_ENV,
+		TYPE_CMDLINE,
+		TYPE_EXELINE,
+		TYPE_CWD,
+		TYPE_NTHREADS,
+		TYPE_NCHILDS,
+		TYPE_PPID,
+		TYPE_PNAME,
+		TYPE_PCMDLINE,
+		TYPE_APID,
+		TYPE_ANAME,
+		TYPE_PEXE,
+		TYPE_AEXE,
+		TYPE_PEXEPATH,
+		TYPE_AEXEPATH,
+		TYPE_LOGINSHELLID,
+		TYPE_DURATION,
+		TYPE_FDOPENCOUNT,
+		TYPE_FDLIMIT,
+		TYPE_FDUSAGE,
+		TYPE_VMSIZE,
+		TYPE_VMRSS,
+		TYPE_VMSWAP,
+		TYPE_PFMAJOR,
+		TYPE_PFMINOR,
+		TYPE_TID,
+		TYPE_ISMAINTHREAD,
+		TYPE_EXECTIME,
+		TYPE_TOTEXECTIME,
+		TYPE_CGROUPS,
+		TYPE_CGROUP,
+		TYPE_VTID,
+		TYPE_VPID,
+		TYPE_THREAD_CPU,
+		TYPE_THREAD_CPU_USER,
+		TYPE_THREAD_CPU_SYSTEM,
+		TYPE_THREAD_VMSIZE,
+		TYPE_THREAD_VMRSS,
+		TYPE_THREAD_VMSIZE_B,
+		TYPE_THREAD_VMRSS_B,
+		TYPE_SID,
+		TYPE_SNAME,
+		TYPE_TTY,
+		TYPE_EXEPATH,
+		TYPE_NAMETID,
+		TYPE_VPGID,
+		TYPE_IS_CONTAINER_HEALTHCHECK,
+		TYPE_IS_CONTAINER_LIVENESS_PROBE,
+		TYPE_IS_CONTAINER_READINESS_PROBE,
+		TYPE_IS_EXE_WRITABLE,
+		TYPE_CAP_PERMITTED,
+		TYPE_CAP_INHERITABLE,
+		TYPE_CAP_EFFECTIVE,
+		TYPE_CMDNARGS,
+		TYPE_CMDLENARGS,
+		TYPE_PVPID,
+		TYPE_IS_EXE_UPPER_LAYER,
+		TYPE_EXE_INO,
+		TYPE_EXE_INO_CTIME,
+		TYPE_EXE_INO_MTIME,
+		TYPE_EXE_INO_CTIME_DURATION_CLONE_TS,
+		TYPE_EXE_INO_CTIME_DURATION_PIDNS_START,
+		TYPE_PIDNS_INIT_START_TS,
 	};
 
 	sinsp_filter_check_thread();
@@ -405,19 +409,21 @@ public:
 
 private:
 	uint64_t extract_exectime(sinsp_evt *evt);
-	int32_t extract_arg(string fldname, string val, OUT const struct ppm_param_info** parinfo);
+	int32_t extract_arg(std::string fldname, std::string val, OUT const struct ppm_param_info** parinfo);
 	uint8_t* extract_thread_cpu(sinsp_evt *evt, OUT uint32_t* len, sinsp_threadinfo* tinfo, bool extract_user, bool extract_system);
 	inline bool compare_full_apid(sinsp_evt *evt);
 	bool compare_full_aname(sinsp_evt *evt);
+	bool compare_full_aexe(sinsp_evt *evt);
+	bool compare_full_aexepath(sinsp_evt *evt);
 
 	int32_t m_argid;
-	string m_argname;
+	std::string m_argname;
 	uint32_t m_tbool;
-	string m_tstr;
+	std::string m_tstr;
 	uint64_t m_u64val;
 	int64_t m_s64val;
 	double m_dval;
-	vector<uint64_t> m_last_proc_switch_times;
+	std::vector<uint64_t> m_last_proc_switch_times;
 	uint32_t m_th_state_id;
 	uint64_t m_cursec_ts;
 };
@@ -453,7 +459,7 @@ public:
 	Json::Value extract_as_js(sinsp_evt *evt, OUT uint32_t* len);
 
 	uint64_t m_u64val;
-	string m_strstorage;
+	std::string m_strstorage;
 };
 
 //
@@ -521,8 +527,6 @@ public:
 		TYPE_INFRA_DOCKER_CONTAINER_NAME = 54,
 		TYPE_INFRA_DOCKER_CONTAINER_IMAGE = 55,
 		TYPE_ISOPEN_EXEC = 56,
-		TYPE_PLUGIN_NAME = 57,
-		TYPE_PLUGIN_INFO = 58,
 	};
 
 	sinsp_filter_check_event();
@@ -539,8 +543,8 @@ public:
 	uint64_t m_u64val;
 	uint64_t m_tsdelta;
 	uint32_t m_u32val;
-	string m_strstorage;
-	string m_argname;
+	std::string m_strstorage;
+	std::string m_argname;
 	int32_t m_argid;
 	uint32_t m_evtid;
 	uint32_t m_evtid1;
@@ -553,8 +557,8 @@ public:
 	filtercheck_field_info m_customfield;
 
 private:
-	int32_t extract_arg(string fldname, string val, OUT const struct ppm_param_info** parinfo);
-	int32_t extract_type(string fldname, string val, OUT const struct ppm_param_info** parinfo);
+	int32_t extract_arg(std::string fldname, std::string val, OUT const struct ppm_param_info** parinfo);
+	int32_t extract_type(std::string fldname, std::string val, OUT const struct ppm_param_info** parinfo);
 	uint8_t* extract_error_count(sinsp_evt *evt, OUT uint32_t* len);
 	uint8_t *extract_abspath(sinsp_evt *evt, OUT uint32_t *len);
 	inline uint8_t* extract_buflen(sinsp_evt *evt, OUT uint32_t* len);
@@ -587,7 +591,7 @@ public:
 	uint8_t* extract(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings = true);
 
 	uint32_t m_uid;
-	string m_strval;
+	std::string m_strval;
 };
 
 //
@@ -607,7 +611,7 @@ public:
 	uint8_t* extract(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings = true);
 
 	uint32_t m_gid;
-	string m_name;
+	std::string m_name;
 };
 
 //
@@ -649,20 +653,20 @@ public:
 	uint8_t* extract(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings = true);
 
 private:
-	int32_t extract_arg(string fldname, string val, OUT const struct ppm_param_info** parinfo);
+	int32_t extract_arg(std::string fldname, std::string val, OUT const struct ppm_param_info** parinfo);
 	inline uint8_t* extract_duration(uint16_t etype, sinsp_tracerparser* eparser, OUT uint32_t* len);
 	uint8_t* extract_args(sinsp_partial_tracer* pae, OUT uint32_t *len);
 	uint8_t* extract_arg(sinsp_partial_tracer* pae, OUT uint32_t *len);
 
 	int32_t m_argid;
-	string m_argname;
+	std::string m_argname;
 	const char* m_cargname;
 	char* m_storage;
 	uint32_t m_storage_size;
 	int64_t m_s64val;
 	int32_t m_u32val;
 	sinsp_filter_check_reference* m_converter;
-	string m_strstorage;
+	std::string m_strstorage;
 };
 
 //
@@ -713,8 +717,8 @@ public:
 	uint64_t m_u64val;
 	uint64_t m_tsdelta;
 	uint32_t m_u32val;
-	string m_strstorage;
-	string m_argname;
+	std::string m_strstorage;
+	std::string m_argname;
 	int32_t m_argid;
 	uint32_t m_evtid;
 	uint32_t m_evtid1;
@@ -727,7 +731,7 @@ public:
 	filtercheck_field_info m_customfield;
 
 private:
-	int32_t extract_arg(string fldname, string val);
+	int32_t extract_arg(std::string fldname, std::string val);
 	inline uint8_t* extract_tracer(sinsp_evt *evt, sinsp_partial_tracer* pae, OUT uint32_t* len);
 	inline bool compare_tracer(sinsp_evt *evt, sinsp_partial_tracer* pae);
 
@@ -744,9 +748,9 @@ private:
 class rawstring_check : public sinsp_filter_check
 {
 public:
-	rawstring_check(string text);
+	rawstring_check(std::string text);
 	sinsp_filter_check* allocate_new();
-	void set_text(string text);
+	void set_text(std::string text);
 	int32_t parse_field_name(const char* str, bool alloc_state, bool needed_for_filtering);
 	uint8_t* extract(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings = true);
 
@@ -754,7 +758,7 @@ public:
 	// It could be optimized by dynamically allocating the right amount
 	// of memory, but we don't care for the moment since we expect filters
 	// to be pretty small.
-	string m_text;
+	std::string m_text;
 	uint32_t m_text_len;
 };
 
@@ -782,7 +786,7 @@ public:
 
 	sinsp_decoder_syslog* m_decoder;
 	uint32_t m_gid;
-	string m_name;
+	std::string m_name;
 };
 
 class sinsp_filter_check_container : public sinsp_filter_check
@@ -811,6 +815,8 @@ public:
 		TYPE_CONTAINER_READINESS_PROBE,
 		TYPE_CONTAINER_START_TS,
 		TYPE_CONTAINER_DURATION,
+		TYPE_CONTAINER_IP_ADDR,
+		TYPE_CONTAINER_CNIRESULT,
 	};
 
 	sinsp_filter_check_container();
@@ -820,12 +826,12 @@ public:
 	const std::string &get_argstr();
 private:
 	int32_t parse_field_name(const char* str, bool alloc_state, bool needed_for_filtering);
-	int32_t extract_arg(const string& val, size_t basename);
+	int32_t extract_arg(const std::string& val, size_t basename);
 
-	string m_tstr;
+	std::string m_tstr;
 	uint32_t m_u32val;
 	int32_t m_argid;
-	string m_argstr;
+	std::string m_argstr;
 	int64_t m_s64val;
 };
 
@@ -911,7 +917,7 @@ public:
 	uint8_t* extract(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings = true);
 
 private:
-	string m_strval;
+	std::string m_strval;
 	char m_addrbuff[100];
 };
 
@@ -926,6 +932,8 @@ public:
 		TYPE_K8S_POD_ID,
 		TYPE_K8S_POD_LABEL,
 		TYPE_K8S_POD_LABELS,
+		TYPE_K8S_POD_IP,
+		TYPE_K8S_POD_CNIRESULT,
 		TYPE_K8S_RC_NAME,
 		TYPE_K8S_RC_ID,
 		TYPE_K8S_RC_LABEL,
@@ -954,19 +962,20 @@ public:
 	uint8_t* extract(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings = true);
 
 private:
-	int32_t extract_arg(const string& fldname, const string& val);
+	int32_t extract_arg(const std::string& fldname, const std::string& val);
 	const k8s_pod_t* find_pod_for_thread(const sinsp_threadinfo* tinfo);
-	const k8s_ns_t* find_ns_by_name(const string& ns_name);
+	const k8s_ns_t* find_ns_by_name(const std::string& ns_name);
 	const k8s_rc_t* find_rc_by_pod(const k8s_pod_t* pod);
 	const k8s_rs_t* find_rs_by_pod(const k8s_pod_t* pod);
-	vector<const k8s_service_t*> find_svc_by_pod(const k8s_pod_t* pod);
+	std::vector<const k8s_service_t*> find_svc_by_pod(const k8s_pod_t* pod);
 	const k8s_deployment_t* find_deployment_by_pod(const k8s_pod_t* pod);
-	void concatenate_labels(const k8s_pair_list& labels, string* s);
-	void concatenate_container_labels(const map<std::string, std::string>& labels, string* s);
-	bool find_label(const k8s_pair_list& labels, const string& key, string* value);
+	void concatenate_labels(const k8s_pair_list& labels, std::string* s);
+	void concatenate_container_labels(const std::map<std::string, std::string>& labels, std::string* s);
+	bool find_label(const k8s_pair_list& labels, const std::string& key, std::string* value);
 
-	string m_argname;
-	string m_tstr;
+	std::string m_argname;
+	std::string m_tstr;
+	uint32_t m_u32val;
 };
 
 class sinsp_filter_check_mesos : public sinsp_filter_check
@@ -995,17 +1004,16 @@ public:
 
 private:
 
-	int32_t extract_arg(const string& fldname, const string& val);
+	int32_t extract_arg(const std::string& fldname, const std::string& val);
 	mesos_task::ptr_t find_task_for_thread(const sinsp_threadinfo* tinfo);
 	const mesos_framework* find_framework_by_task(mesos_task::ptr_t task);
 	marathon_app::ptr_t find_app_by_task(mesos_task::ptr_t task);
 	marathon_group::ptr_t find_group_by_task(mesos_task::ptr_t task);
-	void concatenate_labels(const mesos_pair_list& labels, string* s);
-	bool find_label(const mesos_pair_list& labels, const string& key, string* value);
+	void concatenate_labels(const mesos_pair_list& labels, std::string* s);
+	bool find_label(const mesos_pair_list& labels, const std::string& key, std::string* value);
 
-	string m_argname;
-	string m_tstr;
+	std::string m_argname;
+	std::string m_tstr;
 };
 
 #endif // !defined(CYGWING_AGENT) && !defined(MINIMAL_BUILD)
-
