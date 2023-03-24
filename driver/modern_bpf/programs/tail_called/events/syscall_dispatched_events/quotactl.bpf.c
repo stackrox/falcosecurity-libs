@@ -93,7 +93,7 @@ int BPF_PROG(quotactl_x,
 	unsigned long special_pointer = extract__syscall_argument(regs, 1);
 	auxmap__store_charbuf_param(auxmap, special_pointer, MAX_PATH, USER);
 
-	uint32_t cmd = (uint32_t)extract__syscall_argument(regs, 0);
+	int32_t cmd = (int32_t)extract__syscall_argument(regs, 0);
 	u16 scap_cmd = quotactl_cmd_to_scap(cmd);
 
 	/* The `addr` argument is the address of an optional, command-
@@ -118,7 +118,7 @@ int BPF_PROG(quotactl_x,
 	struct if_dqblk dqblk = {0};
 	if(scap_cmd == PPM_Q_GETQUOTA || scap_cmd == PPM_Q_SETQUOTA)
 	{
-		bpf_probe_read_user((void *)&dqblk, sizeof(dqblk), (void *)addr_pointer);
+		bpf_probe_read_user((void *)&dqblk, bpf_core_type_size(struct if_dqblk), (void *)addr_pointer);
 	}
 
 	/* Please note that `dqblk` struct could be filled with values different from `0`,
@@ -195,7 +195,7 @@ int BPF_PROG(quotactl_x,
 	struct if_dqinfo dqinfo = {0};
 	if(scap_cmd == PPM_Q_GETINFO || scap_cmd == PPM_Q_SETINFO)
 	{
-		bpf_probe_read_user((void *)&dqinfo, sizeof(dqinfo), (void *)addr_pointer);
+		bpf_probe_read_user((void *)&dqinfo, bpf_core_type_size(struct if_dqinfo), (void *)addr_pointer);
 	}
 
 	if(dqinfo.dqi_valid & IIF_BGRACE)

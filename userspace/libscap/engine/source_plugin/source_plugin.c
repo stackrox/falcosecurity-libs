@@ -15,6 +15,8 @@ limitations under the License.
 
 */
 
+#define SCAP_HANDLE_T struct source_plugin_engine
+
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -23,7 +25,7 @@ limitations under the License.
 
 #include "scap.h"
 #include "scap-int.h"
-#include "../common/strlcpy.h"
+#include "strlcpy.h"
 #include "gettimeofday.h"
 
 static int32_t plugin_rc_to_scap_rc(ss_plugin_rc plugin_rc)
@@ -178,6 +180,7 @@ static int32_t next(struct scap_engine_handle engine, OUT scap_evt** pevent, OUT
 		}
 		else
 		{
+			free(handle->m_input_plugin_evt_storage);
 			snprintf(lasterr, SCAP_LASTERR_SIZE, "%s", "failed to alloc space for plugin storage");
 			ASSERT(false);
 			return SCAP_FAILURE;
@@ -247,4 +250,6 @@ const struct scap_vtable scap_source_plugin_engine = {
 	.get_vpid = noop_get_vxid,
 	.get_vtid = noop_get_vxid,
 	.getpid_global = noop_getpid_global,
+	.get_api_version = NULL,
+	.get_schema_version = NULL,
 };

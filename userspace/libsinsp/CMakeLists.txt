@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 include_directories(./)
-include_directories(../../common)
+include_directories(../common)
 include_directories(${LIBSCAP_INCLUDE_DIR})
 include_directories(../async)
 include_directories(./include)
@@ -27,9 +27,6 @@ if(NOT MSVC)
 	endif()
 	add_definitions(-DHAVE_PWD_H)
 	add_definitions(-DHAVE_GRP_H)
-else() # MSVC
-	# todo(leogr): this should be removed - double check
-	add_definitions(-DHAS_CAPTURE)
 endif()
 
 if(NOT DEFINED CHISEL_TOOL_LIBRARY_NAME)
@@ -77,6 +74,7 @@ set(SINSP_SOURCES
 	filter/ast.cpp
 	filter/escaping.cpp
 	filter/parser.cpp
+	filter/ppm_codes.cpp
 	container.cpp
 	container_engine/container_engine_base.cpp
 	container_engine/static_container.cpp
@@ -88,7 +86,6 @@ set(SINSP_SOURCES
 	dumper.cpp
 	fdinfo.cpp
 	filter.cpp
-	fields_info.cpp
 	filterchecks.cpp
 	filter_check_list.cpp
 	gen_filter.cpp
@@ -123,8 +120,13 @@ set(SINSP_SOURCES
 	value_parser.cpp
 	user.cpp
 	gvisor_config.cpp
-	sinsp_ppm_sc.cpp
-	sinsp_tp.cpp)
+	events/sinsp_events.cpp
+	events/sinsp_events_ppm_sc.cpp
+	events/sinsp_events_tp.cpp)
+
+if(NOT WIN32)
+	list(APPEND SINSP_SOURCES procfs_utils.cpp)
+endif()
 
 if(WITH_CHISEL)
 	list(APPEND SINSP_SOURCES
@@ -169,11 +171,7 @@ if(NOT MINIMAL_BUILD)
 		sinsp_curl.cpp
 		container_engine/docker/async_source.cpp
 		container_engine/docker/base.cpp)
-	if(WIN32)
-	list(APPEND SINSP_SOURCES
-		container_engine/docker/connection_win.cpp
-		container_engine/docker/docker_win.cpp)
-	else()
+	if(NOT WIN32)
 	list(APPEND SINSP_SOURCES
 		container_engine/docker/docker_linux.cpp
 		container_engine/docker/connection_linux.cpp
@@ -213,22 +211,17 @@ set(SINSP_LIBRARIES
 add_dependencies(sinsp valijson)
 add_dependencies(sinsp re2)
 
-if(WITH_CHISEL AND USE_BUNDLED_LUAJIT)
+if(WITH_CHISEL)
 	add_dependencies(sinsp luajit)
 endif()
 
 if(NOT WIN32)
 	list(APPEND SINSP_LIBRARIES "${TBB_LIB}")
 
-	if(USE_BUNDLED_OPENSSL AND NOT MINIMAL_BUILD)
-		add_dependencies(sinsp openssl)
-	endif() # USE_BUNDLED_OPENSSL
-	if(USE_BUNDLED_CURL AND NOT MINIMAL_BUILD)
-		add_dependencies(sinsp curl)
-	endif() # USE_BUNDLED_CURL
-	if(USE_BUNDLED_TBB)
-		add_dependencies(sinsp tbb)
-	endif() # USE_BUNDLED_TBB
+	if(NOT MINIMAL_BUILD)
+		add_dependencies(sinsp openssl curl)
+	endif()
+	add_dependencies(sinsp tbb)
 
 
 	if(NOT APPLE)
@@ -280,9 +273,7 @@ if(NOT WIN32)
 			add_dependencies(sinsp jq)
 		endif()
 
-		if(USE_BUNDLED_B64)
-			add_dependencies(sinsp b64)
-		endif()
+		add_dependencies(sinsp b64)
 	endif() # NOT APPLE
 
 	list(APPEND SINSP_LIBRARIES

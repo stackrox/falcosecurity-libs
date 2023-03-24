@@ -31,7 +31,7 @@ limitations under the License.
 #include "gvisor.h"
 #include "pkg/sentry/seccheck/points/common.pb.h"
 
-#include "../../../common/strlcpy.h"
+#include "strlcpy.h"
 
 namespace scap_gvisor {
 
@@ -63,7 +63,8 @@ int32_t sandbox_entry::expand_buffer(size_t size)
 {
 	void* new_buf;
 
-	if (m_buf.buf == nullptr) {
+	if (m_buf.buf == nullptr)
+	{
 		new_buf = malloc(size);
 	} else
 	{
@@ -72,6 +73,8 @@ int32_t sandbox_entry::expand_buffer(size_t size)
 
 	if (new_buf == nullptr)
 	{
+		// no need to clean up existing buffers in case of failed realloc
+		// since they will be cleaned up by the destructor
 		return SCAP_FAILURE;
 	}
 
@@ -382,7 +385,7 @@ uint32_t engine::get_threadinfos(uint64_t *n, const scap_threadinfo **tinfos)
 		for(const auto &line : procfs_res.output)
 		{
 			// skip first line of the output and empty lines
-			if(line.find("PROCFS DUMP") != std::string::npos || line.compare("\n") == 0)
+			if(line.find("PROCFS DUMP") != std::string::npos || std::all_of(line.begin(), line.end(), isspace))
 			{
 				continue;
 			}

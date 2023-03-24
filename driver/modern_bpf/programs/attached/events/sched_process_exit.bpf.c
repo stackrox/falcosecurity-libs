@@ -1,6 +1,6 @@
 #include <helpers/interfaces/fixed_size_event.h>
-#include <helpers/interfaces/attached_programs.h>
 #include <driver/systype_compat.h>
+#include <helpers/interfaces/attached_programs.h>
 
 /* From linux tree: /include/trace/events/sched.h
  * TP_PROTO(struct task_struct *p)
@@ -9,7 +9,7 @@ SEC("tp_btf/sched_process_exit")
 int BPF_PROG(sched_proc_exit,
 	     struct task_struct *task)
 {
-	if(!attached_programs__capture_enabled())
+	if(sampling_logic(PPME_PROCEXIT_1_E, TRACEPOINT))
 	{
 		return 0;
 	}

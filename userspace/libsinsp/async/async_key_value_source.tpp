@@ -24,6 +24,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 #include <vector>
+#include <tuple>
 
 namespace libsinsp
 {
@@ -149,15 +150,15 @@ void async_key_value_source<key_type, value_type>::run()
 			run_impl();
 		}
 	}
-
 }
 
 template<typename key_type, typename value_type>
 bool async_key_value_source<key_type, value_type>::lookup_delayed(
-		const key_type& key,
-		value_type& value,
-		std::chrono::milliseconds delay,
-		const callback_handler& handler)
+	const key_type& key,
+	value_type& value,
+	std::chrono::milliseconds delay,
+	const callback_handler& handler,
+	const ttl_expired_handler& ttl_expired)
 {
 	std::unique_lock<std::mutex> guard(m_mutex);
 
@@ -167,7 +168,7 @@ bool async_key_value_source<key_type, value_type>::lookup_delayed(
 		m_thread = std::thread(&async_key_value_source::run, this);
 	}
 
-	typename value_map::iterator itr = m_value_map.find(key);
+	auto itr = m_value_map.find(key);
 	bool request_complete;
 
 	if (itr == m_value_map.end())
@@ -233,6 +234,7 @@ bool async_key_value_source<key_type, value_type>::lookup_delayed(
 	{
 		// Set the callback to fill the value later
 		itr->second.m_callback = handler;
+		itr->second.m_ttl_callback = ttl_expired;
 	}
 
 	return request_complete;
@@ -241,10 +243,29 @@ bool async_key_value_source<key_type, value_type>::lookup_delayed(
 template<typename key_type, typename value_type>
 bool async_key_value_source<key_type, value_type>::lookup(
 	const key_type& key,
+	value_type& value)
+{
+	return lookup_delayed(key, value, std::chrono::milliseconds::zero(),
+			      callback_handler(), ttl_expired_handler());
+}
+
+template<typename key_type, typename value_type>
+bool async_key_value_source<key_type, value_type>::lookup(
+	const key_type& key,
 	value_type& value,
 	const callback_handler& handler)
 {
-	return lookup_delayed(key, value, std::chrono::milliseconds::zero(), handler);
+	return lookup_delayed(key, value, std::chrono::milliseconds::zero(), handler, ttl_expired_handler());
+}
+
+template<typename key_type, typename value_type>
+bool async_key_value_source<key_type, value_type>::lookup(
+	const key_type& key,
+	value_type& value,
+	const callback_handler& handler,
+	const ttl_expired_handler& ttl_expired)
+{
+	return lookup_delayed(key, value, std::chrono::milliseconds::zero(), handler, ttl_expired);
 }
 
 template<typename key_type, typename value_type>
@@ -256,17 +277,38 @@ bool async_key_value_source<key_type, value_type>::dequeue_next_key(key_type& ke
 	if(!m_request_queue.empty())
 	{
 		auto top_element = m_request_queue.top();
-		if(top_element.first < std::chrono::steady_clock::now())
+		auto now = std::chrono::steady_clock::now();
+		if(top_element.first < now)
 		{
-			key_found = true;
 			key = std::move(top_element.second);
 			m_request_queue.pop();
 			m_request_set.erase(key);
 
-			if(value_ptr)
+			// The value associated to the key may have been removed because
+			// of TTL expired.
+			auto itr = m_value_map.find(key);
+			if(itr != m_value_map.end())
 			{
-				*value_ptr = m_value_map[key].m_value;
+				key_found = true;
+				if(value_ptr)
+				{
+					*value_ptr = m_value_map[key].m_value;
+				}
 			}
+			else
+			{
+				g_logger.log("async_key_value_source: Key not found when"
+					"retrieving value, TTL expired",
+					sinsp_logger::SEV_DEBUG);
+			}
+		}
+		else
+		{
+			std::chrono::duration<double> dur = top_element.first - now;
+			g_logger.log("async_key_value_source: Waiting " +
+				     std::to_string(dur.count()) +
+				     " before dequeuing top job",
+				     sinsp_logger::SEV_DEBUG);
 		}
 	}
 
@@ -289,7 +331,7 @@ void async_key_value_source<key_type, value_type>::store_value(
 {
 	std::lock_guard<std::mutex> guard(m_mutex);
 
-	typename value_map::iterator itr = m_value_map.find(key);
+	auto itr = m_value_map.find(key);
 	if(itr == m_value_map.end())
 	{
 		g_logger.log("async_key_value_source: Key not found when storing value",
@@ -310,6 +352,29 @@ void async_key_value_source<key_type, value_type>::store_value(
 	}
 }
 
+template<typename key_type, typename value_type>
+void async_key_value_source<key_type, value_type>::defer_lookup(
+		const key_type& key,
+		value_type* value_ptr,
+		std::chrono::milliseconds delay)
+{
+	std::lock_guard<std::mutex> guard(m_mutex);
+
+	auto start_time = std::chrono::steady_clock::now() + delay;
+
+	g_logger.log("async_key_value_source: defer_lookup re-adding to request queue delay=" +
+		     std::to_string(delay.count()),
+		     sinsp_logger::SEV_DEBUG);
+
+	m_request_queue.push(std::make_pair(start_time, key));
+	m_request_set.insert(key);
+	if(value_ptr)
+	{
+		m_value_map[key].m_value = *value_ptr;
+	}
+	m_queue_not_empty_condition.notify_one();
+}
+
 /**
  * Prune any "old" outstanding requests.  This method expects that the caller
  * is holding m_mutex.
@@ -319,7 +384,7 @@ void async_key_value_source<key_type, value_type>::prune_stale_requests()
 {
 	// Avoid both iterating over and modifying the map by saving a list
 	// of keys to prune.
-	std::vector<key_type> keys_to_prune;
+	std::vector<std::pair<key_type, ttl_expired_handler>> keys_to_prune;
 
 	for(auto i = m_value_map.begin();
 	    !m_terminate && (i != m_value_map.end());
@@ -333,7 +398,7 @@ void async_key_value_source<key_type, value_type>::prune_stale_requests()
 
 		if(age_ms > m_ttl_ms)
 		{
-			keys_to_prune.push_back(i->first);
+			keys_to_prune.emplace_back(i->first, i->second.m_ttl_callback);
 		}
 	}
 
@@ -341,7 +406,13 @@ void async_key_value_source<key_type, value_type>::prune_stale_requests()
 	    !m_terminate && (i != keys_to_prune.end());
 	    ++i)
 	{
-		m_value_map.erase(*i);
+		key_type key = i->first;
+		ttl_expired_handler ttl_expired_callback = i->second;
+		if(ttl_expired_callback)
+		{
+			ttl_expired_callback(key);
+		}
+		m_value_map.erase(key);
 	}
 }
 

@@ -17,7 +17,7 @@ limitations under the License.
 
 #include "scap.h"
 #include <gtest/gtest.h>
-#include "../../common/strlcpy.h"
+#include "strlcpy.h"
 
 // fills the buffer with ASCII data to catch bugs 
 static void fill_buffer(scap_sized_buffer buf)
@@ -42,7 +42,7 @@ static void fill_buffer(scap_sized_buffer buf)
 }
 
 // This function behaves exactly like scap_event_encode_params but it will allocate the event and return it by setting the event pointer.
-static int32_t scap_event_generate(scap_evt **event, char *error, enum ppm_event_type event_type, uint32_t n, ...)
+static int32_t scap_event_generate(scap_evt **event, char *error, ppm_event_code event_type, uint32_t n, ...)
 {
 	struct scap_sized_buffer event_buf = {NULL, 0};
 	size_t event_size;

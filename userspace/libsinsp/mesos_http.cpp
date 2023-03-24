@@ -40,7 +40,7 @@ limitations under the License.
 mesos_http::mesos_http(mesos& m, const uri& url,
 					bool discover_mesos_lead_master,
 					bool discover_marathon,
-					int timeout_ms, const string& token):
+					int timeout_ms, const std::string& token):
 	m_sync_curl(curl_easy_init()),
 	m_select_curl(curl_easy_init()),
 	m_mesos(m),
@@ -65,7 +65,7 @@ mesos_http::mesos_http(mesos& m, const uri& url,
 	m_request = make_request(url, m_curl_version);
 	if(!m_token.empty())
 	{
-		m_sync_curl_headers.add(string("Authorization: token=") + m_token);
+		m_sync_curl_headers.add(std::string("Authorization: token=") + m_token);
 		check_error(curl_easy_setopt(m_sync_curl, CURLOPT_HTTPHEADER, m_sync_curl_headers.ptr()));
 	}
 	if(m_url.is_secure())
@@ -104,7 +104,7 @@ void mesos_http::cleanup(CURL** curl)
 	m_connected = false;
 }
 
-void mesos_http::set_token(const string& token)
+void mesos_http::set_token(const std::string& token)
 {
 	m_token = token;
 	m_request = make_request(m_url, m_curl_version);
@@ -539,7 +539,7 @@ int mesos_http::get_socket(long timeout_ms)
 
 		check_error(curl_easy_perform(m_select_curl));
 
-		check_error(curl_easy_getinfo(m_select_curl, CURLINFO_LASTSOCKET, &sockextr));
+		check_error(curl_easy_getinfo(m_select_curl, CURLINFO_ACTIVESOCKET, &sockextr));
 		m_watch_socket = sockextr;
 
 		if(!wait(0))
@@ -671,7 +671,7 @@ void mesos_http::extract_data(std::string& data)
 {
 	if(!detect_chunked_transfer(data))
 	{
-		string errstr = "mesos_http: An error occurred while detecting chunked transfer.";
+		std::string errstr = "mesos_http: An error occurred while detecting chunked transfer.";
 		g_logger.log(errstr, sinsp_logger::SEV_ERROR);
 		g_json_error_log.log(data, errstr, sinsp_utils::get_current_time_ns(), m_url.to_string());
 		return;

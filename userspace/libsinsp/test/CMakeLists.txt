@@ -47,7 +47,9 @@ set(LIBSINSP_UNIT_TESTS_SOURCES
 	filter_parser.ut.cpp
 	filter_op_bcontains.ut.cpp
 	filter_compiler.ut.cpp
+	filter_ppm_codes.ut.cpp
 	user.ut.cpp
+	container_info.ut.cpp
 	"${PUBLIC_SINSP_API_SUITE}"
 	"${TABLE_SUITE}"
 )

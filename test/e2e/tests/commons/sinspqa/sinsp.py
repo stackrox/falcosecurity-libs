@@ -141,12 +141,12 @@ def validate_event(expected_fields: dict, event: dict) -> bool:
 
         expected = expected_fields[k]
 
-        if isinstance(expected, str) or expected is None:
-            if expected == event[k]:
+        if isinstance(expected, SinspField):
+            if expected.compare(str(event[k])):
                 continue
             return False
 
-        if not expected.compare(str(event[k])):
+        if expected != event[k]:
             return False
 
     return True
@@ -167,18 +167,22 @@ def assert_events(expected_events: dict,
     """
 
     reader = SinspStreamer(container, timeout=timeout)
+    received_events = []
 
     for event in expected_events:
         success = False
+        received_event = None
 
         for log in reader.read():
             if not log:
                 continue
 
-            if validate_event(event, parse_log(log)):
+            received_event = parse_log(log)
+            received_events.append(received_event)
+            if validate_event(event, received_event):
                 success = True
                 break
-        assert success, f"Did not receive expected event: {event}"
+        assert success, f"Did not receive expected event: {event}, got instead: {received_event}\n\nExpected events: {expected_events}\n\nReceived so far: {received_events}"
 
 
 def sinsp_validation(container: docker.models.containers.Container) -> (bool, str):
@@ -202,8 +206,10 @@ def container_spec(image: str = 'sinsp-example:latest', args: list = [], env: di
         A dictionary describing how to run the sinsp-example container
     """
     mounts = [
-        docker.types.Mount("/dev", "/dev", type="bind",
-                           consistency="delegated", read_only=True)
+        docker.types.Mount("/host/dev", "/dev", type="bind",
+                           consistency="delegated", read_only=True),
+        docker.types.Mount("/host/proc", "/proc", type="bind",
+                           consistency="delegated", read_only=True),
     ]
 
     return {
@@ -212,6 +218,8 @@ def container_spec(image: str = 'sinsp-example:latest', args: list = [], env: di
         'mounts': mounts,
         'env': env,
         'privileged': True,
+        'pid_mode': 'host',
+        'network_mode': 'host',
         'init_wait': 2,
         'post_validation': sinsp_validation,
     }
@@ -230,7 +238,6 @@ def generate_specs(image: str = 'sinsp-example:latest', args: list = []) -> list
     specs = []
     bpf_args = args.copy()
     bpf_args.extend([
-        '-e', 'bpf',
         '-b', os.environ.get('BPF_PROBE'),
     ])
 

@@ -26,7 +26,7 @@ extern "C"
 #endif
 
 	/* `libpman` return values convention:
-	 * In case of success `0` is return otherwise `errno`. If `errno` is not
+	 * In case of success `0` is returned otherwise `errno`. If `errno` is not
 	 * available `-1` is returned.
 	 *
 	 * Please Note:
@@ -47,17 +47,31 @@ extern "C"
 	 *
 	 * @param verbosity use `true` if you want to activate libbpf verbosity.
 	 * @param buf_bytes_dim dimension of a single per-CPU buffer in bytes.
+	 * @param cpus_for_each_buffer number of CPUs to which we want to associate a ring buffer.
+	 * @param allocate_online_only if true, allocate ring buffers taking only into account online CPUs.
 	 * @return `0` on success, `-1` in case of error.
 	 */
-	int pman_init_state(bool verbosity, unsigned long buf_bytes_dim);
+	int pman_init_state(bool verbosity, unsigned long buf_bytes_dim, uint16_t cpus_for_each_buffer, bool allocate_online_only);
 
 	/**
-	 * @brief Return the number of available CPUs on the system, not the
-	 * online CPUs!
-	 *
-	 * @return number of available CPUs on success, `-1` in case of error.
+	 * @brief Clear the `libpman` global state before it is used.
+	 * This API could be useful if we open the modern bpf engine multiple times.
 	 */
-	int pman_get_cpus_number(void);
+	void pman_clear_state(void);
+
+	/**
+	 * @brief Return the number of allocated ring buffers.
+	 *
+	 * @return number of allocated ring buffers.
+	 */
+	int pman_get_required_buffers(void);
+
+	/**
+	 * @brief Return whether modern bpf is supported by running kernel.
+	 *
+	 * @return supported true or false.
+	 */
+	bool pman_check_support();
 
 	/////////////////////////////
 	// PROBE LIFECYCLE
@@ -104,6 +118,12 @@ extern "C"
 	 * @return `0` on success, `errno` in case of error.
 	 */
 	int pman_detach_all_programs(void);
+
+	/**
+	 * @brief Update single program state,
+	 * attaching or detaching it.
+	 */
+	int pman_update_single_program(int tp, bool enabled);
 
 	/**
 	 * @brief Attach only the syscall_exit_dispatcher
@@ -161,6 +181,7 @@ extern "C"
 	 */
 	int pman_detach_sched_switch(void);
 
+#ifdef CAPTURE_SCHED_PROC_EXEC
 	/**
 	 * @brief Attach only the sched_proc_exec tracepoint
 	 *
@@ -174,7 +195,9 @@ extern "C"
 	 * @return `0` on success, `errno` in case of error.
 	 */
 	int pman_detach_sched_proc_exec(void);
+#endif
 
+#ifdef CAPTURE_SCHED_PROC_FORK
 	/**
 	 * @brief Attach only the sched_proc_fork tracepoint
 	 *
@@ -188,6 +211,51 @@ extern "C"
 	 * @return `0` on success, `errno` in case of error.
 	 */
 	int pman_detach_sched_proc_fork(void);
+#endif
+
+#ifdef CAPTURE_PAGE_FAULTS
+	/**
+	 * @brief Attach only the page_fault_user tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_attach_page_fault_user(void);
+
+	/**
+	 * @brief Detach only the page_fault_user tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_detach_page_fault_user(void);
+
+	/**
+	 * @brief Attach only the page_fault_kernel tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_attach_page_fault_kernel(void);
+
+	/**
+	 * @brief Detach only the page_fault_kernel tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_detach_page_fault_kernel(void);
+#endif
+
+	/**
+	 * @brief Attach only the signal_deliver tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_attach_signal_deliver(void);
+
+	/**
+	 * @brief Detach only the signal_deliver tracepoint
+	 *
+	 * @return `0` on success, `errno` in case of error.
+	 */
+	int pman_detach_signal_deliver(void);
 
 	/////////////////////////////
 	// MANAGE RINGBUFFERS
@@ -219,10 +287,10 @@ extern "C"
 	 *
 	 * @param event_ptr in case of success return a pointer
 	 * to the event, otherwise return NULL.
-	 * @param cpu_id in case of success returns the id of the CPU
-	 * on which we have found the event, otherwise return `-1`.
+	 * @param buffer_id in case of success returns the id of the ring buffer
+	 * from which we retrieved the event, otherwise return `-1`.
 	 */
-	void pman_consume_first_from_buffers(void** event_ptr, int16_t *cpu_id);
+	void pman_consume_first_event(void** event_ptr, int16_t* buffer_id);
 
 	/////////////////////////////
 	// CAPTURE (EXCHANGE VALUES WITH BPF SIDE)
@@ -232,13 +300,13 @@ extern "C"
 	 * @brief Enable BPF-capture if we have previously
 	 * disabled it.
 	 */
-	void pman_enable_capture(void);
+	int pman_enable_capture(bool *tp_set);
 
 	/**
 	 * @brief Disable BPF capture for example when we
 	 * want to dump a particular event.
 	 */
-	void pman_disable_capture(void);
+	int pman_disable_capture(void);
 
 	/**
 	 * @brief Receive a pointer to `struct scap_stats` and fill it
@@ -279,6 +347,10 @@ extern "C"
 	 * @param boot_time system boot_time from Epoch.
 	 */
 	void pman_set_boot_time(uint64_t boot_time);
+
+	void pman_set_dropping_mode(bool value);
+
+	void pman_set_sampling_ratio(uint32_t value);
 
 	/**
 	 * @brief Get API version to check it a runtime.
@@ -360,67 +432,6 @@ extern "C"
 	 * @brief Mark all syscalls as uninteresting.
 	 */
 	void pman_clean_all_64bit_interesting_syscalls(void);
-
-	/////////////////////////////
-	// TEST HELPERS
-	/////////////////////////////
-#ifdef TEST_HELPERS
-
-	/**
-	 * @brief Search for one event to read in all the ringbufs.
-	 *
-	 * @param event_ptr in case of success return a pointer
-	 * to the event, otherwise return NULL.
-	 * @param cpu_id in case of success returns the id of the CPU
-	 * on which we have found the event, otherwise return NULL
-	 * @return `0` if an event is found otherwise returns `-1`
-	 */
-	int pman_consume_one_from_buffers(void** event_ptr, uint16_t* cpu_id);
-
-	/**
-	 * @brief Print some statistics about events captured and
-	 * events dropped
-	 *
-	 * @return `0` on success, `errno` in case of error.
-	 */
-	int pman_print_stats(void);
-
-	/**
-	 * @brief Given the event type, returns the number of params
-	 * for that event.
-	 *
-	 * @param event_type event type
-	 * @return number of params associated with the event type
-	 */
-	uint8_t pman_get_event_params(int event_type);
-
-	/**
-	 * @brief Given the event type, returns the name of the BPF
-	 * program associated with that event.
-	 *
-	 * @param event_type event type
-	 * @return name of the BPF program associated with the event type
-	 */
-	const char* pman_get_event_prog_name(int event_type);
-
-	/**
-	 * @brief Return `true` if all ring buffers are full. To state
-	 * that a ring buffer is full we check that the free space is less
-	 * than the `threshold`
-	 * 
-	 * @param threshold used to check if a buffer is full
-	 * @return `true` if all buffers are full, otherwise `false`
-	 */
-	bool pman_are_all_ringbuffers_full(unsigned long threshold);
-
-	/**
-	 * @brief Get the producer pos for the required ring
-	 * 
-	 * @param ring_num ring for which we want to obtain the producer pos
-	 * @return producer pos as an unsigned long
-	 */
-	unsigned long pman_get_producer_pos(int ring_num);
-#endif
 
 #ifdef __cplusplus
 }

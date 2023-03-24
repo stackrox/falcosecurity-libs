@@ -37,7 +37,6 @@ or GPL2.txt for full copies of the license.
 #endif
 #else // UDIG
 #define _GNU_SOURCE
-#ifndef WDIG
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,15 +65,6 @@ or GPL2.txt for full copies of the license.
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
-#else /* WDIG */
-#include "stdint.h"
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <afunix.h>
-#include "portal.h"
-
-#pragma warning(disable : 4996)
-#endif /* WDIG */
 
 #include "udig_capture.h"
 #include "ppm_ringbuffer.h"
@@ -651,6 +641,34 @@ done:
 }
 #endif // UDIG
 
+int push_empty_param(struct event_filler_arguments *args)
+{
+	u16 *psize = (u16 *)(args->buffer + args->curarg * sizeof(u16));
+
+	if (unlikely(args->curarg >= args->nargs))
+	{
+#ifndef UDIG
+		pr_err("(%u)val_to_ring: too many arguments for event #%u, type=%u, curarg=%u, nargs=%u tid:%u\n",
+			smp_processor_id(),
+			args->nevents,
+			(u32)args->event_type,
+			args->curarg,
+			args->nargs,
+			current->pid);
+		memory_dump(args->buffer - sizeof(struct ppm_evt_hdr), 32);
+#endif
+		ASSERT(0);
+		return PPM_FAILURE_BUG;
+	}
+
+	/* We push 0 in the length array */
+	*psize = 0;
+
+	/* We increment the current argument */
+	args->curarg++;
+	return PPM_SUCCESS;
+}
+
 /*
  * NOTES:
  * - val_len is ignored for everything other than PT_BYTEBUF.
@@ -694,7 +712,7 @@ int val_to_ring(struct event_filler_arguments *args, uint64_t val, u32 val_len, 
 			return PPM_FAILURE_BUG;
 		}
 
-#if defined(UDIG) && !defined(WDIG)
+#if defined(UDIG)
 		dyn_params = (const struct ppm_param_info *)patch_pointer((uint8_t*)param_info->info);
 #else
 		dyn_params = (const struct ppm_param_info *)param_info->info;
@@ -726,10 +744,6 @@ int val_to_ring(struct event_filler_arguments *args, uint64_t val, u32 val_len, 
 			break;
 		}
 
-#ifdef WDIG // strlcpy does not exist on Windows, where in any case we only have 
-			// userlevel capture, so we default to ppm_strncpy_from_user
-		fromuser = true;
-#endif
 
 		if(fromuser)
 		{
@@ -1071,11 +1085,7 @@ u16 pack_addr(struct sockaddr *usrsockaddr,
 {
 	u32 ip;
 	u16 port;
-#ifdef WDIG
-	ADDRESS_FAMILY family = usrsockaddr->sa_family;
-#else
 	sa_family_t family = usrsockaddr->sa_family;
-#endif
 	struct sockaddr_in *usrsockaddr_in;
 	struct sockaddr_in6 *usrsockaddr_in6;
 	struct sockaddr_un *usrsockaddr_un;
@@ -1177,11 +1187,7 @@ u16 fd_to_socktuple(int fd,
 	u16 targetbufsize)
 {
 	int err = 0;
-#ifdef WDIG
-	ADDRESS_FAMILY family;
-#else
 	sa_family_t family;
-#endif
 	u32 sip;
 	u32 dip;
 	u8 *sip6;
@@ -1271,8 +1277,19 @@ u16 fd_to_socktuple(int fd,
 			usrsockaddr_in = (struct sockaddr_in *)usrsockaddr;
 
 			if (is_inbound) {
-				sip = usrsockaddr_in->sin_addr.s_addr;
-				sport = ntohs(usrsockaddr_in->sin_port);
+				/* To take inbound info we cannot use the `src_addr` obtained from the syscall
+				 * it could be empty!
+				 * From kernel 3.13 we can take both ipv4 and ipv6 info from here
+				 * https://elixir.bootlin.com/linux/v3.13/source/include/net/sock.h#L164
+				 */
+				#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+					sip = sock->sk->__sk_common.skc_daddr;
+					sport = ntohs(sock->sk->__sk_common.skc_dport);
+				#else
+					/* this is probably wrong, we need to find an alternative in old kernels */
+					sip = ((struct sockaddr_in *) &sock_address)->sin_addr.s_addr;
+					sport = ntohs(usrsockaddr_in->sin_port);
+				#endif
 				dip = ((struct sockaddr_in *) &sock_address)->sin_addr.s_addr;
 				dport = ntohs(((struct sockaddr_in *) &sock_address)->sin_port);
 			} else {
@@ -1323,8 +1340,14 @@ u16 fd_to_socktuple(int fd,
 			usrsockaddr_in6 = (struct sockaddr_in6 *)usrsockaddr;
 
 			if (is_inbound) {
-				sip6 = usrsockaddr_in6->sin6_addr.s6_addr;
-				sport = ntohs(usrsockaddr_in6->sin6_port);
+				#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+					sip6 = sock->sk->__sk_common.skc_v6_daddr.in6_u.u6_addr8;
+					sport = ntohs(sock->sk->__sk_common.skc_dport);
+				#else
+					/* this is probably wrong, we need to find an alternative in old kernels */
+					sip6 = usrsockaddr_in6->sin6_addr.s6_addr;
+					sport = ntohs(usrsockaddr_in6->sin6_port);
+				#endif
 				dip6 = ((struct sockaddr_in6 *) &sock_address)->sin6_addr.s6_addr;
 				dport = ntohs(((struct sockaddr_in6 *) &sock_address)->sin6_port);
 			} else {
@@ -1447,7 +1470,6 @@ int addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr *kaddr)
  * Parses the list of buffers of a xreadv or xwritev call, and pushes the size
  * (and optionally the data) to the ring.
  */
-#ifndef WDIG
 int32_t parse_readv_writev_bufs(struct event_filler_arguments *args, const struct iovec __user *iovsrc, unsigned long iovcnt, int64_t retval, int flags)
 {
 	int32_t res;
@@ -1721,7 +1743,6 @@ int32_t compat_parse_readv_writev_bufs(struct event_filler_arguments *args, cons
 }
 #endif /* CONFIG_COMPAT */
 #endif /* UDIG */
-#endif /* WDIG */
 
 /*
  * STANDARD FILLERS

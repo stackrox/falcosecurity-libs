@@ -18,15 +18,87 @@ limitations under the License.
 
 #include <stdint.h>
 #include <stddef.h>
+#include "scap_const.h"
+#include "scap_limits.h"
 #include "scap_reader.h"
 #include "scap_savefile.h"
 
-#define SCAP_HANDLE_T struct savefile_engine
+#define READER_BUF_SIZE (1 << 16) // UINT16_MAX + 1, ie: 65536
 
-typedef struct _scap_machine_info scap_machine_info;
-struct scap_proclist;
-struct scap_addrlist;
-struct scap_userlist;
+#define CHECK_READ_SIZE_ERR(read_size, expected_size, error) if(read_size != expected_size) \
+	{\
+		snprintf(error,	SCAP_LASTERR_SIZE, "expecting %d bytes, read %d at %s, line %d. Is the file truncated?",\
+			(int)expected_size,\
+			(int)read_size,\
+			__FILE__,\
+			__LINE__);\
+		return SCAP_FAILURE;\
+	}
+
+#define CHECK_READ_SIZE(read_size, expected_size) if(read_size != expected_size) \
+	{\
+		snprintf(handle->m_lasterr,	SCAP_LASTERR_SIZE, "expecting %d bytes, read %d at %s, line %d. Is the file truncated?",\
+			(int)expected_size,\
+			(int)read_size,\
+			__FILE__,\
+			__LINE__);\
+		return SCAP_FAILURE;\
+	}
+
+#define CHECK_READ_SIZE_WITH_FREE_ERR(alloc_buffer, read_size, expected_size, error) if(read_size != expected_size) \
+    	{\
+		snprintf(error,	SCAP_LASTERR_SIZE, "expecting %d bytes, read %d at %s, line %d. Is the file truncated?",\
+			(int)expected_size,\
+			(int)read_size,\
+			__FILE__,\
+			__LINE__);\
+		free(alloc_buffer);\
+		return SCAP_FAILURE;\
+	}
+
+//
+// The following stuff is byte aligned because we save it to disk.
+//
+#if defined _MSC_VER
+#pragma pack(push)
+#pragma pack(1)
+#elif defined __sun
+#pragma pack(1)
+#else
+#pragma pack(push, 1)
+#endif
+
+/*!
+  \brief For backward compatibility only
+*/
+typedef struct scap_ifinfo_ipv4_nolinkspeed
+{
+	uint16_t type;
+	uint16_t ifnamelen;
+	uint32_t addr;
+	uint32_t netmask;
+	uint32_t bcast;
+	char ifname[SCAP_MAX_PATH_SIZE];
+}scap_ifinfo_ipv4_nolinkspeed;
+
+/*!
+  \brief For backword compatibility only
+*/
+typedef struct scap_ifinfo_ipv6_nolinkspeed
+{
+	uint16_t type;
+	uint16_t ifnamelen;
+	char addr[SCAP_IPV6_ADDR_LEN];
+	char netmask[SCAP_IPV6_ADDR_LEN];
+	char bcast[SCAP_IPV6_ADDR_LEN];
+	char ifname[SCAP_MAX_PATH_SIZE];
+}scap_ifinfo_ipv6_nolinkspeed;
+
+#if defined __sun
+#pragma pack()
+#else
+#pragma pack(pop)
+#endif
 
 struct savefile_engine
 {

@@ -24,12 +24,14 @@ limitations under the License.
 #include <unistd.h>
 #else
 #define NOMINMAX
+#define localtime_r(a, b) (localtime_s(b, a) == 0 ? b : NULL)
 #endif
 
 #include <limits>
 
 #include "sinsp.h"
 #include "sinsp_int.h"
+#include "strlcpy.h"
 
 #include "scap.h"
 
@@ -238,7 +240,7 @@ uint32_t binary_buffer_to_hex_string(char *dst, char *src, uint32_t dstlen, uint
 	for(j = 0; j < srclen; j += 8 * sizeof(uint16_t))
 	{
 		k = 0;
-		k += sprintf(row + k, "\n\t0x%.4x:", j);
+		k += snprintf(row + k, sizeof(row) - k, "\n\t0x%.4x:", j);
 
 		ptr = &src[j];
 		num_chunks = 0;
@@ -246,15 +248,22 @@ uint32_t binary_buffer_to_hex_string(char *dst, char *src, uint32_t dstlen, uint
 		{
 			uint16_t chunk = htons(*(uint16_t*)ptr);
 
+			int ret;
 			if(ptr == src + srclen - 1)
 			{
-				k += sprintf(row + k, " %.2x", *(((uint8_t*)&chunk) + 1));
+				ret = snprintf(row + k, sizeof(row) - k, " %.2x", *(((uint8_t*)&chunk) + 1));
 			}
 			else
 			{
-				k += sprintf(row + k, " %.4x", chunk);
+				ret = snprintf(row + k, sizeof(row) - k, " %.4x", chunk);
+			}
+			if (ret < 0 || ret >= sizeof(row) - k)
+			{
+				dst[0] = 0;
+				return 0;
 			}
 
+			k += ret;
 			num_chunks++;
 			ptr += sizeof(uint16_t);
 		}
@@ -295,7 +304,7 @@ uint32_t binary_buffer_to_hex_string(char *dst, char *src, uint32_t dstlen, uint
 			truncated = true;
 			break;
 		}
-		strcpy(dst + l, row);
+		strlcpy(dst + l, row, dstlen - l);
 		l += row_len;
 	}
 
@@ -609,7 +618,7 @@ int sinsp_evt::render_fd_json(Json::Value *ret, int64_t fd, const char** resolve
 			//
 			// Make sure we remove invalid characters from the resolved name
 			//
-			string sanitized_str = fdinfo->m_name;
+			std::string sanitized_str = fdinfo->m_name;
 
 			sanitize_string(sanitized_str);
 
@@ -629,7 +638,7 @@ int sinsp_evt::render_fd_json(Json::Value *ret, int64_t fd, const char** resolve
 		//
 		// Resolve this as an errno
 		//
-		string errstr(sinsp_utils::errno_to_str((int32_t)fd));
+		std::string errstr(sinsp_utils::errno_to_str((int32_t)fd));
 		if(errstr != "")
 		{
 			(*ret)["error"] = errstr;
@@ -702,7 +711,7 @@ char* sinsp_evt::render_fd(int64_t fd, const char** resolved_str, sinsp_evt::par
 			//
 			// Make sure we remove invalid characters from the resolved name
 			//
-			string sanitized_str = fdinfo->m_name;
+			std::string sanitized_str = fdinfo->m_name;
 
 			sanitize_string(sanitized_str);
 
@@ -748,7 +757,7 @@ char* sinsp_evt::render_fd(int64_t fd, const char** resolved_str, sinsp_evt::par
 		//
 		// Resolve this as an errno
 		//
-		string errstr(sinsp_utils::errno_to_str((int32_t)fd));
+		std::string errstr(sinsp_utils::errno_to_str((int32_t)fd));
 		if(errstr != "")
 		{
 			snprintf(&m_resolved_paramstr_storage[0],
@@ -864,7 +873,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 			sinsp_threadinfo* atinfo = m_inspector->get_thread_ref(*(int64_t *)payload, false, true).get();
 			if(atinfo != NULL)
 			{
-				string& tcomm = atinfo->m_comm;
+				std::string& tcomm = atinfo->m_comm;
 
 				//
 				// Make sure the string will fit
@@ -891,7 +900,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 		//
 		// Resolve this as an errno
 		//
-		string errstr;
+		std::string errstr;
 
 		if(val < 0)
 		{
@@ -935,7 +944,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 			//
 			// Sanitize the file string.
 			//
-			string sanitized_str = payload + 1;
+			std::string sanitized_str = payload + 1;
 			sanitize_string(sanitized_str);
 
 			ret = sanitized_str;
@@ -956,7 +965,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 						(unsigned int)(uint8_t)payload[3],
 						(unsigned int)(uint8_t)payload[4]
 				);
-				ret["addr"] = string(ipv4_addr);
+				ret["addr"] = std::string(ipv4_addr);
 				ret["port"] = *(uint16_t*)(payload + 5);
 			}
 			else
@@ -992,7 +1001,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 						(unsigned int)(uint8_t)payload[4]
 				);
 
-				source["addr"] = string(ipv4_addr);
+				source["addr"] = std::string(ipv4_addr);
 				source["port"] = *(uint16_t*)(payload + 5);
 
 				snprintf(
@@ -1006,7 +1015,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 				);
 
 
-				dest["addr"] = string(ipv4_addr);
+				dest["addr"] = std::string(ipv4_addr);
 				dest["port"] = *(uint16_t*)(payload + 11);
 
 				ret["src"] = source;
@@ -1045,7 +1054,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 							(unsigned int)sip[3]
 					);
 
-					source["addr"] = string(ipv4_addr);
+					source["addr"] = std::string(ipv4_addr);
 					source["port"] = (unsigned int)*(uint16_t*)(payload + 17);
 
 					snprintf(
@@ -1058,7 +1067,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 							(unsigned int)dip[3]
 				 	);
 
-					dest["addr"] = string(ipv4_addr);
+					dest["addr"] = std::string(ipv4_addr);
 					dest["port"] = (unsigned int)*(uint16_t*)(payload + 35);
 
 					ret["src"] = source;
@@ -1101,7 +1110,7 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 			//
 			// Sanitize the file string.
 			//
-            string sanitized_str = payload + 17;
+            std::string sanitized_str = payload + 17;
 	    sanitize_string(sanitized_str);
 
 			snprintf(&m_paramstr_storage[0],
@@ -1266,14 +1275,14 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 	case PT_CHARBUFARRAY:
 	{
 		ASSERT(param->m_len == sizeof(uint64_t));
-		vector<char*>* strvect = (vector<char*>*)*(uint64_t *)param->m_val;
+		std::vector<char*>* strvect = (std::vector<char*>*)*(uint64_t *)param->m_val;
 
 		m_paramstr_storage[0] = 0;
 
 		while(true)
 		{
-			vector<char*>::iterator it;
-			vector<char*>::iterator itbeg;
+			std::vector<char*>::iterator it;
+			std::vector<char*>::iterator itbeg;
 			bool need_to_resize = false;
 
 			//
@@ -1324,18 +1333,18 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 	case PT_CHARBUF_PAIR_ARRAY:
 	{
 		ASSERT(param->m_len == sizeof(uint64_t));
-		pair<vector<char*>*, vector<char*>*>* pairs =
-			(pair<vector<char*>*, vector<char*>*>*)*(uint64_t *)param->m_val;
+		std::pair<std::vector<char*>*, std::vector<char*>*>* pairs =
+			(std::pair<std::vector<char*>*, std::vector<char*>*>*)*(uint64_t *)param->m_val;
 		ASSERT(pairs->first->size() == pairs->second->size());
 
 		m_paramstr_storage[0] = 0;
 
 		while(true)
 		{
-			vector<char*>::iterator it1;
-			vector<char*>::iterator itbeg1;
-			vector<char*>::iterator it2;
-			vector<char*>::iterator itbeg2;
+			std::vector<char*>::iterator it1;
+			std::vector<char*>::iterator itbeg1;
+			std::vector<char*>::iterator it2;
+			std::vector<char*>::iterator itbeg2;
 			bool need_to_resize = false;
 
 			//
@@ -1402,10 +1411,19 @@ Json::Value sinsp_evt::get_param_as_json(uint32_t id, OUT const char** resolved_
 		}
 	}
 	case PT_ABSTIME:
-		//
-		// XXX not implemented yet
-		//
-		ASSERT(false);
+		{
+			ASSERT(payload_len == sizeof(uint64_t));
+			uint64_t val = *(uint64_t *)payload;
+			time_t sec = val / 1000000000ULL;
+			unsigned long nsec = val % 1000000000ULL;
+			struct tm tm;
+			localtime_r(&sec, &tm);
+			strftime(&m_paramstr_storage[0],
+				m_paramstr_storage.size(),
+				"%Y-%m-%d %H:%M:%S.XXXXXXXXX %z", &tm);
+			snprintf(&m_paramstr_storage[20], 9, "%09ld", nsec);
+			break;
+		}
 	case PT_DYN:
 		ASSERT(false);
 		snprintf(&m_paramstr_storage[0],
@@ -1591,7 +1609,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 			sinsp_threadinfo* atinfo = m_inspector->get_thread_ref(*(int64_t *)payload, false, true).get();
 			if(atinfo != NULL)
 			{
-				string& tcomm = atinfo->m_comm;
+				std::string& tcomm = atinfo->m_comm;
 
 				//
 				// Make sure the string will fit
@@ -1645,7 +1663,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 		//
 		// Resolve this as an errno
 		//
-		string errstr;
+		std::string errstr;
 
 		if(val < 0)
 		{
@@ -1782,7 +1800,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 			//
 			// Sanitize the file string.
 			//
-            string sanitized_str = payload + 1;
+            std::string sanitized_str = payload + 1;
 	    sanitize_string(sanitized_str);
 
 			snprintf(&m_paramstr_storage[0],
@@ -1798,7 +1816,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 				addr.m_ip = *(uint32_t*)(payload + 1);
 				addr.m_port = *(uint16_t*)(payload+5);
 				addr.m_l4proto = (m_fdinfo != NULL) ? m_fdinfo->get_l4proto() : SCAP_L4_UNKNOWN;
-				string straddr = ipv4serveraddr_to_string(&addr, m_inspector->m_hostname_and_port_resolution_enabled);
+				std::string straddr = ipv4serveraddr_to_string(&addr, m_inspector->m_hostname_and_port_resolution_enabled);
 				snprintf(&m_paramstr_storage[0],
 					   	 m_paramstr_storage.size(),
 					   	 "%s",
@@ -1820,7 +1838,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 				memcpy((uint8_t *) addr.m_ip.m_b, (uint8_t *) payload+1, sizeof(addr.m_ip.m_b));
 				addr.m_port = *(uint16_t*)(payload+17);
 				addr.m_l4proto = (m_fdinfo != NULL) ? m_fdinfo->get_l4proto() : SCAP_L4_UNKNOWN;
-				string straddr = ipv6serveraddr_to_string(&addr, m_inspector->m_hostname_and_port_resolution_enabled);
+				std::string straddr = ipv6serveraddr_to_string(&addr, m_inspector->m_hostname_and_port_resolution_enabled);
 				snprintf(&m_paramstr_storage[0],
 					   	 m_paramstr_storage.size(),
 					   	 "%s",
@@ -1852,7 +1870,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 				addr.m_fields.m_dip = *(uint32_t*)(payload + 7);
 				addr.m_fields.m_dport = *(uint16_t*)(payload+11);
 				addr.m_fields.m_l4proto = (m_fdinfo != NULL) ? m_fdinfo->get_l4proto() : SCAP_L4_UNKNOWN;
-				string straddr = ipv4tuple_to_string(&addr, m_inspector->m_hostname_and_port_resolution_enabled);
+				std::string straddr = ipv4tuple_to_string(&addr, m_inspector->m_hostname_and_port_resolution_enabled);
 				snprintf(&m_paramstr_storage[0],
 					   	 m_paramstr_storage.size(),
 					   	 "%s",
@@ -1883,7 +1901,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 					addr.m_fields.m_dip = *(uint32_t*)dip;
 					addr.m_fields.m_dport = *(uint16_t*)(payload+35);
 					addr.m_fields.m_l4proto = (m_fdinfo != NULL) ? m_fdinfo->get_l4proto() : SCAP_L4_UNKNOWN;
-					string straddr = ipv4tuple_to_string(&addr, m_inspector->m_hostname_and_port_resolution_enabled);
+					std::string straddr = ipv4tuple_to_string(&addr, m_inspector->m_hostname_and_port_resolution_enabled);
 
 					snprintf(&m_paramstr_storage[0],
 							 m_paramstr_storage.size(),
@@ -1922,7 +1940,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 			//
 			// Sanitize the file string.
 			//
-            string sanitized_str = payload + 17;
+            std::string sanitized_str = payload + 17;
 	    sanitize_string(sanitized_str);
 
 			snprintf(&m_paramstr_storage[0],
@@ -2035,7 +2053,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 		break;
 	case PT_RELTIME:
 		{
-			string sigstr;
+			std::string sigstr;
 
 			ASSERT(payload_len == sizeof(uint64_t));
 			uint64_t val = *(uint64_t *)payload;
@@ -2190,10 +2208,19 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 			break;
 		}
 	case PT_ABSTIME:
-		//
-		// XXX not implemented yet
-		//
-		ASSERT(false);
+		{
+			ASSERT(payload_len == sizeof(uint64_t));
+			uint64_t val = *(uint64_t *)payload;
+			time_t sec = val / 1000000000ULL;
+			unsigned long nsec = val % 1000000000ULL;
+			struct tm tm;
+			localtime_r(&sec, &tm);
+			strftime(&m_paramstr_storage[0],
+				m_paramstr_storage.size(),
+				"%Y-%m-%d %H:%M:%S.XXXXXXXXX %z", &tm);
+			snprintf(&m_paramstr_storage[20], 9, "%09ld", nsec);
+			break;
+		}
 	case PT_DYN:
 		ASSERT(false);
 		snprintf(&m_paramstr_storage[0],
@@ -2205,6 +2232,11 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 		uint32_t val = *(uint32_t *)payload;
 		if (val < std::numeric_limits<uint32_t>::max())
 		{
+			// Note: we want to resolve user given the uid
+			// from the event.
+			// Eg: for setuid() the requested uid is not
+			// the threadinfo one yet;
+			// therefore we cannot directly use tinfo->m_user here.
 			snprintf(&m_paramstr_storage[0],
 					 m_paramstr_storage.size(),
 					 "%d", val);
@@ -2242,6 +2274,11 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 		uint32_t val = *(uint32_t *)payload;
 		if (val < std::numeric_limits<uint32_t>::max())
 		{
+			// Note: we want to resolve group given the gid
+			// from the event.
+			// Eg: for setgid() the requested gid is not
+			// the threadinfo one yet;
+			// therefore we cannot directly use tinfo->m_group here.
 			snprintf(&m_paramstr_storage[0],
 					 m_paramstr_storage.size(),
 					 "%d", val);
@@ -2277,14 +2314,14 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 	case PT_CHARBUFARRAY:
 	{
 		ASSERT(param->m_len == sizeof(uint64_t));
-		vector<char*>* strvect = (vector<char*>*)*(uint64_t *)param->m_val;
+		std::vector<char*>* strvect = (std::vector<char*>*)*(uint64_t *)param->m_val;
 
 		m_paramstr_storage[0] = 0;
 
 		while(true)
 		{
-			vector<char*>::iterator it;
-			vector<char*>::iterator itbeg;
+			std::vector<char*>::iterator it;
+			std::vector<char*>::iterator itbeg;
 			bool need_to_resize = false;
 
 			//
@@ -2335,8 +2372,8 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 	case PT_CHARBUF_PAIR_ARRAY:
 	{
 		ASSERT(param->m_len == sizeof(uint64_t));
-		pair<vector<char*>*, vector<char*>*>* pairs =
-			(pair<vector<char*>*, vector<char*>*>*)*(uint64_t *)param->m_val;
+		std::pair<std::vector<char*>*, std::vector<char*>*>* pairs =
+			(std::pair<std::vector<char*>*, std::vector<char*>*>*)*(uint64_t *)param->m_val;
 
 		m_paramstr_storage[0] = 0;
 
@@ -2348,10 +2385,10 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 
 		while(true)
 		{
-			vector<char*>::iterator it1;
-			vector<char*>::iterator itbeg1;
-			vector<char*>::iterator it2;
-			vector<char*>::iterator itbeg2;
+			std::vector<char*>::iterator it1;
+			std::vector<char*>::iterator itbeg1;
+			std::vector<char*>::iterator it2;
+			std::vector<char*>::iterator itbeg2;
 			bool need_to_resize = false;
 
 			//
@@ -2469,7 +2506,7 @@ const char* sinsp_evt::get_param_as_str(uint32_t id, OUT const char** resolved_s
 	return &m_paramstr_storage[0];
 }
 
-string sinsp_evt::get_param_value_str(const string &name, bool resolved)
+std::string sinsp_evt::get_param_value_str(const std::string &name, bool resolved)
 {
 	for(uint32_t i = 0; i < get_num_params(); i++)
 	{
@@ -2479,17 +2516,17 @@ string sinsp_evt::get_param_value_str(const string &name, bool resolved)
 		}
 	}
 
-	return string("");
+	return std::string("");
 }
 
-string sinsp_evt::get_param_value_str(const char *name, bool resolved)
+std::string sinsp_evt::get_param_value_str(const char *name, bool resolved)
 {
 	// TODO fix this !!
-	string s_name = string(name);
+	std::string s_name = std::string(name);
 	return get_param_value_str(s_name, resolved);
 }
 
-string sinsp_evt::get_param_value_str(uint32_t i, bool resolved)
+std::string sinsp_evt::get_param_value_str(uint32_t i, bool resolved)
 {
 	const char *param_value_str;
 	const char *val_str;
@@ -2497,11 +2534,11 @@ string sinsp_evt::get_param_value_str(uint32_t i, bool resolved)
 
 	if(resolved)
 	{
-		return string((*param_value_str == '\0')? val_str : param_value_str);
+		return std::string((*param_value_str == '\0')? val_str : param_value_str);
 	}
 	else
 	{
-		return string(val_str);
+		return std::string(val_str);
 	}
 }
 

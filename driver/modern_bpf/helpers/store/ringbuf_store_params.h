@@ -99,6 +99,9 @@ static __always_inline u32 ringbuf__reserve_space(struct ringbuf_struct *ringbuf
 		return 0;
 	}
 
+	/* This counts the event seen by the drivers even if they are dropped because the buffer is full. */
+	counter->n_evts++;
+
 	/* If we are not able to reserve space we stop here
 	 * the event collection.
 	 */
@@ -109,7 +112,6 @@ static __always_inline u32 ringbuf__reserve_space(struct ringbuf_struct *ringbuf
 		return 0;
 	}
 
-	counter->n_evts++;
 	ringbuf->data = space;
 	ringbuf->reserved_event_size = event_size;
 	return 1;
@@ -172,6 +174,19 @@ static __always_inline void ringbuf__submit_event(struct ringbuf_struct *ringbuf
  */
 
 /**
+ * @brief This helper should be used to store signed 16 bit params.
+ * The following types are compatible with this helper:
+ * - PT_INT16
+ *
+ * @param ringbuf pointer to the `ringbuf_struct`.
+ * @param param param to store.
+ */
+static __always_inline void ringbuf__store_s16(struct ringbuf_struct *ringbuf, s16 param)
+{
+	PUSH_FIXED_SIZE_TO_RINGBUF(ringbuf, param, sizeof(s16));
+}
+
+/**
  * @brief This helper should be used to store signed 32 bit params.
  * The following types are compatible with this helper:
  * - PT_INT32
@@ -181,8 +196,7 @@ static __always_inline void ringbuf__submit_event(struct ringbuf_struct *ringbuf
  */
 static __always_inline void ringbuf__store_s32(struct ringbuf_struct *ringbuf, s32 param)
 {
-	push__s32(ringbuf->data, &ringbuf->payload_pos, param);
-	push__param_len(ringbuf->data, &ringbuf->lengths_pos, sizeof(s32));
+	PUSH_FIXED_SIZE_TO_RINGBUF(ringbuf, param, sizeof(s32));
 }
 
 /**

@@ -11,6 +11,10 @@
 #include <helpers/base/read_from_task.h>
 #include <driver/ppm_flag_helpers.h>
 
+#ifdef CAPTURE_SOCKETCALL
+#include <syscall.h>
+#endif
+
 /* Used to convert from page number to KB. */
 #define DO_PAGE_SHIFT(x) (x) << (IOC_PAGE_SHIFT - 10)
 
@@ -26,12 +30,31 @@ enum capability_type
  * start with the `extract` prefix.
  */
 
-/////////////////////////
-// SYSCALL ARGUMENTS EXTRACION
-////////////////////////
+///////////////////////////
+// EXTRACT FROM SYSCALLS
+///////////////////////////
 
 /**
- * @brief Extact a specific syscall argument
+ * @brief Extract the syscall id starting from the registers
+ *
+ * @param regs pointer to the struct where we find the arguments
+ * @return syscall id
+ */
+static __always_inline u32 extract__syscall_id(struct pt_regs *regs)
+{
+#if defined(__TARGET_ARCH_x86)
+	return (u32)regs->orig_ax;
+#elif defined(__TARGET_ARCH_arm64)
+	return (u32)regs->syscallno;
+#elif defined(__TARGET_ARCH_s390)
+	return (u32)regs->int_code & 0xffff;
+#else
+	return 0;
+#endif
+}
+
+/**
+ * @brief Extract a specific syscall argument
  *
  * @param regs pointer to the strcut where we find the arguments
  * @param idx index of the argument to extract
@@ -67,6 +90,36 @@ static __always_inline unsigned long extract__syscall_argument(struct pt_regs *r
 	}
 
 	return arg;
+}
+
+/**
+ * @brief Extract one ore more arguments related to a network / socket system call.
+ *
+ * This function takes into consideration whether the network system call has been
+ * called directly (e.g. accept4) or through the socketcall system call multiplexer.
+ * For the socketcall multiplexer, arguments are extracted from the second argument
+ * of the socketcall system call.  See socketcall(2) for more information.
+ *
+ * @param argv Pointer to store up to @num arguments of size `unsigned long`
+ * @param num Number of arguments to extract
+ * @param regs Pointer to the struct pt_regs to access arguments and system call ID
+ */
+static __always_inline void extract__network_args(void *argv, int num, struct pt_regs *regs)
+{
+#ifdef CAPTURE_SOCKETCALL
+	int id = extract__syscall_id(regs);
+	if(id == __NR_socketcall)
+	{
+		unsigned long args_pointer = extract__syscall_argument(regs, 1);
+		bpf_probe_read_user(argv, num * sizeof(unsigned long), (void*)args_pointer);
+		return;
+	}
+#endif
+	for (int i = 0; i < num; i++)
+	{
+		unsigned long *dst = (unsigned long *)argv;
+		dst[i] = extract__syscall_argument(regs, i);
+	}
 }
 
 ///////////////////////////
@@ -128,6 +181,45 @@ static __always_inline void extract__ino_from_fd(s32 fd, u64 *ino)
 	}
 
 	BPF_CORE_READ_INTO(ino, f, f_inode, i_ino);
+}
+
+/**
+ * @brief Return the `f_inode` of task exe_file.
+ *
+ * @param mm pointer to task mm struct.
+ * @return `f_inode` of task exe_file.
+ */
+static __always_inline struct inode *extract__exe_inode_from_task(struct task_struct *task)
+{
+	return READ_TASK_FIELD(task, mm, exe_file, f_inode);
+}
+
+/**
+ * @brief Return the `i_ino` from f_inode.
+ *
+ * @param mm pointer to inode struct.
+ * @param ino pointer to the inode number we have to fill.
+ * @return `i_ino` from f_inode.
+ */
+static __always_inline void extract__ino_from_inode(struct inode *f_inode, u64 *ino)
+{
+	BPF_CORE_READ_INTO(ino, f_inode, i_ino);
+}
+
+/**
+ * @brief Return epoch in ns from struct timespec64.
+ *
+ * @param time timespec64 struct.
+ * @return epoch in ns.
+ */
+static __always_inline u64 extract__epoch_ns_from_time(struct timespec64 time)
+{
+	time64_t tv_sec = time.tv_sec;
+	if (tv_sec < 0)
+	{
+		return 0;
+	}
+	return (tv_sec * (uint64_t) 1000000000 + time.tv_nsec);
 }
 
 /**
@@ -335,6 +427,26 @@ static __always_inline pid_t extract__task_xid_vnr(struct task_struct *task, enu
 	return extract__xid_nr_seen_by_namespace(pid_struct, pid_namespace_struct);
 }
 
+/**
+ * @brief Return the `start_time` of init task struct from pid namespace seen from
+ *  pid namespace of the current task. Monotonic time in nanoseconds.
+ *
+ * @param task pointer to task struct.
+ * @param type pid type.
+ * @return `start_time` of init task struct from pid namespace seen from current task pid namespace.
+ */
+static __always_inline u64 extract__task_pidns_start_time(struct task_struct *task, enum pid_type type, long in_childtid)
+{
+	// only perform lookup when clone/vfork/fork returns 0 (child process / childtid)
+	if (in_childtid == 0)
+	{
+		struct pid *pid_struct = extract__task_pid_struct(task, type);
+		struct pid_namespace *pid_namespace = extract__namespace_of_pid(pid_struct);
+		return BPF_CORE_READ(pid_namespace, child_reaper, start_time);
+	}
+	return 0;
+}
+
 /////////////////////////
 // PAGE INFO EXTRACION
 ////////////////////////
@@ -416,12 +528,38 @@ static __always_inline unsigned long extract__vm_swap(struct mm_struct *mm)
  */
 static __always_inline u32 exctract__tty(struct task_struct *task)
 {
-	int index;
-	int major;
-	int minor_start;
-	READ_TASK_FIELD_INTO(&index, task, signal, tty, index);
-	READ_TASK_FIELD_INTO(&major, task, signal, tty, driver, major);
-	READ_TASK_FIELD_INTO(&minor_start, task, signal, tty, driver, minor_start);
+	struct signal_struct *signal;
+	struct tty_struct *tty;
+	struct tty_driver *driver;
+	int major = 0;
+	int minor_start = 0;
+	int index = 0;
+
+	/* Direct access of fields w/ READ_TASK_FIELD_INTO or READ_TASK_FIELD can
+	cause issues for tty extraction. Adopt approach of incremental lookups and
+	checks similar to driver-bpf */
+
+	BPF_CORE_READ_INTO(&signal, task, signal);
+	if (!signal)
+	{
+		return 0;
+	}
+
+	BPF_CORE_READ_INTO(&tty, signal, tty);
+	if (!tty)
+	{
+		return 0;
+	}
+
+	BPF_CORE_READ_INTO(&driver, tty, driver);
+	if (!driver)
+	{
+		return 0;
+	}
+
+	BPF_CORE_READ_INTO(&index, tty, index);
+	BPF_CORE_READ_INTO(&major, driver, major);
+	BPF_CORE_READ_INTO(&minor_start, driver, minor_start);
 	return encode_dev(MKDEV(major, minor_start) + index);
 }
 
@@ -500,4 +638,33 @@ static __always_inline void extract__euid(struct task_struct *task, u32 *euid)
 static __always_inline void extract__egid(struct task_struct *task, u32 *egid)
 {
 	READ_TASK_FIELD_INTO(egid, task, cred, egid.val);
+}
+
+/////////////////////////
+// EXECVE FLAGS EXTRACTION
+////////////////////////
+
+static __always_inline bool extract__exe_upper_layer(struct inode *inode)
+{
+	unsigned long sb_magic = BPF_CORE_READ(inode, i_sb, s_magic);
+
+	if(sb_magic == PPM_OVERLAYFS_SUPER_MAGIC)
+	{
+		struct dentry *upper_dentry = NULL;
+		char *vfs_inode = (char *)inode;
+		unsigned long inode_size = bpf_core_type_size(struct inode);
+		if(!inode_size)
+		{
+			return false;
+		}
+
+		bpf_probe_read_kernel(&upper_dentry, sizeof(upper_dentry), vfs_inode + inode_size);
+
+		if(upper_dentry)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }

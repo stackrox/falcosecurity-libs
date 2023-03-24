@@ -27,6 +27,7 @@ limitations under the License.
 #include <unistd.h>
 #endif
 #include <third-party/tinydir.h>
+#include "filterchecks.h"
 
 #include "chisel.h"
 #include "chisel_api.h"
@@ -43,6 +44,8 @@ extern "C" {
 #include "lauxlib.h"
 }
 #endif
+
+using namespace std;
 
 extern vector<chiseldir_info>* g_chisel_dirs;
 extern sinsp_filter_check_list g_filterlist;

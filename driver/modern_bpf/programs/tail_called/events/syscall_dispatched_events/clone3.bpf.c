@@ -193,7 +193,7 @@ int BPF_PROG(t1_clone3_x,
 	/* the `clone_args` struct is defined since kernel version 5.3 */
 	unsigned long cl_args_pointer = extract__syscall_argument(regs, 0);
 	struct clone_args cl_args = {0};
-	bpf_probe_read_user((void *)&cl_args, sizeof(struct clone_args), (void *)cl_args_pointer);
+	bpf_probe_read_user((void *)&cl_args, bpf_core_type_size(struct clone_args), (void *)cl_args_pointer);
 	unsigned long flags = cl_args.flags;
 	auxmap__store_u32_param(auxmap, (u32)extract__clone_flags(task, flags));
 
@@ -214,6 +214,33 @@ int BPF_PROG(t1_clone3_x,
 	/* Parameter 20: vpid (type: PT_PID) */
 	pid_t vpid = extract__task_xid_vnr(task, PIDTYPE_TGID);
 	auxmap__store_s64_param(auxmap, (s64)vpid);
+
+	/*=============================== COLLECT PARAMETERS  ===========================*/
+
+	/* We have to split here the bpf program, otherwise, it is too large
+	 * for the verifier (limit 1000000 instructions).
+	 */
+	bpf_tail_call(ctx, &extra_event_prog_tail_table, T2_CLONE3_X);
+	return 0;
+}
+
+SEC("tp_btf/sys_exit")
+int BPF_PROG(t2_clone3_x,
+	     struct pt_regs *regs,
+	     long ret)
+{
+	struct auxiliary_map *auxmap = auxmap__get();
+	if(!auxmap)
+	{
+		return 0;
+	}
+
+	/*=============================== COLLECT PARAMETERS  ===========================*/
+
+	struct task_struct *task = get_current_task();
+
+	/* Parameter 21: pid_namespace init task start_time monotonic time in ns (type: PT_UINT64) */
+	auxmap__store_u64_param(auxmap, extract__task_pidns_start_time(task, PIDTYPE_TGID, ret));
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 

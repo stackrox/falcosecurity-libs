@@ -27,7 +27,7 @@ struct noop_engine
 
 #include "noop.h"
 #include "scap.h"
-#include "../common/strlcpy.h"
+#include "strlcpy.h"
 
 struct noop_engine* noop_alloc_handle(scap_t* main_handle, char* lasterr_ptr)
 {
@@ -137,4 +137,6 @@ const struct scap_vtable scap_noop_engine = {
 	.get_vpid = noop_get_vxid,
 	.get_vtid = noop_get_vxid,
 	.getpid_global = noop_getpid_global,
+	.get_api_version = NULL,
+	.get_schema_version = NULL,
 };

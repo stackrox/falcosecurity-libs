@@ -27,7 +27,7 @@ or GPL2.txt for full copies of the license.
 
 #ifdef __KERNEL__ /* Kernel module - BPF probe */
 
-#include <linux/version.h>
+#include "ppm_version.h"
 
 ///////////////////////////////
 // CAPTURE_SCHED_PROC_FORK 
@@ -62,6 +62,21 @@ or GPL2.txt for full copies of the license.
  */
 #if defined(CONFIG_ARM64) || defined(CONFIG_S390)
 	#define CAPTURE_SCHED_PROC_FORK 
+#endif
+
+///////////////////////////////
+// CAPTURE_SOCKETCALL
+///////////////////////////////
+
+/* There are architectures that used history socketcall to multiplex
+ * the network system calls.  Even if architectures, like s390x, has
+ * direct support for those network system calls, kernel version header
+ * dependencies in libc prevent using them.
+ *
+ * For details, see also https://sourceware.org/pipermail/libc-alpha/2022-September/142108.html
+ */
+#if defined(CONFIG_S390)
+	#define CAPTURE_SOCKETCALL
 #endif
 
 ///////////////////////////////
@@ -132,6 +147,15 @@ or GPL2.txt for full copies of the license.
 	#define CAPTURE_PAGE_FAULTS
 #endif
 
+///////////////////////////////
+// USE_BPF_PROBE_KERNEL_USER_VARIANTS
+///////////////////////////////
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,5,0)) || \
+	((PPM_RHEL_RELEASE_CODE > 0) && (PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 5)))
+		#define USE_BPF_PROBE_KERNEL_USER_VARIANTS
+#endif
+
 #elif defined(__USE_VMLINUX__) /* modern BPF probe */
 
 ///////////////////////////////
@@ -148,6 +172,22 @@ or GPL2.txt for full copies of the license.
 
 #if defined(__TARGET_ARCH_arm64) || defined(__TARGET_ARCH_s390)
 	#define CAPTURE_SCHED_PROC_FORK 
+#endif
+
+///////////////////////////////
+// CAPTURE_PAGE_FAULTS
+///////////////////////////////
+
+#if defined(__TARGET_ARCH_x86)
+	#define CAPTURE_PAGE_FAULTS 
+#endif
+
+///////////////////////////////
+// CAPTURE_SOCKETCALL
+///////////////////////////////
+
+#if defined(__TARGET_ARCH_s390)
+	#define CAPTURE_SOCKETCALL
 #endif
 
 #else /* Userspace */
@@ -199,6 +239,14 @@ or GPL2.txt for full copies of the license.
 
 #if defined(__aarch64__)
 	#define CAPTURE_SCHED_PROC_EXEC 
+#endif
+
+///////////////////////////////
+// CAPTURE_SOCKETCALL
+///////////////////////////////
+
+#if defined(__s390x__)
+	#define CAPTURE_SOCKETCALL
 #endif
 
 #endif /* UDIG */

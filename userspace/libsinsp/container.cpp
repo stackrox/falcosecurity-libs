@@ -21,9 +21,7 @@ limitations under the License.
 #ifdef HAS_CAPTURE
 #include "container_engine/cri.h"
 #endif // HAS_CAPTURE
-#ifdef _WIN32
-#include "container_engine/docker/docker_win.h"
-#else
+#ifndef _WIN32
 #include "container_engine/docker/docker_linux.h"
 #include "container_engine/docker/podman.h"
 #endif
@@ -48,7 +46,8 @@ sinsp_container_manager::sinsp_container_manager(sinsp* inspector, bool static_c
 	m_static_container(static_container),
 	m_static_id(static_id),
 	m_static_name(static_name),
-	m_static_image(static_image)
+	m_static_image(static_image),
+	m_container_engine_mask(~0ULL)
 {
 }
 
@@ -74,7 +73,7 @@ bool sinsp_container_manager::remove_inactive_containers()
 
 		g_logger.format(sinsp_logger::SEV_INFO, "Flushing container table");
 
-		set<string> containers_in_use;
+		std::set<std::string> containers_in_use;
 
 		threadinfo_map_t* threadtable = m_inspector->m_thread_manager->get_threads();
 
@@ -108,7 +107,7 @@ bool sinsp_container_manager::remove_inactive_containers()
 	return res;
 }
 
-sinsp_container_info::ptr_t sinsp_container_manager::get_container(const string& container_id) const
+sinsp_container_info::ptr_t sinsp_container_manager::get_container(const std::string& container_id) const
 {
 	auto containers = m_containers.lock();
 	auto it = containers->find(container_id);
@@ -153,7 +152,7 @@ bool sinsp_container_manager::resolve_container(sinsp_threadinfo* tinfo, bool qu
 	return matches;
 }
 
-string sinsp_container_manager::container_to_json(const sinsp_container_info& container_info)
+std::string sinsp_container_manager::container_to_json(const sinsp_container_info& container_info)
 {
 	Json::Value obj;
 	Json::Value& container = obj["container"];
@@ -197,6 +196,8 @@ string sinsp_container_manager::container_to_json(const sinsp_container_info& co
 	uint32_t iph = htonl(container_info.m_container_ip);
 	inet_ntop(AF_INET, &iph, addrbuff, sizeof(addrbuff));
 	container["ip"] = addrbuff;
+
+	container["cni_json"] = container_info.m_pod_cniresult;
 
 	Json::Value port_mappings = Json::arrayValue;
 
@@ -250,7 +251,7 @@ string sinsp_container_manager::container_to_json(const sinsp_container_info& co
 	return Json::FastWriter().write(obj);
 }
 
-bool sinsp_container_manager::container_to_sinsp_event(const string& json, sinsp_evt* evt, shared_ptr<sinsp_threadinfo> tinfo)
+bool sinsp_container_manager::container_to_sinsp_event(const std::string& json, sinsp_evt* evt, std::shared_ptr<sinsp_threadinfo> tinfo)
 {
 	size_t totlen = sizeof(scap_evt) + sizeof(uint32_t) + json.length() + 1;
 
@@ -372,7 +373,7 @@ void sinsp_container_manager::notify_new_container(const sinsp_container_info& c
 
 		// Enqueue it onto the queue of pending container events for the inspector
 #ifndef _WIN32
-		m_inspector->m_pending_state_evts.push(std::move(cevt));
+		m_inspector->m_pending_state_evts.push(cevt);
 #endif
 	}
 	else
@@ -396,18 +397,18 @@ void sinsp_container_manager::dump_containers(scap_dumper_t* dumper)
 		sinsp_evt evt;
 		if(container_to_sinsp_event(container_to_json(*it.second), &evt, it.second->get_tinfo(m_inspector)))
 		{
-			int32_t res = scap_dump(m_inspector->m_h, dumper, evt.m_pevt, evt.m_cpuid, SCAP_DF_LARGE);
+			int32_t res = scap_dump(dumper, evt.m_pevt, evt.m_cpuid, SCAP_DF_LARGE);
 			if(res != SCAP_SUCCESS)
 			{
-				throw sinsp_exception(scap_getlasterr(m_inspector->m_h));
+				throw sinsp_exception(scap_dump_getlasterr(dumper));
 			}
 		}
 	}
 }
 
-string sinsp_container_manager::get_container_name(sinsp_threadinfo* tinfo) const
+std::string sinsp_container_manager::get_container_name(sinsp_threadinfo* tinfo) const
 {
-	string res;
+	std::string res;
 
 	if(tinfo->m_container_id.empty())
 	{
@@ -573,19 +574,14 @@ void sinsp_container_manager::create_engines()
 		return;
 	}
 #ifndef MINIMAL_BUILD
-#ifdef CYGWING_AGENT
-	{
-		auto docker_engine = std::make_shared<container_engine::docker_win>(*this, m_inspector /*wmi source*/);
-		m_container_engines.push_back(docker_engine);
-		m_container_engine_by_type[CT_DOCKER] = docker_engine;
-	}
-#else
 #ifndef _WIN32
+	if (m_container_engine_mask & (1 << CT_PODMAN))
 	{
 		auto podman_engine = std::make_shared<container_engine::podman>(*this);
 		m_container_engines.push_back(podman_engine);
 		m_container_engine_by_type[CT_PODMAN] = podman_engine;
 	}
+	if (m_container_engine_mask & (1 << CT_DOCKER))
 	{
 		auto docker_engine = std::make_shared<container_engine::docker_linux>(*this);
 		m_container_engines.push_back(docker_engine);
@@ -593,6 +589,10 @@ void sinsp_container_manager::create_engines()
 	}
 
 #if defined(HAS_CAPTURE)
+	if (m_container_engine_mask &
+	   ((1 << CT_CRI) |
+	    (1 << CT_CRIO) |
+	    (1 << CT_CONTAINERD)))
 	{
 		auto cri_engine = std::make_shared<container_engine::cri>(*this);
 		m_container_engines.push_back(cri_engine);
@@ -601,34 +601,37 @@ void sinsp_container_manager::create_engines()
 		m_container_engine_by_type[CT_CONTAINERD] = cri_engine;
 	}
 #endif
+	if (m_container_engine_mask & (1 << CT_LXC))
 	{
 		auto lxc_engine = std::make_shared<container_engine::lxc>(*this);
 		m_container_engines.push_back(lxc_engine);
 		m_container_engine_by_type[CT_LXC] = lxc_engine;
 	}
+	if (m_container_engine_mask & (1 << CT_LIBVIRT_LXC))
 	{
 		auto libvirt_lxc_engine = std::make_shared<container_engine::libvirt_lxc>(*this);
 		m_container_engines.push_back(libvirt_lxc_engine);
 		m_container_engine_by_type[CT_LIBVIRT_LXC] = libvirt_lxc_engine;
 	}
-
+	if (m_container_engine_mask & (1 << CT_MESOS))
 	{
 		auto mesos_engine = std::make_shared<container_engine::mesos>(*this);
 		m_container_engines.push_back(mesos_engine);
 		m_container_engine_by_type[CT_MESOS] = mesos_engine;
 	}
+	if (m_container_engine_mask & (1 << CT_RKT))
 	{
 		auto rkt_engine = std::make_shared<container_engine::rkt>(*this);
 		m_container_engines.push_back(rkt_engine);
 		m_container_engine_by_type[CT_RKT] = rkt_engine;
 	}
+	if (m_container_engine_mask & (1 << CT_BPM))
 	{
 		auto bpm_engine = std::make_shared<container_engine::bpm>(*this);
 		m_container_engines.push_back(bpm_engine);
 		m_container_engine_by_type[CT_BPM] = bpm_engine;
 	}
 #endif // _WIN32
-#endif // CYGWING_AGENT
 #endif // MINIMAL_BUILD
 }
 

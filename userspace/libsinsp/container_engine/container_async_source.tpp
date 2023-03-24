@@ -34,24 +34,24 @@ container_async_source<key_type>::container_async_source(uint64_t max_wait_ms, u
 
 template<typename key_type>
 bool container_async_source<key_type>::lookup(const key_type& key,
+					      sinsp_container_info& value)
+{
+    return parent_type::lookup(
+        key,
+        value,
+        std::bind(
+            &container_async_source::source_callback,
+            this,
+            std::placeholders::_1,
+            std::placeholders::_2));
+}
+
+template<typename key_type>
+bool container_async_source<key_type>::lookup(const key_type& key,
 					      sinsp_container_info& value,
 					      const callback_handler& handler)
 {
-	if(handler)
-	{
-		return parent_type::lookup(key, value, handler);
-	}
-	else
-	{
-		return parent_type::lookup(
-			key,
-			value,
-			std::bind(
-				&container_async_source::source_callback,
-				this,
-				std::placeholders::_1,
-				std::placeholders::_2));
-	}
+	return parent_type::lookup(key, value, handler);
 }
 
 template<typename key_type>
@@ -95,9 +95,10 @@ void container_async_source<key_type>::run_impl()
 	while(this->dequeue_next_key(key, &res))
 	{
 		g_logger.format(sinsp_logger::SEV_DEBUG,
-				"%s_async (%s): Source dequeued key",
+				"%s_async (%s): Source dequeued key attempt=%u",
 				name(),
-				container_id(key).c_str());
+				container_id(key).c_str(),
+				res.m_lookup.retry_no());
 
 		lookup_sync(key, res);
 
@@ -127,15 +128,9 @@ void container_async_source<key_type>::run_impl()
 					container_id(key).c_str(),
 					res.m_lookup.retry_no());
 
-			this->lookup_delayed(
-				key,
-				res,
-				std::chrono::milliseconds(res.m_lookup.delay()),
-				std::bind(
-					&container_async_source::source_callback,
-					this,
-					std::placeholders::_1,
-					std::placeholders::_2));
+			this->defer_lookup(key,
+					   &res,
+					   std::chrono::milliseconds(res.m_lookup.delay()));
 		}
 
 		// Reset res

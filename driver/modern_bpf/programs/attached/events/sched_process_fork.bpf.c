@@ -6,7 +6,6 @@
  */
 
 #include <helpers/interfaces/variable_size_event.h>
-#include <helpers/interfaces/attached_programs.h>
 
 /* From linux tree: /include/trace/events/sched.h
  * TP_PROTO(struct task_struct *parent,
@@ -19,11 +18,6 @@ SEC("tp_btf/sched_process_fork")
 int BPF_PROG(sched_p_fork,
 	     struct task_struct *parent, struct task_struct *child)
 {
-	if(!attached_programs__capture_enabled())
-	{
-		return 0;
-	}
-
 	struct task_struct *task = get_current_task();
 	uint32_t flags = 0;
 	READ_TASK_FIELD_INTO(&flags, task, flags);
@@ -218,6 +212,28 @@ int BPF_PROG(t1_sched_p_fork,
 	/* Parameter 20: vpid (type: PT_PID) */
 	pid_t vpid = extract__task_xid_vnr(child, PIDTYPE_TGID);
 	auxmap__store_s64_param(auxmap, (s64)vpid);
+
+	/*=============================== COLLECT PARAMETERS  ===========================*/
+
+	/* We have to split here the bpf program, otherwise, it is too large
+	 * for the verifier (limit 1000000 instructions).
+	 */
+	bpf_tail_call(ctx, &extra_event_prog_tail_table, T2_SCHED_PROC_FORK);
+	return 0;
+}
+
+SEC("tp_btf/sched_process_fork")
+int BPF_PROG(t2_sched_p_fork,
+	     struct task_struct *parent, struct task_struct *child)
+{
+	struct auxiliary_map *auxmap = auxmap__get();
+	if(!auxmap)
+	{
+		return 0;
+	}
+
+	/* Parameter 21: pid_namespace init task start_time monotonic time in ns (type: PT_UINT64) */
+	auxmap__store_u64_param(auxmap, extract__task_pidns_start_time(child, PIDTYPE_TGID, 0));
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 

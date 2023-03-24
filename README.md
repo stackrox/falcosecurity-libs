@@ -2,6 +2,7 @@
 
 [![CI Build](https://github.com/falcosecurity/libs/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/falcosecurity/libs/actions/workflows/ci.yml)
 [![Architectures](https://img.shields.io/badge/ARCHS-x86__64%7Caarch64%7Cs390x-blueviolet)](#drivers-officially-supported-architectures)
+[![Drivers build against latest kernel](https://github.com/falcosecurity/libs/actions/workflows/latest-kernel.yml/badge.svg)](https://github.com/falcosecurity/libs/actions/workflows/latest-kernel.yml)
 
 As per the [OSS Libraries Contribution Plan](https://github.com/falcosecurity/falco/blob/master/proposals/20210119-libraries-contribution.md), this repository has been chosen to be the new home for **libsinsp**, **libscap**, the **kernel module** and the **eBPF probe** sources.  
 Refer to https://falco.org/blog/contribution-drivers-kmod-ebpf-libraries/ for more information.  
@@ -47,13 +48,11 @@ If you build this project from a git working directory, the main [CMakeLists.txt
 
 Right now our drivers officially support the following architectures:
 
-|             | Kernel module | eBPF probe | Modern eBPF probe |
-| ----------- | ------------- | ---------- | ---------------- |
-| **x86_64**  | >= 2.6        | >= 4.14    | WIP 👷           |
-| **aarch64** | >= 3.4        | >= 4.17    | WIP 👷           |
-| **s390x**   | >= 2.6        | ❌         | WIP 👷            |
-
->**Please note**: BPF has some issues with architectures like `s390x`! Some helpers like `bpf_probe_read()` and `bpf_probe_read_str()` are broken on archs with overlapping address ranges.
+|             | Kernel module                                                                                | eBPF probe | Modern eBPF probe |
+| ----------- |----------------------------------------------------------------------------------------------| ---------- | ---------------- |
+| **x86_64**  | >= 2.6                                                                                       | >= 4.14    | WIP 👷           |
+| **aarch64** | >= [3.16](https://github.com/torvalds/linux/commit/055b1212d141f1f398fca548f8147787c0b6253f) | >= 4.17    | WIP 👷           |
+| **s390x**   | >= 2.6                                                                                       | >= [5.5](https://github.com/torvalds/linux/commit/6ae08ae3dea) | WIP 👷            |
 
 **For a list of supported syscalls through specific events, please refer to [_report_](./driver/report.md).**
 
@@ -144,6 +143,12 @@ make ProbeSkeleton
 ```
 
 > __Please note__: these are not the requirements to use the BPF probe but to build it from source!
+
+As you have seen the modern bpf probe has strict requirements to be built that maybe are not easy to satisfy on old machines. The workaround you can use is to build the probe skeleton on a recent machine and than link it during the building phase on an older machine. To do that you have to use the cmake variable `MODERN_BPF_SKEL_DIR`. Supposing you have built the skeleton under the directory `/tmp/skel-dir`, you should use the option in this way:
+
+```bash
+cmake -DUSE_BUNDLED_DEPS=ON -DBUILD_LIBSCAP_MODERN_BPF=ON -DMODERN_BPF_SKEL_DIR="/tmp/skel-dir" -DBUILD_LIBSCAP_GVISOR=OFF .. 
+```
 
 ### gVisor support
 

@@ -21,8 +21,8 @@ else()
 
 		ExternalProject_Add(openssl
 			PREFIX "${PROJECT_BINARY_DIR}/openssl-prefix"
-			URL "https://github.com/openssl/openssl/archive/OpenSSL_1_1_1p.tar.gz"
-			URL_HASH "SHA256=cd0cce1de6c9a6da8f83ba7ae210a3662eab21c4df7aff30149597797b2ceac9"
+			URL "https://github.com/openssl/openssl/archive/OpenSSL_1_1_1t.tar.gz"
+			URL_HASH "SHA256=b1270f044e36452e15d1f2e18b702691a240b0445080282f2c7daaea8704ec5e"
 			CONFIGURE_COMMAND ./config no-shared --prefix=${OPENSSL_INSTALL_DIR}
 			BUILD_COMMAND ${CMD_MAKE}
 			BUILD_IN_SOURCE 1
@@ -35,6 +35,10 @@ else()
 		install(DIRECTORY "${OPENSSL_INCLUDE_DIR}" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${LIBS_PACKAGE_NAME}"
 				COMPONENT "libs-deps")
 	endif()
+endif()
+
+if(NOT TARGET openssl)
+	add_custom_target(openssl)
 endif()
 
 include_directories("${OPENSSL_INCLUDE_DIR}")

@@ -20,14 +20,17 @@ limitations under the License.
 #include <stdint.h>
 #include <stddef.h>
 
+#include <sys/mman.h>
+#include <unistd.h>
+#define INVALID_FD (-1)
+#define INVALID_MAPPING MAP_FAILED
+
+#include "scap_assert.h"
+
 //
 // Read buffer timeout constants
 //
-#ifdef _WIN32
-#define BUFFER_EMPTY_WAIT_TIME_US_START 1000
-#else
 #define BUFFER_EMPTY_WAIT_TIME_US_START 500
-#endif
 #define BUFFER_EMPTY_WAIT_TIME_US_MAX (30 * 1000)
 #define BUFFER_EMPTY_THRESHOLD_B 20000
 
@@ -68,4 +71,23 @@ struct scap_device_set
 };
 
 int32_t devset_init(struct scap_device_set *devset, size_t num_devs, char *lasterr);
+void devset_close_device(struct scap_device *dev);
 void devset_free(struct scap_device_set *devset);
+
+static inline void devset_munmap(void* addr, size_t size)
+{
+	if(addr != INVALID_MAPPING)
+	{
+		int ret = munmap(addr, size);
+		ASSERT(ret == 0);
+		(void) ret;
+	}
+}
+
+static inline void devset_close(int fd)
+{
+	if(fd != INVALID_FD)
+	{
+		close(fd);
+	}
+}

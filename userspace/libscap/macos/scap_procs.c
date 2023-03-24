@@ -15,9 +15,16 @@ limitations under the License.
 
 */
 
-#include "scap.h"
-#include "scap_vtable.h"
+#include <stdbool.h>
+#include <stdint.h>
 #include <unistd.h>
+
+typedef struct scap scap_t;
+struct ppm_proclist_info;
+
+#define SCAP_HANDLE_T void
+#include "engine_handle.h"
+#include "scap_const.h"
 
 int32_t scap_os_getpid_global(struct scap_engine_handle engine, int64_t *pid, char* error)
 {
@@ -40,8 +47,9 @@ bool scap_is_thread_alive(scap_t* handle, int64_t pid, int64_t tid, const char* 
 	return false;
 }
 
-void scap_refresh_proc_table(scap_t* handle)
+int32_t scap_refresh_proc_table(scap_t* handle)
 {
+	return SCAP_SUCCESS;
 }
 
 int32_t scap_procfs_get_threadlist(struct scap_engine_handle engine, struct ppm_proclist_info **procinfo_p, char *lasterr)

@@ -35,10 +35,11 @@ sinsp_ipv4_ifinfo::sinsp_ipv4_ifinfo(uint32_t addr, uint32_t netmask, uint32_t b
 	m_name = name;
 }
 
-void sinsp_ipv4_ifinfo::convert_to_string(char * dest, const uint32_t addr)
+void sinsp_ipv4_ifinfo::convert_to_string(char * dest, size_t len, const uint32_t addr)
 {
-	sprintf(
+	snprintf(
 		dest,
+		len,
 		"%d.%d.%d.%d",
 		(addr & 0xFF),
 		((addr & 0xFF00) >> 8),
@@ -46,30 +47,30 @@ void sinsp_ipv4_ifinfo::convert_to_string(char * dest, const uint32_t addr)
 		((addr & 0xFF000000) >> 24));
 }
 
-string sinsp_ipv4_ifinfo::address() const
+std::string sinsp_ipv4_ifinfo::address() const
 {
 	char str_addr[16];
-	convert_to_string(str_addr, m_addr);
-	return string(str_addr);
+	convert_to_string(str_addr, sizeof(str_addr), m_addr);
+	return std::string(str_addr);
 }
 
-string sinsp_ipv4_ifinfo::to_string() const
+std::string sinsp_ipv4_ifinfo::to_string() const
 {
 	char s[100];
 	char str_addr[16];
 	char s_netmask[16];
 	char s_bcast[16];
 
-	convert_to_string(str_addr, m_addr);
-	convert_to_string(s_netmask, m_netmask);
-	convert_to_string(s_bcast, m_bcast);
+	convert_to_string(str_addr, sizeof(str_addr), m_addr);
+	convert_to_string(s_netmask, sizeof(str_addr), m_netmask);
+	convert_to_string(s_bcast, sizeof(str_addr), m_bcast);
 	snprintf(s, sizeof(s), "%s inet %s netmask %s broadcast %s", m_name.c_str(), str_addr, s_netmask, s_bcast);
-	return string(s);
+	return std::string(s);
 }
 
 uint32_t sinsp_network_interfaces::infer_ipv4_address(uint32_t destination_address)
 {
-	vector<sinsp_ipv4_ifinfo>::iterator it;
+	std::vector<sinsp_ipv4_ifinfo>::iterator it;
 
 	// first try to find exact match
 	for(it = m_ipv4_interfaces.begin(); it != m_ipv4_interfaces.end(); it++)
@@ -195,7 +196,7 @@ void sinsp_network_interfaces::update_fd(sinsp_fdinfo_t *fd)
 
 bool sinsp_network_interfaces::is_ipv4addr_in_subnet(uint32_t addr)
 {
-	vector<sinsp_ipv4_ifinfo>::iterator it;
+	std::vector<sinsp_ipv4_ifinfo>::iterator it;
 
 	//
 	// Accept everything that comes from 192.168.0.0/16 or 10.0.0.0/8
@@ -279,7 +280,7 @@ bool sinsp_network_interfaces::is_ipv4addr_in_local_machine(uint32_t addr, sinsp
 		}
 	}
 
-	vector<sinsp_ipv4_ifinfo>::iterator it;
+	std::vector<sinsp_ipv4_ifinfo>::iterator it;
 
 	// try to find an interface that has the given IP as address
 	for(it = m_ipv4_interfaces.begin(); it != m_ipv4_interfaces.end(); it++)
@@ -313,7 +314,7 @@ void sinsp_network_interfaces::import_ipv4_ifaddr_list(uint32_t count, scap_ifin
 
 ipv6addr sinsp_network_interfaces::infer_ipv6_address(ipv6addr &destination_address)
 {
-	vector<sinsp_ipv6_ifinfo>::iterator it;
+	std::vector<sinsp_ipv6_ifinfo>::iterator it;
 
 	// first try to find exact match
 	for(it = m_ipv6_interfaces.begin(); it != m_ipv6_interfaces.end(); it++)
@@ -353,7 +354,7 @@ bool sinsp_network_interfaces::is_ipv6addr_in_local_machine(ipv6addr &addr, sins
 		return false;
 	}
 
-	vector<sinsp_ipv6_ifinfo>::iterator it;
+	std::vector<sinsp_ipv6_ifinfo>::iterator it;
 
 	// try to find an interface that has the given IP as address
 	for(it = m_ipv6_interfaces.begin(); it != m_ipv6_interfaces.end(); it++)
@@ -408,12 +409,12 @@ void sinsp_network_interfaces::import_ipv6_interface(const sinsp_ipv6_ifinfo& if
 	m_ipv6_interfaces.push_back(ifinfo);
 }
 
-vector<sinsp_ipv4_ifinfo>* sinsp_network_interfaces::get_ipv4_list()
+std::vector<sinsp_ipv4_ifinfo>* sinsp_network_interfaces::get_ipv4_list()
 {
 	return &m_ipv4_interfaces;
 }
 
-vector<sinsp_ipv6_ifinfo>* sinsp_network_interfaces::get_ipv6_list()
+std::vector<sinsp_ipv6_ifinfo>* sinsp_network_interfaces::get_ipv6_list()
 {
 	return &m_ipv6_interfaces;
 }

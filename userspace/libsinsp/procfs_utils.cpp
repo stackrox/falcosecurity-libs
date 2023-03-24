@@ -15,9 +15,11 @@ limitations under the License.
 
 */
 #include "procfs_utils.h"
+#include "logger.h"
 
-#include <string>
-#include "sinsp.h"
+#include <cstring>
+#include <sstream>
+#include <sys/stat.h>
 
 int libsinsp::procfs_utils::get_userns_root_uid(std::istream& uid_map)
 {
@@ -63,3 +65,47 @@ std::string libsinsp::procfs_utils::get_systemd_cgroup(std::istream& cgroups)
 
 	return "";
 }
+
+//
+// ns_helper
+//
+libsinsp::procfs_utils::ns_helper::ns_helper(const std::string& host_root):
+	m_host_root(host_root)
+{
+	struct stat rootlink;
+	if(-1 == stat((m_host_root + "/proc/1/root").c_str(), &rootlink))
+	{
+		g_logger.format(sinsp_logger::SEV_WARNING,
+				"Cannot read host init process proc root: %d", errno);
+		m_cannot_read_host_init_ns_mnt = true;
+	}
+	else
+	{
+		m_host_init_root_inode = rootlink.st_ino;
+	}
+}
+
+bool libsinsp::procfs_utils::ns_helper::in_own_ns_mnt(int64_t pid) const
+{
+	if(m_cannot_read_host_init_ns_mnt)
+	{
+		return false;
+	}
+
+	struct stat rootlink;
+	if(-1 == stat(get_pid_root(pid).c_str(), &rootlink))
+	{
+		g_logger.format(sinsp_logger::SEV_DEBUG,
+				"Cannot read process proc root");
+		return false;
+	}
+
+	if(static_cast<decltype(m_host_init_root_inode)>(rootlink.st_ino) == m_host_init_root_inode)
+	{
+		// Still in the host namespace
+		return false;
+	}
+
+	return true;
+}
+

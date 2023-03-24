@@ -18,7 +18,9 @@ or GPL2.txt for full copies of the license.
 	FN(sys_single_x)			\
 	FN(sys_open_e)				\
 	FN(sys_open_x)				\
+	FN(sys_read_e)				\
 	FN(sys_read_x)				\
+	FN(sys_write_e)				\
 	FN(sys_write_x)				\
 	FN(sys_execve_e)			\
 	FN(proc_startupdate)			\
@@ -97,6 +99,10 @@ or GPL2.txt for full copies of the license.
 	FN(sys_fchmodat_x)			\
 	FN(sys_chmod_x)				\
 	FN(sys_fchmod_x)			\
+        FN(sys_chown_x)				\
+	FN(sys_lchown_x)			\
+	FN(sys_fchown_x)			\
+	FN(sys_fchownat_x)			\
 	FN(sys_mkdirat_x)			\
 	FN(sys_openat_e)			\
 	FN(sys_openat_x)			\
@@ -133,11 +139,25 @@ or GPL2.txt for full copies of the license.
 	FN(sched_prog_fork_2)		        \
 	FN(sched_prog_fork_3)		        \
 	FN(sys_mlock2_x)			\
-        FN(sys_fsconfig_x)			\
-        FN(sys_epoll_create_e)                  \
-        FN(sys_epoll_create_x)                  \
-        FN(sys_epoll_create1_e)                 \
-        FN(sys_epoll_create1_x)                 \
+	FN(sys_fsconfig_x)			\
+	FN(sys_epoll_create_e)                  \
+	FN(sys_epoll_create_x)                  \
+	FN(sys_epoll_create1_e)                 \
+	FN(sys_epoll_create1_x)                 \
+	FN(sys_socket_bind_e)                 \
+	FN(sys_bpf_e)                 \
+	FN(sys_close_e)                 \
+	FN(sys_close_x)                 \
+	FN(sys_fchdir_e)                 \
+	FN(sys_fchdir_x)                 \
+	FN(sys_ioctl_e)                 \
+	FN(sys_mkdir_e)                 \
+	FN(sys_setpgid_e)                 \
+	FN(sys_recvfrom_e)                 \
+	FN(sys_recvmsg_e)                 \
+	FN(sys_signalfd_e)                 \
+	FN(sys_splice_e)				\
+	FN(sys_umount_x)				\
 	FN(terminate_filler)
 
 #define FILLER_ENUM_FN(x) PPM_FILLER_##x,

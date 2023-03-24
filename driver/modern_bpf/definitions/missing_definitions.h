@@ -36,6 +36,54 @@
 
 /*=============================== ARCH SPECIFIC ===========================*/
 
+/*=============================== SIGNALS ===========================*/
+
+#define SI_QUEUE -1
+#define SI_USER 0
+#define SIGHUP 1
+#define SIGINT 2
+#define SIGQUIT 3
+#define SIGILL 4
+#define SIGTRAP 5
+#define SIGABRT 6
+#define SIGIOT 6
+#define SIGBUS 7
+#define SIGFPE 8
+#define SIGKILL 9
+#define SIGUSR1 10
+#define SIGSEGV 11
+#define SIGUSR2 12
+#define SIGPIPE 13
+#define SIGALRM 14
+#define SIGTERM 15
+#define SIGSTKFLT 16
+#define SIGCHLD 17
+#define SIGCONT 18
+#define SIGSTOP 19
+#define SIGTSTP 20
+#define SIGTTIN 21
+#define SIGTTOU 22
+#define SIGURG 23
+#define SIGXCPU 24
+#define SIGXFSZ 25
+#define SIGVTALRM 26
+#define SIGPROF 27
+#define SIGWINCH 28
+#define SIGIO 29
+#define SIGPOLL SIGIO
+/*
+#define SIGLOST		29
+*/
+#define SIGPWR 30
+#define SIGSYS 31
+#define SIGUNUSED 31
+#define SIGRTMIN 32
+#define __SIGRTMAX 64
+#define _NSIG (__SIGRTMAX + 1)
+#define SIGRTMAX _NSIG
+
+/*=============================== SIGNALS ===========================*/
+
 /*=============================== FLAGS ===========================*/
 
 //////////////////////////
@@ -336,12 +384,15 @@
 #define SO_RCVLOWAT 18
 #define SO_SNDLOWAT 19
 
-/* In kernel definitions they are called `SO_RCVTIMEO_OLD` and `SO_SNDTIMEO_OLD`,
- * since there are new definitions `SO_RCVTIMEO_NEW` `SO_SNDTIMEO_NEW`.
- * We keep names without `OLD` for compatibility with our `sockopt_optname_to_scap()`
+/* Define all flavours just to be sure to catch at least one of them
+ * https://github.com/torvalds/linux/commit/a9beb86ae6e55bd92f38453c8623de60b8e5a308
  */
-#define SO_RCVTIMEO 20 /* SO_RCVTIMEO_OLD */
-#define SO_SNDTIMEO 21 /* SO_SNDTIMEO_OLD */
+#define SO_RCVTIMEO 20
+#define SO_RCVTIMEO_OLD 20
+#define SO_RCVTIMEO_NEW 66
+#define SO_SNDTIMEO 21
+#define SO_SNDTIMEO_OLD 21
+#define SO_SNDTIMEO_NEW 67
 
 /* Security levels - as per NRL IPv6 - don't actually do anything */
 #define SO_SECURITY_AUTHENTICATION 22
@@ -664,6 +715,24 @@
 //////////////////////////
 
 #define EPOLL_CLOEXEC 02000000
+
+//////////////////////////
+// mlock2 flags
+//////////////////////////
+
+/* `/include/uapi/asm-generic/mman-common.h` from kernel source tree. */
+
+#define MLOCK_ONFAULT 0x01 /* Lock pages in range after they are faulted in, do not prefault */
+
+//////////////////////////
+// mlockall flags
+//////////////////////////
+
+/* `/include/uapi/asm-generic/mman.h` from kernel source tree. */
+
+#define MCL_CURRENT 1 /* lock all current mappings */
+#define MCL_FUTURE 2  /* lock all future mappings */
+#define MCL_ONFAULT 4 /* lock all pages that are faulted in */
 
 /*=============================== FLAGS ===========================*/
 
@@ -1291,5 +1360,41 @@
 #define IIF_ALL (IIF_BGRACE | IIF_IGRACE | IIF_FLAGS)
 
 /*=============================== QUOTACTL SYSCALL ===========================*/
+
+/*=============================== SPLICE SYSCALL =============================*/
+
+#define SPLICE_F_MOVE	   (0x01)	
+#define SPLICE_F_NONBLOCK  (0x02) 
+#define SPLICE_F_MORE	   (0x04)	
+#define SPLICE_F_GIFT	   (0x08)	
+
+#define SPLICE_F_ALL (SPLICE_F_MOVE|SPLICE_F_NONBLOCK|SPLICE_F_MORE|SPLICE_F_GIFT)
+
+/*=============================== SPLICE SYSCALL =============================*/
+
+/*=============================== SOCKETCALL CODES ===========================*/
+
+#define SYS_SOCKET 1	  /* sys_socket(2)		*/
+#define SYS_BIND 2	  /* sys_bind(2)			*/
+#define SYS_CONNECT 3	  /* sys_connect(2)		*/
+#define SYS_LISTEN 4	  /* sys_listen(2)		*/
+#define SYS_ACCEPT 5	  /* sys_accept(2)		*/
+#define SYS_GETSOCKNAME 6 /* sys_getsockname(2)		*/
+#define SYS_GETPEERNAME 7 /* sys_getpeername(2)		*/
+#define SYS_SOCKETPAIR 8  /* sys_socketpair(2)		*/
+#define SYS_SEND 9	  /* sys_send(2)			*/
+#define SYS_RECV 10	  /* sys_recv(2)			*/
+#define SYS_SENDTO 11	  /* sys_sendto(2)		*/
+#define SYS_RECVFROM 12	  /* sys_recvfrom(2)		*/
+#define SYS_SHUTDOWN 13	  /* sys_shutdown(2)		*/
+#define SYS_SETSOCKOPT 14 /* sys_setsockopt(2)		*/
+#define SYS_GETSOCKOPT 15 /* sys_getsockopt(2)		*/
+#define SYS_SENDMSG 16	  /* sys_sendmsg(2)		*/
+#define SYS_RECVMSG 17	  /* sys_recvmsg(2)		*/
+#define SYS_ACCEPT4 18	  /* sys_accept4(2)		*/
+#define SYS_RECVMMSG 19	  /* sys_recvmmsg(2)		*/
+#define SYS_SENDMMSG 20	  /* sys_sendmmsg(2)		*/
+
+/*=============================== SOCKETCALL CODES ===========================*/
 
 #endif /* __MISSING_DEFINITIONS_H__ */

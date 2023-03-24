@@ -17,10 +17,128 @@ limitations under the License.
 
 #include "state.h"
 #include <feature_gates.h>
+#include <ppm_tp.h>
+#include <libpman.h>
 
 /* Some notes about how a bpf program must be detached without unloading it:
  * https://lore.kernel.org/bpf/CAEf4BzZ8=dV0wvggAKnD64yXnhcXhdf1ovCT_LBd17RtJJXrdA@mail.gmail.com/T/
  */
+
+int pman_update_single_program(int tp, bool enabled)
+{
+	int ret = 0;
+	switch(tp)
+	{
+	case SYS_ENTER:
+		if (enabled)
+		{
+			ret = pman_attach_syscall_enter_dispatcher();
+		}
+		else
+		{
+			ret = pman_detach_syscall_enter_dispatcher();
+		}
+		break;
+
+	case SYS_EXIT:
+		if (enabled)
+		{
+			ret = pman_attach_syscall_exit_dispatcher();
+		}
+		else
+		{
+			ret = pman_detach_syscall_exit_dispatcher();
+		}
+		break;
+	case SCHED_PROC_EXIT:
+		if (enabled)
+		{
+			ret = pman_attach_sched_proc_exit();
+		}
+		else
+		{
+			ret = pman_detach_sched_proc_exit();
+		}
+		break;
+
+	case SCHED_SWITCH:
+		if (enabled)
+		{
+			ret = pman_attach_sched_switch();
+		}
+		else
+		{
+			ret = pman_detach_sched_switch();
+		}
+		break;
+
+#ifdef CAPTURE_SCHED_PROC_EXEC
+	case SCHED_PROC_EXEC:
+		if (enabled)
+		{
+			ret = pman_attach_sched_proc_exec();
+		}
+		else
+		{
+			ret = pman_detach_sched_proc_exec();
+		}
+		break;
+#endif
+
+#ifdef CAPTURE_SCHED_PROC_FORK
+	case SCHED_PROC_FORK:
+		if (enabled)
+		{
+			ret = pman_attach_sched_proc_fork();
+		}
+		else
+		{
+			ret = pman_detach_sched_proc_fork();
+		}
+		break;
+#endif
+
+#ifdef CAPTURE_PAGE_FAULTS
+	case PAGE_FAULT_USER:
+		if (enabled)
+		{
+			ret = pman_attach_page_fault_user();
+		}
+		else
+		{
+			ret = pman_detach_page_fault_user();
+		}
+		break;
+
+	case PAGE_FAULT_KERN:
+		if (enabled)
+		{
+			ret = pman_attach_page_fault_kernel();
+		}
+		else
+		{
+			ret = pman_detach_page_fault_kernel();
+		}
+		break;
+#endif
+
+	case SIGNAL_DELIVER:
+		if (enabled)
+		{
+			ret = pman_attach_signal_deliver();
+		}
+		else
+		{
+			ret = pman_detach_signal_deliver();
+		}
+		break;
+
+	default:
+		/* Do nothing right now. */
+		break;
+	}
+	return ret;
+}
 
 /*=============================== ATTACH PROGRAMS ===============================*/
 
@@ -130,21 +248,67 @@ int pman_attach_sched_proc_fork()
 }
 #endif
 
+#ifdef CAPTURE_PAGE_FAULTS
+int pman_attach_page_fault_user()
+{
+	/* The program is already attached. */
+	if(g_state.skel->links.pf_user != NULL)
+	{
+		return 0;
+	}
+
+	g_state.skel->links.pf_user = bpf_program__attach(g_state.skel->progs.pf_user);
+	if(!g_state.skel->links.pf_user)
+	{
+		pman_print_error("failed to attach the 'pf_user' program");
+		return errno;
+	}
+	return 0;
+}
+
+int pman_attach_page_fault_kernel()
+{
+	/* The program is already attached. */
+	if(g_state.skel->links.pf_kernel != NULL)
+	{
+		return 0;
+	}
+
+	g_state.skel->links.pf_kernel = bpf_program__attach(g_state.skel->progs.pf_kernel);
+	if(!g_state.skel->links.pf_kernel)
+	{
+		pman_print_error("failed to attach the 'pf_kernel' program");
+		return errno;
+	}
+	return 0;
+}
+#endif
+
+int pman_attach_signal_deliver()
+{
+	/* The program is already attached. */
+	if(g_state.skel->links.signal_deliver != NULL)
+	{
+		return 0;
+	}
+
+	g_state.skel->links.signal_deliver = bpf_program__attach(g_state.skel->progs.signal_deliver);
+	if(!g_state.skel->links.signal_deliver)
+	{
+		pman_print_error("failed to attach the 'signal_deliver' program");
+		return errno;
+	}
+	return 0;
+}
+
 int pman_attach_all_programs()
 {
-	int err;
-	err = pman_attach_syscall_enter_dispatcher();
-	err = err ?: pman_attach_syscall_exit_dispatcher();
-	err = err ?: pman_attach_sched_proc_exit();
-	err = err ?: pman_attach_sched_switch();
-#ifdef CAPTURE_SCHED_PROC_EXEC
-	err = err ?: pman_attach_sched_proc_exec();
-#endif
-#ifdef CAPTURE_SCHED_PROC_FORK
-	err = err ?: pman_attach_sched_proc_fork();
-#endif
-	/* add all other programs. */
-	return err;
+	int ret = 0;
+	for (int i = 0; i < TP_VAL_MAX && ret == 0; i++)
+	{
+		ret = pman_update_single_program(i, true);
+	}
+	return ret;
 }
 
 /*=============================== ATTACH PROGRAMS ===============================*/
@@ -221,21 +385,50 @@ int pman_detach_sched_proc_fork()
 }
 #endif
 
+#ifdef CAPTURE_PAGE_FAULTS
+int pman_detach_page_fault_user()
+{
+	if(g_state.skel->links.pf_user && bpf_link__destroy(g_state.skel->links.pf_user))
+	{
+		pman_print_error("failed to detach the 'pf_user' program");
+		return errno;
+	}
+	g_state.skel->links.pf_user = NULL;
+	return 0;
+}
+
+int pman_detach_page_fault_kernel()
+{
+	if(g_state.skel->links.pf_kernel && bpf_link__destroy(g_state.skel->links.pf_kernel))
+	{
+		pman_print_error("failed to detach the 'pf_kernel' program");
+		return errno;
+	}
+	g_state.skel->links.pf_kernel = NULL;
+	return 0;
+}
+#endif
+
+int pman_detach_signal_deliver()
+{
+	if(g_state.skel->links.signal_deliver && bpf_link__destroy(g_state.skel->links.signal_deliver))
+	{
+		pman_print_error("failed to detach the 'signal_deliver' program");
+		return errno;
+	}
+	g_state.skel->links.signal_deliver = NULL;
+	return 0;
+}
+
 int pman_detach_all_programs()
 {
-	int err;
-	err = pman_detach_syscall_enter_dispatcher();
-	err = err ?: pman_detach_syscall_exit_dispatcher();
-	err = err ?: pman_detach_sched_proc_exit();
-	err = err ?: pman_detach_sched_switch();
-#ifdef CAPTURE_SCHED_PROC_EXEC
-	err = err ?: pman_detach_sched_proc_exec();
-#endif
-#ifdef CAPTURE_SCHED_PROC_FORK
-	err = err ?: pman_detach_sched_proc_fork();
-#endif	
-	/* add all other programs. */
-	return err;
+	int ret = 0;
+	for (int i = 0; i < TP_VAL_MAX && ret == 0; i++)
+	{
+		ret = pman_update_single_program(i, false);
+
+	}
+	return ret;
 }
 
 /*=============================== DETACH PROGRAMS ===============================*/

@@ -33,6 +33,7 @@ limitations under the License.
 #include "sinsp.h"
 #include "sinsp_int.h"
 
+using namespace std;
 using namespace libsinsp::cri;
 using namespace libsinsp::container_engine;
 using namespace libsinsp::runc;
@@ -86,7 +87,14 @@ bool cri_async_source::parse_containerd(const runtime::v1alpha2::ContainerStatus
 	if(root.isMember("sandboxID") && root["sandboxID"].isString())
 	{
 		const auto pod_sandbox_id = root["sandboxID"].asString();
-		container.m_container_ip = ntohl(m_cri->get_pod_sandbox_ip(pod_sandbox_id));
+		runtime::v1alpha2::PodSandboxStatusResponse resp_pod;
+		grpc::Status status_pod;
+		m_cri->get_pod_sandbox_resp(pod_sandbox_id, resp_pod, status_pod);
+		if (status_pod.ok())
+		{
+			container.m_container_ip = ntohl(m_cri->get_pod_sandbox_ip(resp_pod));
+			m_cri->get_pod_info_cniresult(resp_pod, container.m_pod_cniresult);
+		}
 	}
 
 	return ret;
@@ -169,15 +177,32 @@ bool cri_async_source::parse(const key_type& key, sinsp_container_info& containe
 		// name stays at its default "<NA>" value.
 	}
 
+	g_logger.format(sinsp_logger::SEV_DEBUG,
+			"cri (%s): after parse_containerd: repo=%s tag=%s image=%s digest=%s",
+			container.m_id.c_str(),
+			container.m_imagerepo.c_str(),
+			container.m_imagetag.c_str(),
+			container.m_image.c_str(),
+			container.m_imagedigest.c_str());
+
+
 	if(s_cri_extra_queries)
 	{
 		if(!container.m_container_ip)
 		{
-			container.m_container_ip = m_cri->get_container_ip(container.m_id);
+			m_cri->get_container_ip(container.m_id, container.m_container_ip, container.m_pod_cniresult);
 		}
 		if(container.m_imageid.empty())
 		{
 			container.m_imageid = m_cri->get_container_image_id(resp_container.image_ref());
+			g_logger.format(sinsp_logger::SEV_DEBUG,
+					"cri (%s): after get_container_image_id: repo=%s tag=%s image=%s digest=%s",
+					container.m_id.c_str(),
+					container.m_imagerepo.c_str(),
+					container.m_imagetag.c_str(),
+					container.m_image.c_str(),
+					container.m_imagedigest.c_str());
+
 		}
 	}
 
@@ -188,9 +213,14 @@ cri::cri(container_cache_interface &cache) : container_engine_base(cache)
 {
 	if (s_cri_unix_socket_paths.empty())
 	{
-		// Default value when empty
+		// containerd as primary default value when empty
 		s_cri_unix_socket_paths.emplace_back("/run/containerd/containerd.sock");
+		// crio-o as secondary default value when empty
+		s_cri_unix_socket_paths.emplace_back("/run/crio/crio.sock");
+		// k3s containerd as third option when empty
+		s_cri_unix_socket_paths.emplace_back("/run/k3s/containerd/containerd.sock");
 	}
+
 
 	// Try all specified unix socket paths
 	// NOTE: having multiple container runtimes on the same host is a sporadic case,
@@ -312,22 +342,47 @@ bool cri::resolve(sinsp_threadinfo *tinfo, bool query_os_for_missing_info)
 
 		if(!m_async_source)
 		{
-			auto async_source = new cri_async_source(cache, m_cri.get(), s_cri_timeout);
+			// Each lookup attempt involves two CRI API calls (see
+			// `cri_async_source::parse`), each one having a default timeout
+			// of 1000ms (`cri::set_cri_timeout`).
+			// On top of that, there's an exponential backoff with 125ms start
+			// time (`sinsp_container_lookup::delay`) with a maximum of 5
+			// retries.
+			// The maximum time to complete all attempts can be then evaluated
+			// with the following formula:
+			//
+			// max_wait_ms = (2 * s_cri_timeout) * n + (125 * (2^n - 1))
+			//
+			// Note that this excludes the time for the last 2 CRI API calls
+			// that will be performed anyway, even if the TTL expires.
+			//
+			// With n=5 the result is 13875ms, we keep some margin as we are
+			// taking into account elapsed time.
+			uint64_t max_wait_ms = 20000;
+			auto async_source = new cri_async_source(cache, m_cri.get(), max_wait_ms);
 			m_async_source = std::unique_ptr<cri_async_source>(async_source);
 		}
 
 		cache->set_lookup_status(container_id, m_cri->get_cri_runtime_type(), sinsp_container_lookup::state::STARTED);
 
-		sinsp_container_info result;
+		// sinsp_container_lookup is set-up to perform 5 retries at most, with
+		// an exponential backoff with 2000 ms of maximum wait time.
+		sinsp_container_info result(sinsp_container_lookup(5, 2000));
 
 		bool done;
 		const bool async = s_async && cache->async_allowed();
 		if(async)
 		{
+			g_logger.format(sinsp_logger::SEV_DEBUG,
+					"cri_async (%s): Starting asynchronous lookup",
+					container_id.c_str());
 			done = m_async_source->lookup(key, result);
 		}
 		else
 		{
+			g_logger.format(sinsp_logger::SEV_DEBUG,
+					"cri_async (%s): Starting synchronous lookup",
+					container_id.c_str());
 			done = m_async_source->lookup_sync(key, result);
 		}
 

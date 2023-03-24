@@ -18,11 +18,13 @@ limitations under the License.
 #include <stdio.h>
 #include <stdlib.h>
 
+#define SCAP_HANDLE_T struct nodriver_engine
+
 #include "nodriver.h"
 #include "noop.h"
 
 #include "scap.h"
-#include "../common/strlcpy.h"
+#include "strlcpy.h"
 #include "gettimeofday.h"
 #include "sleep.h"
 
@@ -72,4 +74,6 @@ const struct scap_vtable scap_nodriver_engine = {
 	.get_vpid = noop_get_vxid,
 	.get_vtid = noop_get_vxid,
 	.getpid_global = noop_getpid_global,
+	.get_api_version = NULL,
+	.get_schema_version = NULL,
 };

@@ -23,6 +23,23 @@ limitations under the License.
 #include <unordered_set>
 #include <netinet/in.h>
 
+#define ASSERT_NAMES_EQ(a, b) { \
+	ASSERT_EQ(std::set<std::string>(a.begin(), a.end()), std::set<std::string>(b.begin(), b.end())); \
+	ASSERT_EQ(a.size(), b.size()); \
+}
+
+#define ASSERT_PPM_EVENT_CODES_EQ(a, b) { \
+	ASSERT_EQ(libsinsp::events::set<ppm_event_code>(a.begin(), a.end()), libsinsp::events::set<ppm_event_code>(b.begin(), b.end())); \
+	ASSERT_TRUE(a.equals(b)); \
+	ASSERT_EQ(a.size(), b.size()); \
+}
+
+#define ASSERT_PPM_SC_CODES_EQ(a, b) { \
+	ASSERT_EQ(libsinsp::events::set<ppm_sc_code>(a.begin(), a.end()), libsinsp::events::set<ppm_sc_code>(b.begin(), b.end())); \
+	ASSERT_TRUE(a.equals(b)); \
+	ASSERT_EQ(a.size(), b.size()); \
+}
+
 namespace test_utils {
 
 // transform a list of strings into a single string where each element is delimited by a null (0) byte.

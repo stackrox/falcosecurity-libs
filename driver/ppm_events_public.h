@@ -613,7 +613,8 @@ or GPL2.txt for full copies of the license.
  * Execve family additional flags.
  */
 #define PPM_EXE_WRITABLE		(1 << 0)
-
+#define PPM_EXE_UPPER_LAYER 	(1 << 1)
+  
 /*
  * Execveat flags
  */
@@ -799,7 +800,7 @@ enum ppm_capture_category {
 /** @defgroup etypes Event Types
  *  @{
  */
-enum ppm_event_type {
+typedef enum ppm_event_type {
 	PPME_GENERIC_E = 0,
 	PPME_GENERIC_X = 1,
 	PPME_SYSCALL_OPEN_E = 2,
@@ -1179,8 +1180,18 @@ enum ppm_event_type {
 	PPME_SYSCALL_EPOLL_CREATE_X = 375,
 	PPME_SYSCALL_EPOLL_CREATE1_E = 376,
 	PPME_SYSCALL_EPOLL_CREATE1_X = 377,
-	PPM_EVENT_MAX = 378
-};
+	PPME_SYSCALL_CHOWN_E = 378,
+	PPME_SYSCALL_CHOWN_X = 379,
+	PPME_SYSCALL_LCHOWN_E = 380,
+	PPME_SYSCALL_LCHOWN_X = 381,
+	PPME_SYSCALL_FCHOWN_E = 382,
+	PPME_SYSCALL_FCHOWN_X = 383,
+	PPME_SYSCALL_FCHOWNAT_E = 384,
+	PPME_SYSCALL_FCHOWNAT_X = 385,
+	PPME_SYSCALL_UMOUNT_1_E = 386,
+	PPME_SYSCALL_UMOUNT_1_X = 387,
+	PPM_EVENT_MAX = 388
+} ppm_event_code;
 /*@}*/
 
 
@@ -1202,7 +1213,12 @@ enum extra_event_prog_code
 	T1_VFORK_X = 5,
 	T1_SCHED_PROC_EXEC = 6,
 	T1_SCHED_PROC_FORK = 7,
-	TAIL_EXTRA_EVENT_PROG_MAX = 8
+	T2_SCHED_PROC_FORK = 8,
+	T2_CLONE_X = 9,
+	T2_CLONE3_X = 10,
+	T2_FORK_X = 11,
+	T2_VFORK_X = 12,
+	TAIL_EXTRA_EVENT_PROG_MAX = 13
 };
 
 /*
@@ -1603,14 +1619,16 @@ enum extra_event_prog_code
 	PPM_SC_X(MEMBARRIER, 390) \
 	PPM_SC_X(IOPL, 391) \
 	PPM_SC_X(CLOSE_RANGE, 392) \
-	PPM_SC_X(FANOTIFY_MARK, 393)
+	PPM_SC_X(FANOTIFY_MARK, 393) \
+	PPM_SC_X(RECV, 394) \
+	PPM_SC_X(SEND, 395)
 
-enum ppm_syscall_code {
+typedef enum {
 #define PPM_SC_X(name, value) PPM_SC_##name = value,
 	PPM_SC_FIELDS
 #undef PPM_SC_X
 	PPM_SC_MAX,
-};
+} ppm_sc_code;
 
 /*
  * Event information enums
@@ -1787,14 +1805,14 @@ struct ppm_evt_hdr {
  */
 #ifndef CYGWING_AGENT
 #define PPM_IOCTL_MAGIC	's'
-#define PPM_IOCTL_DISABLE_CAPTURE _IO(PPM_IOCTL_MAGIC, 0)
-#define PPM_IOCTL_ENABLE_CAPTURE _IO(PPM_IOCTL_MAGIC, 1)
+// #define PPM_IOCTL_DISABLE_CAPTURE _IO(PPM_IOCTL_MAGIC, 0) Support dropped
+// #define PPM_IOCTL_ENABLE_CAPTURE _IO(PPM_IOCTL_MAGIC, 1) Support dropped
 #define PPM_IOCTL_DISABLE_DROPPING_MODE _IO(PPM_IOCTL_MAGIC, 2)
 #define PPM_IOCTL_ENABLE_DROPPING_MODE _IO(PPM_IOCTL_MAGIC, 3)
 #define PPM_IOCTL_SET_SNAPLEN _IO(PPM_IOCTL_MAGIC, 4)
-#define PPM_IOCTL_MASK_ZERO_EVENTS _IO(PPM_IOCTL_MAGIC, 5)
-#define PPM_IOCTL_MASK_SET_EVENT   _IO(PPM_IOCTL_MAGIC, 6)
-#define PPM_IOCTL_MASK_UNSET_EVENT _IO(PPM_IOCTL_MAGIC, 7)
+// #define PPM_IOCTL_MASK_ZERO_EVENTS _IO(PPM_IOCTL_MAGIC, 5) Support dropped
+// #define PPM_IOCTL_MASK_SET_EVENT   _IO(PPM_IOCTL_MAGIC, 6) Support dropped
+// #define PPM_IOCTL_MASK_UNSET_EVENT _IO(PPM_IOCTL_MAGIC, 7) Support dropped
 #define PPM_IOCTL_DISABLE_DYNAMIC_SNAPLEN _IO(PPM_IOCTL_MAGIC, 8)
 #define PPM_IOCTL_ENABLE_DYNAMIC_SNAPLEN _IO(PPM_IOCTL_MAGIC, 9)
 #define PPM_IOCTL_GET_VTID _IO(PPM_IOCTL_MAGIC, 10)
@@ -1813,8 +1831,13 @@ struct ppm_evt_hdr {
 #define PPM_IOCTL_SET_STATSD_PORT _IO(PPM_IOCTL_MAGIC, 23)
 #define PPM_IOCTL_GET_API_VERSION _IO(PPM_IOCTL_MAGIC, 24)
 #define PPM_IOCTL_GET_SCHEMA_VERSION _IO(PPM_IOCTL_MAGIC, 25)
-#define PPM_IOCTL_MANAGE_TP _IO(PPM_IOCTL_MAGIC, 26)
-#define PPM_IOCTL_GET_TPMASK _IO(PPM_IOCTL_MAGIC, 27)
+// #define PPM_IOCTL_MANAGE_TP _IO(PPM_IOCTL_MAGIC, 26) Support dropped
+// #define PPM_IOCTL_GET_TPMASK _IO(PPM_IOCTL_MAGIC, 27) Support dropped
+// #define PPM_IOCTL_ZERO_SYSCALLS _IO(PPM_IOCTL_MAGIC, 28) Support dropped
+#define PPM_IOCTL_ENABLE_SYSCALL   _IO(PPM_IOCTL_MAGIC, 29) // this replaces PPM_IOCTL_MASK_SET_EVENT
+#define PPM_IOCTL_DISABLE_SYSCALL _IO(PPM_IOCTL_MAGIC, 30) // this replaces PPM_IOCTL_MASK_UNSET_EVENT
+#define PPM_IOCTL_ENABLE_TP _IO(PPM_IOCTL_MAGIC, 31)
+#define PPM_IOCTL_DISABLE_TP _IO(PPM_IOCTL_MAGIC, 32)
 /* Begin StackRox Section */
 #define PPM_IOCTL_EXCLUDE_NS_OF_PID _IO(PPM_IOCTL_MAGIC, 40)
 /* End StackRox Section */
@@ -1862,19 +1885,11 @@ extern const struct ppm_name_value mlockall_flags[];
 extern const struct ppm_name_value mlock2_flags[];
 extern const struct ppm_name_value fsconfig_cmds[];
 extern const struct ppm_name_value epoll_create1_flags[];
+extern const struct ppm_name_value fchownat_flags[];
 
 extern const struct ppm_param_info sockopt_dynamic_param[];
 extern const struct ppm_param_info ptrace_dynamic_param[];
 extern const struct ppm_param_info bpf_dynamic_param[];
-
-/*
- * Driver event notification ID
- */
-enum ppm_driver_event_id {
-	DEI_NONE = 0,
-	DEI_DISABLE_DROPPING = 1,
-	DEI_ENABLE_DROPPING = 2,
-};
 
 /*!
   \brief Process information as returned by the PPM_IOCTL_GET_PROCLIST IOCTL.
@@ -1902,9 +1917,9 @@ enum syscall_flags {
 
 struct syscall_evt_pair {
 	int flags;
-	enum ppm_event_type enter_event_type;
-	enum ppm_event_type exit_event_type;
-	enum ppm_syscall_code ppm_sc;
+	ppm_event_code enter_event_type;
+	ppm_event_code exit_event_type;
+	ppm_sc_code ppm_sc;
 
 } _packed;
 
@@ -1973,27 +1988,5 @@ struct ppm_event_entry {
 #define RW_SNAPLEN 80
 #define RW_MAX_SNAPLEN PPM_MAX_ARG_SIZE
 #define RW_MAX_FULLCAPTURE_PORT_SNAPLEN 16000
-
-/*
- * Udig stuff
- */
-struct udig_consumer_t {
-	uint32_t snaplen;
-	uint32_t sampling_ratio;
-	bool do_dynamic_snaplen;
-	uint32_t sampling_interval;
-	int is_dropping;
-	int dropping_mode;
-	volatile int need_to_insert_drop_e;
-	volatile int need_to_insert_drop_x;
-	uint16_t fullcapture_port_range_start;
-	uint16_t fullcapture_port_range_end;
-	uint16_t statsd_port;
-};
-#ifdef UDIG
-typedef struct udig_consumer_t ppm_consumer_t;
-#else
-typedef struct ppm_consumer_t ppm_consumer_t;
-#endif /* UDIG */
 
 #endif /* EVENTS_PUBLIC_H_ */

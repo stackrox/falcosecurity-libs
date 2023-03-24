@@ -40,12 +40,13 @@ static void fill_event_params_table()
 	}
 }
 
-#ifdef TEST_HELPERS
-uint8_t pman_get_event_params(int event_type)
+static void fill_ppm_sc_table()
 {
-	return g_state.skel->rodata->g_event_params_table[event_type];
+	for(int j = 0; j < SYSCALL_TABLE_SIZE; ++j)
+	{
+		g_state.skel->rodata->g_ppm_sc_table[j] = (uint16_t)g_syscall_table[j].ppm_sc;
+	}
 }
-#endif
 
 uint64_t pman_get_probe_api_ver()
 {
@@ -71,6 +72,16 @@ void pman_set_boot_time(uint64_t boot_time)
 	g_state.skel->bss->g_settings.boot_time = boot_time;
 }
 
+void pman_set_dropping_mode(bool value)
+{
+	g_state.skel->bss->g_settings.dropping_mode = value;
+}
+
+void pman_set_sampling_ratio(uint32_t value)
+{
+	g_state.skel->bss->g_settings.sampling_ratio = value;
+}
+
 void pman_clean_all_64bit_interesting_syscalls()
 {
 	/* All syscalls are not interesting. */
@@ -85,6 +96,41 @@ void pman_mark_single_64bit_syscall(int intersting_syscall_id, bool interesting)
 	g_state.skel->bss->g_64bit_interesting_syscalls_table[intersting_syscall_id] = interesting;
 }
 
+void pman_fill_syscall_sampling_table()
+{
+	for(int syscall_id = 0; syscall_id < SYSCALL_TABLE_SIZE; syscall_id++)
+	{
+		if(g_syscall_table[syscall_id].flags & UF_NEVER_DROP)
+		{
+			g_state.skel->bss->g_64bit_sampling_syscall_table[syscall_id] = UF_NEVER_DROP;
+			continue;
+		}
+
+		/* Syscalls with `g_syscall_table[syscall_id].flags == UF_NONE` are the generic ones */
+		if(g_syscall_table[syscall_id].flags & UF_ALWAYS_DROP || g_syscall_table[syscall_id].flags == UF_NONE)
+		{
+			g_state.skel->bss->g_64bit_sampling_syscall_table[syscall_id] = UF_ALWAYS_DROP;
+			continue;
+		}
+
+		if(g_syscall_table[syscall_id].flags & UF_USED)
+		{
+			g_state.skel->bss->g_64bit_sampling_syscall_table[syscall_id] = 0;
+			continue;
+		}
+	}
+}
+
+void pman_fill_syscall_tracepoint_table()
+{
+	/* Right now these are the only 2 tracepoints involved in the dropping logic. We need to add them here */
+	g_state.skel->bss->g_64bit_sampling_tracepoint_table[PPME_PROCEXIT_1_E] = UF_NEVER_DROP;
+	g_state.skel->bss->g_64bit_sampling_tracepoint_table[PPME_SCHEDSWITCH_6_E] = 0;
+	g_state.skel->bss->g_64bit_sampling_tracepoint_table[PPME_PAGE_FAULT_E] = UF_ALWAYS_DROP;
+	g_state.skel->bss->g_64bit_sampling_tracepoint_table[PPME_SIGNALDELIVER_E] = UF_ALWAYS_DROP;
+}
+
+
 /*=============================== BPF GLOBAL VARIABLES ===============================*/
 
 /*=============================== BPF_MAP_TYPE_PROG_ARRAY ===============================*/
@@ -98,22 +144,28 @@ static int add_bpf_program_to_tail_table(int tail_table_fd, const char* bpf_prog
 	bpf_prog = bpf_object__find_program_by_name(g_state.skel->obj, bpf_prog_name);
 	if(!bpf_prog)
 	{
-		sprintf(error_message, "unable to find BPF program '%s'", bpf_prog_name);
+		snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unable to find BPF program '%s'", bpf_prog_name);
 		pman_print_error((const char*)error_message);
-		goto clean_add_program_to_tail_table;
+
+		/*
+		 * It's not a hard failure, as programs could be excluded from the
+		 * build. There is no need to close the file descriptor yet, so return
+		 * success.
+		 */
+		return 0;
 	}
 
 	bpf_prog_fd = bpf_program__fd(bpf_prog);
 	if(bpf_prog_fd <= 0)
 	{
-		sprintf(error_message, "unable to get the fd for BPF program '%s'", bpf_prog_name);
+		snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unable to get the fd for BPF program '%s'", bpf_prog_name);
 		pman_print_error((const char*)error_message);
 		goto clean_add_program_to_tail_table;
 	}
 
 	if(bpf_map_update_elem(tail_table_fd, &key, &bpf_prog_fd, BPF_ANY))
 	{
-		sprintf(error_message, "unable to update the tail table with BPF program '%s'", bpf_prog_name);
+		snprintf(error_message, MAX_ERROR_MESSAGE_LEN, "unable to update the tail table with BPF program '%s'", bpf_prog_name);
 		pman_print_error((const char*)error_message);
 		goto clean_add_program_to_tail_table;
 	}
@@ -154,26 +206,43 @@ int pman_fill_syscalls_tail_table()
 		enter_event_type = g_syscall_table[syscall_id].enter_event_type;
 		exit_event_type = g_syscall_table[syscall_id].exit_event_type;
 
-		/* Check if we have a corresponding bpf program for these events.
-		 * If we have no associated programs the tail call will fail for
-		 * these entries.
+		/* If the syscall is generic, the exit_event would be `0`, so
+		 * `PPME_GENERIC_E` but for the exit_event we want `PPME_GENERIC_X`
+		 * that is `1`, so we patch it on the fly, otherwise the exit_event
+		 * will be associated with the wrong bpf program, `generic_e` instead
+		 * of `generic_x`.
+		 */
+		if(exit_event_type == PPME_GENERIC_E)
+		{
+			exit_event_type = PPME_GENERIC_X;
+		}
+
+		/* At the end of the work, we should always have a corresponding bpf program for every event.
+		 * Until we miss some syscalls, this is not true so we manage these cases as generic events.
+		 * We need to remove this workaround when all syscalls will be implemented.
 		 */
 		enter_prog_name = event_prog_names[enter_event_type];
 		exit_prog_name = event_prog_names[exit_event_type];
 
-		if(enter_prog_name &&
-		   add_bpf_program_to_tail_table(syscall_enter_tail_table_fd, enter_prog_name, syscall_id))
+		if(!enter_prog_name)
+		{
+			enter_prog_name = event_prog_names[PPME_GENERIC_E];
+		}
+
+		if(!exit_prog_name)
+		{
+			exit_prog_name = event_prog_names[PPME_GENERIC_X];
+		}
+
+		if(add_bpf_program_to_tail_table(syscall_enter_tail_table_fd, enter_prog_name, syscall_id))
 		{
 			goto clean_fill_syscalls_tail_table;
 		}
 
-		if(exit_prog_name &&
-		   add_bpf_program_to_tail_table(syscall_exit_tail_table_fd, exit_prog_name, syscall_id))
+		if(add_bpf_program_to_tail_table(syscall_exit_tail_table_fd, exit_prog_name, syscall_id))
 		{
 			goto clean_fill_syscalls_tail_table;
 		}
-
-		/// TODO: for all not managed cases we can think of a generic bpf program like in the current probe.
 	}
 	return 0;
 
@@ -219,7 +288,8 @@ int pman_fill_extra_event_prog_tail_table()
 
 static int size_auxiliary_maps()
 {
-	if(bpf_map__set_max_entries(g_state.skel->maps.auxiliary_maps, g_state.n_cpus))
+	/* We always allocate auxiliary maps from all the CPUs, even if some of them are not online. */
+	if(bpf_map__set_max_entries(g_state.skel->maps.auxiliary_maps, g_state.n_possible_cpus))
 	{
 		pman_print_error("unable to set max entries for 'auxiliary_maps'");
 		return errno;
@@ -229,7 +299,8 @@ static int size_auxiliary_maps()
 
 static int size_counter_maps()
 {
-	if(bpf_map__set_max_entries(g_state.skel->maps.counter_maps, g_state.n_cpus))
+	/* We always allocate counter maps from all the CPUs, even if some of them are not online. */
+	if(bpf_map__set_max_entries(g_state.skel->maps.counter_maps, g_state.n_possible_cpus))
 	{
 		pman_print_error(" unable to set max entries for 'counter_maps'");
 		return errno;
@@ -248,6 +319,7 @@ int pman_prepare_maps_before_loading()
 
 	/* Read-only global variables must be set before loading phase. */
 	fill_event_params_table();
+	fill_ppm_sc_table();
 
 	/* We need to set the entries number for every BPF_MAP_TYPE_ARRAY
 	 * The number of entries will be always equal to the CPUs number.
@@ -265,6 +337,8 @@ int pman_finalize_maps_after_loading()
 	pman_set_snaplen(80);
 
 	/* We have to fill all ours tail tables. */
+	pman_fill_syscall_sampling_table();
+	pman_fill_syscall_tracepoint_table();
 	err = pman_fill_syscalls_tail_table();
 	err = err ?: pman_fill_extra_event_prog_tail_table();
 	return err;
