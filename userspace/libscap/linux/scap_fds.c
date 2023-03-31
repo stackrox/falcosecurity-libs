@@ -721,7 +721,7 @@ int32_t scap_fd_read_ipv4_sockets_from_proc_fs(const char *dir, int l4proto, sca
 	f = fopen(dir, "r");
 	if(NULL == f)
 	{
-		ASSERT(false);
+		/*ASSERT(false);*/
 		free(scan_buf);
 		return scap_errprintf(error, errno, "Could not open ipv4 sockets dir %s", dir);
 	}

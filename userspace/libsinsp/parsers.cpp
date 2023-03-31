@@ -2290,7 +2290,7 @@ void sinsp_parser::parse_dirfd(sinsp_evt *evt, char* name, int64_t dirfd, OUT st
 
 		if(evt->m_fdinfo == NULL)
 		{
-			ASSERT(false);
+			SINSP_ERROR("Failed to find dirfd %d", dirfd);
 			*sdir = "<UNKNOWN>";
 		}
 		else
@@ -3285,7 +3285,13 @@ void sinsp_parser::parse_connect_exit(sinsp_evt *evt)
 		// This happens for socket types that we don't support, so we have the assertion
 		// to make sure that this is not a type of socket that we support.
 		//
-		ASSERT(!(evt->m_fdinfo->is_unix_socket() || evt->m_fdinfo->is_ipv4_socket()));
+		// There will also be no address if the retval is different from
+		// success, e.g. SE_EINPROGRESS.
+		ASSERT(!(
+			retval == 0 &&
+			(evt->m_fdinfo->is_unix_socket() ||
+			evt->m_fdinfo->is_ipv4_socket())
+		));
 		return;
 	}
 
