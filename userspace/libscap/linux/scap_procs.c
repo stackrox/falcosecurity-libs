@@ -902,6 +902,7 @@ static int32_t scap_proc_add_from_proc(struct scap_linux_platform* linux_platfor
 			// If res != SCAP_SUCCESS, free thread data for consistency with other locations
 			// in this function where the return value != SCAP_SUCCESS.
 			scap_proc_free(handle, tinfo);
+			free_tinfo = false; // Already free'd by scap_proc_free
 		}
 		/* End StackRox Section */
 	}
