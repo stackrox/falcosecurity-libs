@@ -654,10 +654,8 @@ cleanup:
 }
 
 #if defined(CAPTURE_SOCKETCALL)
-static __always_inline long convert_network_syscalls(void *ctx)
+static __always_inline long convert_network_syscalls_by_id(int socketcall_id)
 {
-	int socketcall_id = (int)bpf_syscall_get_argument_from_ctx(ctx, 0);
-
 	switch(socketcall_id)
 	{
 #ifdef __NR_socket
@@ -767,6 +765,12 @@ static __always_inline long convert_network_syscalls(void *ctx)
 	}
 
 	return 0;
+}
+
+static __always_inline long convert_network_syscalls(void *ctx)
+{
+	int socketcall_id = (int)bpf_syscall_get_argument_from_ctx(ctx, 0);
+	return convert_network_syscalls_by_id(socketcall_id);
 }
 #endif
 
