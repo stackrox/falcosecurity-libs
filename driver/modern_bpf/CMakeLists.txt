@@ -13,21 +13,6 @@ endif()
 message(STATUS "${MODERN_BPF_LOG_PREFIX} MODERN_BPF_DEBUG_MODE: ${MODERN_BPF_DEBUG_MODE}")
 
 ########################
-# Check kernel version.
-########################
-
-# We check it here because the skeleton could be provided with the `MODERN_BPF_SKEL_DIR` env variable
-# so the compilation is still possible on older kernels.
-execute_process(COMMAND uname -r OUTPUT_VARIABLE UNAME_RESULT OUTPUT_STRIP_TRAILING_WHITESPACE)
-string(REGEX MATCH "[0-9]+.[0-9]+" LINUX_KERNEL_VERSION ${UNAME_RESULT})
-set(modern_bpf_min_kver_map_x86_64 5.8)
-set(modern_bpf_min_kver_map_aarch64 5.8)
-set(modern_bpf_min_kver_map_s390x 5.8)
-if (LINUX_KERNEL_VERSION VERSION_LESS ${modern_bpf_min_kver_map_${CMAKE_HOST_SYSTEM_PROCESSOR}})
-  message(WARNING "${MODERN_BPF_LOG_PREFIX} To run this driver you need a Linux kernel version >= ${modern_bpf_min_kver_map_${CMAKE_HOST_SYSTEM_PROCESSOR}} but actual kernel version is: ${UNAME_RESULT}")
-endif()
-
-########################
 # Get driver version.
 ########################
 
