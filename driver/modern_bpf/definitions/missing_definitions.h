@@ -32,6 +32,11 @@
  */
 #define _TIF_31BIT (1 << 16)
 
+#elif defined(__TARGET_ARCH_powerpc)
+
+/* Taken from arch/powerpc/include/asm/thread_info.h */
+#define _TIF_32BIT (1<<20)
+
 #endif
 
 /*=============================== ARCH SPECIFIC ===========================*/
@@ -163,6 +168,15 @@
 #define O_NOFOLLOW 0100000 /* don't follow links */
 #define O_DIRECT 0200000   /* direct disk access hint - currently ignored */
 #define O_LARGEFILE 0400000
+
+#elif defined(__TARGET_ARCH_powerpc)
+
+/* `/arch/powerpc/include/uapi/asm/fcntl.h` from kernel source tree. */
+
+#define O_DIRECTORY     040000	/* must be a directory */
+#define O_NOFOLLOW      0100000	/* don't follow links */
+#define O_LARGEFILE     0200000
+#define O_DIRECT	0400000	/* direct disk access hint */
 
 #endif
 
@@ -1363,10 +1377,10 @@
 
 /*=============================== SPLICE SYSCALL =============================*/
 
-#define SPLICE_F_MOVE	   (0x01)	
-#define SPLICE_F_NONBLOCK  (0x02) 
-#define SPLICE_F_MORE	   (0x04)	
-#define SPLICE_F_GIFT	   (0x08)	
+#define SPLICE_F_MOVE	   (0x01)
+#define SPLICE_F_NONBLOCK  (0x02)
+#define SPLICE_F_MORE	   (0x04)
+#define SPLICE_F_GIFT	   (0x08)
 
 #define SPLICE_F_ALL (SPLICE_F_MOVE|SPLICE_F_NONBLOCK|SPLICE_F_MORE|SPLICE_F_GIFT)
 
