@@ -592,15 +592,19 @@ static __always_inline u32 exctract__tty(struct task_struct *task)
  */
 static __always_inline void extract__loginuid(struct task_struct *task, u32 *loginuid)
 {
+	*loginuid = -1;
 	if (bpf_core_field_exists(task->loginuid))
 	{
 		READ_TASK_FIELD_INTO(loginuid, task, loginuid.val);
 	}
 	else
 	{
-		struct task_struct___cos *task_cos = (void *) task;
+		struct task_struct___cos *task_cos = (void *)task;
 
-		READ_TASK_FIELD_INTO(loginuid, task_cos, audit->loginuid.val);
+		if(bpf_core_field_exists(task_cos->audit->loginuid))
+		{
+			READ_TASK_FIELD_INTO(loginuid, task_cos, audit, loginuid.val);
+		}
 	}
 }
 
