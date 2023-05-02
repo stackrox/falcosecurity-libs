@@ -1331,7 +1331,10 @@ cgroups_error:
 			{
 
 				/* Support exe_writable */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+				exe_writable |= (file_permission(exe_file, MAY_WRITE) == 0);
+				exe_writable |= inode_owner_or_capable(file_mnt_idmap(exe_file), file_inode(exe_file));
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
 				exe_writable |= (inode_permission(current_user_ns(), file_inode(exe_file), MAY_WRITE) == 0);
 				exe_writable |= inode_owner_or_capable(current_user_ns(), file_inode(exe_file));
 #else
@@ -1406,9 +1409,15 @@ cgroups_error:
 		 * capabilities
 		 */
 		cred = get_current_cred();
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 3, 0)
 		cap_inheritable = ((uint64_t)cred->cap_inheritable.cap[1] << 32) | cred->cap_inheritable.cap[0];
 		cap_permitted = ((uint64_t)cred->cap_permitted.cap[1] << 32) | cred->cap_permitted.cap[0];
 		cap_effective = ((uint64_t)cred->cap_effective.cap[1] << 32) | cred->cap_effective.cap[0];
+#else
+		cap_inheritable = (uint64_t)cred->cap_inheritable.val;
+		cap_permitted = (uint64_t)cred->cap_permitted.val;
+		cap_effective = (uint64_t)cred->cap_effective.val;
+#endif
 		put_cred(cred);
 
 		/* Parameter 21: cap_inheritable (type: PT_UINT64) */
@@ -6959,18 +6968,29 @@ int f_sys_capset_x(struct event_filler_arguments *args)
 		return res;
 
 	cred = get_current_cred();
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 3, 0)
 	val = ((uint64_t)cred->cap_inheritable.cap[1] << 32) | cred->cap_inheritable.cap[0];
+#else
+	val = (uint64_t)cred->cap_inheritable.val;
+#endif
 	res = val_to_ring(args, capabilities_to_scap(val), 0, false, 0);
 	if(unlikely(res != PPM_SUCCESS))
 		goto out;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 3, 0)
 	val = ((uint64_t)cred->cap_permitted.cap[1] << 32) | cred->cap_permitted.cap[0];
+#else
+	val = (uint64_t)cred->cap_permitted.val;
+#endif
 	res = val_to_ring(args, capabilities_to_scap(val), 0, false, 0);
 	if(unlikely(res != PPM_SUCCESS))
 		goto out;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 3, 0)
 	val = ((uint64_t)cred->cap_effective.cap[1] << 32) | cred->cap_effective.cap[0];
+#else
+	val = (uint64_t)cred->cap_effective.val;
+#endif
 	res = val_to_ring(args, capabilities_to_scap(val), 0, false, 0);
 	if(unlikely(res != PPM_SUCCESS))
 		goto out;
