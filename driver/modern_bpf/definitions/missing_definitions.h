@@ -1227,6 +1227,12 @@
 
 #define CAP_LAST_CAP CAP_CHECKPOINT_RESTORE
 
+/* `/include/linux/capability.h` from kernel source tree. */
+
+#define cap_raised(c, flag) ((c).cap[CAP_TO_INDEX(flag)] & CAP_TO_MASK(flag))
+
+#define cap_raised___v6_3(c, flag) (((c).val & (1 << (flag))) != 0)
+
 /*=============================== CAPABILITIES ===========================*/
 
 /*=============================== DIRECTORY_NOTIFICATIONS ===========================*/
