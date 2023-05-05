@@ -3266,7 +3266,7 @@ FILLER(sys_open_by_handle_at_x, true)
 {
 	/* Parameter 1: ret (type: PT_FD) */
 	long retval = bpf_syscall_get_retval(data->ctx);
-	int res = bpf_push_s64_to_ring(data, retval);
+	int res = bpf_val_to_ring(data, (s64)retval);
 	CHECK_RES(res);
 
 	/* Parameter 2: mountfd (type: PT_FD) */
@@ -3280,7 +3280,7 @@ FILLER(sys_open_by_handle_at_x, true)
 
 	/* Parameter 3: flags (type: PT_FLAGS32) */
 	u32 flags = (u32)bpf_syscall_get_argument(data, 2);
-	res = bpf_push_u32_to_ring(data, open_flags_to_scap(flags));
+	res = bpf_val_to_ring(data, open_flags_to_scap(flags));
 	CHECK_RES(res);
 	
 	/* Parameter 4: path (type: PT_FSPATH) */
