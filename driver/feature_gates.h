@@ -157,6 +157,7 @@ or GPL2.txt for full copies of the license.
 #elif defined(__s390x__)
 	#error s390x requires USE_BPF_PROBE_KERNEL_USER_VARIANTS, but not set.
 #endif
+#error Using this source?
 
 #elif defined(__USE_VMLINUX__) /* modern BPF probe */
 
