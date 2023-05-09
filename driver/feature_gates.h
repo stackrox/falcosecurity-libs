@@ -154,6 +154,8 @@ or GPL2.txt for full copies of the license.
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,5,0)) || \
 	((PPM_RHEL_RELEASE_CODE > 0) && (PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 5)))
 		#define USE_BPF_PROBE_KERNEL_USER_VARIANTS
+#elif defined(__s390x__)
+	#error s390x requires USE_BPF_PROBE_KERNEL_USER_VARIANTS, but not set.
 #endif
 
 #elif defined(__USE_VMLINUX__) /* modern BPF probe */
