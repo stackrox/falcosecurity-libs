@@ -44,7 +44,7 @@ struct sys_exit_args {
 #else
 struct sys_exit_args {
 	__u64 pad;
-#ifdef USE_COLLECTOR_CUSTOM_PROBES
+#if !defined(RHEL_RELEASE_CODE) || RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(8, 0)
 	int id;
 #else
 	long id;
