@@ -60,7 +60,7 @@ or GPL2.txt for full copies of the license.
  * been introduced in the following kernel release:
  * https://github.com/torvalds/linux/commit/0a16b6075843325dc402edf80c1662838b929aff
  */
-#if defined(CONFIG_ARM64) || defined(CONFIG_S390)
+#if defined(CONFIG_ARM64)
 	#define CAPTURE_SCHED_PROC_FORK 
 #endif
 
@@ -170,7 +170,7 @@ or GPL2.txt for full copies of the license.
 // CAPTURE_SCHED_PROC_FORK 
 ///////////////////////////////
 
-#if defined(__TARGET_ARCH_arm64) || defined(__TARGET_ARCH_s390)
+#if defined(__TARGET_ARCH_arm64)
 	#define CAPTURE_SCHED_PROC_FORK 
 #endif
 
@@ -229,7 +229,7 @@ or GPL2.txt for full copies of the license.
 // CAPTURE_SCHED_PROC_FORK 
 ///////////////////////////////
 
-#if defined(__aarch64__) || defined(__s390x__)
+#if defined(__aarch64__)
 	#define CAPTURE_SCHED_PROC_FORK 
 #endif
 
