@@ -44,7 +44,11 @@ struct sys_exit_args {
 #else
 struct sys_exit_args {
 	__u64 pad;
+#if !defined(RHEL_RELEASE_CODE) || RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(8, 0)
+	int id;
+#else
 	long id;
+#endif
 	long ret;
 };
 #endif

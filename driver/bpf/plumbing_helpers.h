@@ -255,8 +255,15 @@ static __always_inline unsigned long bpf_syscall_get_socketcall_arg(void *ctx, i
 	unsigned long arg = 0;
 	unsigned long args_pointer = 0;
 
+#ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
 	args_pointer = bpf_syscall_get_argument_from_ctx(ctx, 1);
-	bpf_probe_read_user(&arg, sizeof(unsigned long), (void*)(args_pointer + (idx * sizeof(unsigned long))));
+#else
+	unsigned long *args = unstash_args();	/* socketcall arguments */
+	if (args)
+		args_pointer = bpf_syscall_get_argument_from_args(args, 1);
+#endif
+	if (args_pointer)
+		bpf_probe_read_user(&arg, sizeof(unsigned long), (void*)(args_pointer + (idx * sizeof(unsigned long))));
 
 	return arg;
 }
@@ -265,15 +272,14 @@ static __always_inline unsigned long bpf_syscall_get_socketcall_arg(void *ctx, i
 static __always_inline unsigned long bpf_syscall_get_argument(struct filler_data *data,
 							      int idx)
 {
-#ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
-
-/* We define it here because we support socket calls only on kernels with BPF_SUPPORTS_RAW_TRACEPOINTS */
 #ifdef CAPTURE_SOCKETCALL
 	if(bpf_syscall_get_nr(data->ctx) == __NR_socketcall)
 	{
 		return bpf_syscall_get_socketcall_arg(data->ctx, idx);
 	}
-#endif /* CAPTURE_SOCKETCALL */
+#endif
+
+#ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
 	return bpf_syscall_get_argument_from_ctx(data->ctx, idx);
 #else
 	return bpf_syscall_get_argument_from_args(data->args, idx);
@@ -647,11 +653,9 @@ cleanup:
 	release_local_state(state);
 }
 
-#if defined(CAPTURE_SOCKETCALL) && defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
-static __always_inline long convert_network_syscalls(void *ctx)
+#if defined(CAPTURE_SOCKETCALL)
+static __always_inline long convert_network_syscalls_by_id(int socketcall_id)
 {
-	int socketcall_id = (int)bpf_syscall_get_argument_from_ctx(ctx, 0);
-
 	switch(socketcall_id)
 	{
 #ifdef __NR_socket
@@ -761,6 +765,12 @@ static __always_inline long convert_network_syscalls(void *ctx)
 	}
 
 	return 0;
+}
+
+static __always_inline long convert_network_syscalls(void *ctx)
+{
+	int socketcall_id = (int)bpf_syscall_get_argument_from_ctx(ctx, 0);
+	return convert_network_syscalls_by_id(socketcall_id);
 }
 #endif
 

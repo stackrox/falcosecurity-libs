@@ -1838,8 +1838,8 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 	}
 
 	int res = bpf_probe_read_kernel_str(&buf[off & SCRATCH_SIZE_HALF],
-					    SCRATCH_SIZE_HALF,
-					    subsys_name);
+				     SCRATCH_SIZE_HALF,
+				     subsys_name);
 	if (res == -EFAULT || res == 0)
 		return PPM_FAILURE_INVALID_USER_MEMORY;
 
@@ -1890,7 +1890,7 @@ static __always_inline int __bpf_append_cgroup(struct css_set *cgroups,
 			return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 		}
 
-		res = bpf_probe_read_str(&buf[off & SCRATCH_SIZE_HALF],
+		res = bpf_probe_read_kernel_str(&buf[off & SCRATCH_SIZE_HALF],
 						SCRATCH_SIZE_HALF,
 						cgroup_path[k]);
 		if (res <= 0)
@@ -2008,8 +2008,10 @@ static __always_inline int bpf_accumulate_argv_or_env(struct filler_data *data,
 			return PPM_FAILURE_FRAME_SCRATCH_MAP_FULL;
 		}
 
-		len = bpf_probe_read_user_str(&data->buf[off & SCRATCH_SIZE_HALF], SCRATCH_SIZE_HALF, arg);
+		len = bpf_probe_read_kernel_str(&data->buf[off & SCRATCH_SIZE_HALF], SCRATCH_SIZE_HALF, arg);
+        /* Begin StackRox Section */
 		if (len == -EFAULT || len == 0)
+        /* End StackRox Section */
 			return PPM_FAILURE_INVALID_USER_MEMORY;
 
 		*args_len += len;
