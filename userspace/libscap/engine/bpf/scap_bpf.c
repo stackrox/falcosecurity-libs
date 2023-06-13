@@ -122,7 +122,15 @@ static const char *g_filler_names[PPM_FILLER_MAX] = {
 
 static int sys_bpf(enum bpf_cmd cmd, union bpf_attr *attr, unsigned int size)
 {
-	return syscall(__NR_bpf, cmd, attr, size);
+
+	int err = syscall(__NR_bpf, cmd, attr, size);
+
+	if (err == EAGAIN) {
+		return syscall(__NR_bpf, cmd, attr, size);
+	}
+
+	return err;
+
 }
 
 static int sys_perf_event_open(struct perf_event_attr *attr,
