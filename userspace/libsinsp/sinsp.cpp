@@ -1350,7 +1350,7 @@ int32_t sinsp::next(OUT sinsp_evt **puevt)
 		{
 			uint64_t remove_tid = m_tid_to_remove;
 			m_tid_to_remove = -1;
-			remove_thread(remove_tid, false);
+			remove_thread(remove_tid);
 		}
 
 		if(!is_offline())
@@ -1595,9 +1595,9 @@ bool sinsp::add_thread(std::shared_ptr<sinsp_threadinfo> ptinfo)
 	return m_thread_manager->add_thread(std::move(ptinfo), false);
 }
 
-void sinsp::remove_thread(int64_t tid, bool force)
+void sinsp::remove_thread(int64_t tid)
 {
-	m_thread_manager->remove_thread(tid, force);
+	m_thread_manager->remove_thread(tid);
 }
 
 bool sinsp::suppress_events_comm(const std::string &comm)
@@ -2726,7 +2726,7 @@ bool sinsp_thread_manager::remove_inactive_threads()
 
 		if (!to_delete.empty()) {
             for (auto &it : to_delete) {
-                remove_thread(it.first, it.second);
+                remove_thread(it.first);
             }
 
             //

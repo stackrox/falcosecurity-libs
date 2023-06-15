@@ -582,7 +582,7 @@ public:
 	void clear();
 
 	bool add_thread(std::shared_ptr<sinsp_threadinfo> threadinfo, bool from_scap_proctable);
-	void remove_thread(int64_t tid, bool force);
+	void remove_thread(int64_t tid);
 	// Returns true if the table is actually scanned
 	// NOTE: this is implemented in sinsp.cpp so we can inline it from there
 	inline bool remove_inactive_threads();
@@ -700,7 +700,7 @@ public:
 		// we have more than one thread removed in a given event loop iteration?
 		if(m_threadtable.get(key))
 		{
-			this->remove_thread(key, false);
+			this->remove_thread(key);
 			return true;
 		}
 		return false;
