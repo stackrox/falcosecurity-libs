@@ -3216,6 +3216,7 @@ FILLER(sys_openat_x, true)
 	long retval;
 	int res;
 
+	res = 0;
 	retval = bpf_syscall_get_retval(data->ctx);
 	res = bpf_val_to_ring(data, retval);
 	if (res != PPM_SUCCESS)
@@ -3259,19 +3260,19 @@ FILLER(sys_openat_x, true)
 	if (res != PPM_SUCCESS)
 		return res;
 
-	bpf_get_fd_dev_ino(retval, &dev, &ino);
+	//bpf_get_fd_dev_ino(retval, &dev, &ino);
 
-	/*
-	 * Device
-	 */
-	res = bpf_val_to_ring(data, dev);
-	if (res != PPM_SUCCESS)
-		return res;
+	///*
+	// * Device
+	// */
+	//res = bpf_val_to_ring(data, dev);
+	//if (res != PPM_SUCCESS)
+	//	return res;
 
-	/*
-	 * Ino
-	 */
-	res = bpf_val_to_ring(data, ino);
+	///*
+	// * Ino
+	// */
+	//res = bpf_val_to_ring(data, ino);
 	return res;
 }
 
