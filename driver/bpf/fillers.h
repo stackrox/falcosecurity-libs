@@ -3216,62 +3216,63 @@ FILLER(sys_openat_x, true)
 	long retval;
 	int res;
 
-	retval = bpf_syscall_get_retval(data->ctx);
-	res = bpf_val_to_ring(data, retval);
-	if (res != PPM_SUCCESS)
-		return res;
+	res = 0;
+	//retval = bpf_syscall_get_retval(data->ctx);
+	//res = bpf_val_to_ring(data, retval);
+	//if (res != PPM_SUCCESS)
+	//	return res;
 
-	/*
-	 * dirfd
-	 */
-	val = bpf_syscall_get_argument(data, 0);
-	if ((int)val == AT_FDCWD)
-		val = PPM_AT_FDCWD;
+	///*
+	// * dirfd
+	// */
+	//val = bpf_syscall_get_argument(data, 0);
+	//if ((int)val == AT_FDCWD)
+	//	val = PPM_AT_FDCWD;
 
-	res = bpf_val_to_ring(data, val);
-	if (res != PPM_SUCCESS)
-		return res;
+	//res = bpf_val_to_ring(data, val);
+	//if (res != PPM_SUCCESS)
+	//	return res;
 
-	/*
-	 * name
-	 */
-	val = bpf_syscall_get_argument(data, 1);
-	res = bpf_val_to_ring(data, val);
-	if (res != PPM_SUCCESS)
-		return res;
+	///*
+	// * name
+	// */
+	//val = bpf_syscall_get_argument(data, 1);
+	//res = bpf_val_to_ring(data, val);
+	//if (res != PPM_SUCCESS)
+	//	return res;
 
-	/*
-	 * Flags
-	 * Note that we convert them into the ppm portable representation before pushing them to the ring
-	 */
-	val = bpf_syscall_get_argument(data, 2);
-	flags = open_flags_to_scap(val);
-	res = bpf_val_to_ring(data, flags);
-	if (res != PPM_SUCCESS)
-		return res;
+	///*
+	// * Flags
+	// * Note that we convert them into the ppm portable representation before pushing them to the ring
+	// */
+	//val = bpf_syscall_get_argument(data, 2);
+	//flags = open_flags_to_scap(val);
+	//res = bpf_val_to_ring(data, flags);
+	//if (res != PPM_SUCCESS)
+	//	return res;
 
-	/*
-	 * mode
-	 */
-	mode = bpf_syscall_get_argument(data, 3);
-	mode = open_modes_to_scap(val, mode);
-	res = bpf_val_to_ring(data, mode);
-	if (res != PPM_SUCCESS)
-		return res;
+	///*
+	// * mode
+	// */
+	//mode = bpf_syscall_get_argument(data, 3);
+	//mode = open_modes_to_scap(val, mode);
+	//res = bpf_val_to_ring(data, mode);
+	//if (res != PPM_SUCCESS)
+	//	return res;
 
-	bpf_get_fd_dev_ino(retval, &dev, &ino);
+	//bpf_get_fd_dev_ino(retval, &dev, &ino);
 
-	/*
-	 * Device
-	 */
-	res = bpf_val_to_ring(data, dev);
-	if (res != PPM_SUCCESS)
-		return res;
+	///*
+	// * Device
+	// */
+	//res = bpf_val_to_ring(data, dev);
+	//if (res != PPM_SUCCESS)
+	//	return res;
 
-	/*
-	 * Ino
-	 */
-	res = bpf_val_to_ring(data, ino);
+	///*
+	// * Ino
+	// */
+	//res = bpf_val_to_ring(data, ino);
 	return res;
 }
 
