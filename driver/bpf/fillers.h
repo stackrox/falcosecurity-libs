@@ -3216,6 +3216,7 @@ FILLER(sys_openat_x, true)
 	long retval;
 	int res;
 
+	res = 0;
 	retval = bpf_syscall_get_retval(data->ctx);
 	res = bpf_val_to_ring(data, retval);
 	if (res != PPM_SUCCESS)
