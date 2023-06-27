@@ -3217,7 +3217,7 @@ FILLER(sys_openat_x, true)
 	int res;
 
 	retval = bpf_syscall_get_retval(data->ctx);
-	res = bpf_val_to_ring(data, retval);
+	res = bpf_push_s64_to_ring(data, retval);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -3228,7 +3228,7 @@ FILLER(sys_openat_x, true)
 	if ((int)val == AT_FDCWD)
 		val = PPM_AT_FDCWD;
 
-	res = bpf_val_to_ring(data, val);
+	res = bpf_push_s64_to_ring(data, val);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -3246,7 +3246,7 @@ FILLER(sys_openat_x, true)
 	 */
 	val = bpf_syscall_get_argument(data, 2);
 	flags = open_flags_to_scap(val);
-	res = bpf_val_to_ring(data, flags);
+	res = bpf_push_u32_to_ring(data, flags);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -3255,7 +3255,7 @@ FILLER(sys_openat_x, true)
 	 */
 	mode = bpf_syscall_get_argument(data, 3);
 	mode = open_modes_to_scap(val, mode);
-	res = bpf_val_to_ring(data, mode);
+	res = bpf_push_u32_to_ring(data, mode);
 	if (res != PPM_SUCCESS)
 		return res;
 
@@ -3264,14 +3264,14 @@ FILLER(sys_openat_x, true)
 	/*
 	 * Device
 	 */
-	res = bpf_val_to_ring(data, dev);
+	res = bpf_push_u32_to_ring(data, dev);
 	if (res != PPM_SUCCESS)
 		return res;
 
 	/*
 	 * Ino
 	 */
-	res = bpf_val_to_ring(data, ino);
+	res = bpf_push_u64_to_ring(data, ino);
 	return res;
 }
 
