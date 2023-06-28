@@ -1617,6 +1617,11 @@ bool sinsp_thread_manager::add_thread(std::shared_ptr<sinsp_threadinfo> threadin
  */
 sinsp_threadinfo* sinsp_thread_manager::find_new_reaper(sinsp_threadinfo* tinfo)
 {
+	if(tinfo == nullptr)
+	{
+		throw sinsp_exception("cannot call find_new_reaper() on a null tinfo");
+	}
+
 	/* First we check in our thread group for alive threads */
 	if(tinfo->m_tginfo != nullptr && tinfo->m_tginfo->get_thread_count() > 0)
 	{
