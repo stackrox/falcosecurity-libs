@@ -29,7 +29,11 @@ or GPL2.txt for full copies of the license.
 		bpf_trace_printk(s, sizeof(s), ##__VA_ARGS__);	\
 	} while (0)
 #else
-#define bpf_printk(fmt, ...)
+#define bpf_printk(fmt, ...)					\
+	do {							\
+		char s[] = fmt;					\
+		bpf_trace_printk(s, sizeof(s), ##__VA_ARGS__);	\
+	} while (0)
 #endif
 
 #ifndef BPF_SUPPORTS_RAW_TRACEPOINTS
@@ -552,6 +556,9 @@ static __always_inline void call_filler(void *ctx,
 	}
 
 	ts = settings->boot_time + bpf_ktime_get_boot_ns();
+	bpf_printk("In call_filler settings->boot_time= %llu\n", settings->boot_time);
+        bpf_printk("In call_filler bpf_ktime_get_boot_ns()= %llu\n", bpf_ktime_get_boot_ns());
+        bpf_printk("In call_filler ts= %llu\n", ts);
 	reset_tail_ctx(state, evt_type, ts);
 
 	/* drop_event can change state->tail_ctx.evt_type */
