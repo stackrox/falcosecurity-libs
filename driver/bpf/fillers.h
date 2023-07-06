@@ -2027,6 +2027,8 @@ static __always_inline int bpf_accumulate_argv_or_env(struct filler_data *data,
 	return PPM_SUCCESS;
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+
 // log(NGROUPS_MAX) = log(65536)
 #define MAX_GROUP_SEARCH_DEPTH 16
 
@@ -2239,6 +2241,7 @@ static __always_inline bool get_exe_writable(struct inode *inode, struct cred *c
 
 	return false;
 }
+#endif // LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
 
 static __always_inline bool get_exe_upper_layer(struct dentry *dentry, struct super_block *sb)
 {
@@ -2791,7 +2794,9 @@ FILLER(execve_family_flags, true)
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	struct cred *cred = (struct cred *)_READ(task->cred);
 	struct file *exe_file = get_exe_file(task);
-	struct inode *inode = _READ(exe_file->f_inode);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
+	struct inode *inode = get_exe_inode(task);
+#endif
 	struct path f_path = (struct path)_READ(exe_file->f_path);
 	struct dentry* dentry = f_path.dentry;
 
@@ -2807,6 +2812,7 @@ FILLER(execve_family_flags, true)
 	uint32_t flags = 0;
 	kuid_t euid;
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
 	if(sb && inode)
 	{
 		/*
@@ -2829,6 +2835,7 @@ FILLER(execve_family_flags, true)
 
 		// write all additional flags for execve family here...
 	}
+#endif // LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
 
 	/* Parameter 20: flags (type: PT_FLAGS32) */
 	int res = bpf_push_u32_to_ring(data, flags);
@@ -2861,6 +2868,7 @@ FILLER(execve_family_flags, true)
 #endif
 	CHECK_RES(res);
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 9, 0)
 	/* Parameter 24: exe_file ino (type: PT_UINT64) */
 	unsigned long ino = _READ(inode->i_ino);
 	res = bpf_push_u64_to_ring(data, ino);
@@ -2877,6 +2885,7 @@ FILLER(execve_family_flags, true)
 	time = _READ(inode->i_mtime);
 	res = bpf_push_u64_to_ring(data, bpf_epoch_ns_from_time(time));
 	CHECK_RES(res);
+#endif
 
 	/* Parameter 27: uid */
 	euid = _READ(cred->euid);
