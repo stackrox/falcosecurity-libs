@@ -681,6 +681,14 @@
 // chmod modes
 //////////////////////////
 
+/*=============================== INODE/SUPERBLOCK FLAGS ===========================*/
+
+/* `/include/linux/fs.h` from kernel source tree. */
+
+#define SB_RDONLY 1	     /* Mount read-only */
+#define S_IMMUTABLE (1 << 3) /* Immutable file */
+
+
 /* `/include/uapi/linux/stat.h` from kernel source tree. */
 
 #define S_IFMT 00170000
@@ -709,6 +717,10 @@
 #define S_IROTH 00004
 #define S_IWOTH 00002
 #define S_IXOTH 00001
+
+#define S_ISREG(m) (((m)&S_IFMT) == S_IFREG)
+#define S_ISDIR(m) (((m)&S_IFMT) == S_IFDIR)
+#define S_ISLNK(m) (((m)&S_IFMT) == S_IFLNK)
 
 //////////////////////////
 // epoll_create1 flags
@@ -915,6 +927,13 @@
 /*=============================== CAPABILITIES ===========================*/
 
 /* `/include/uapi/linux/capability.h` from kernel source tree. */
+
+/*
+ * Bit location of each capability (used by user-space library and kernel)
+ */
+
+#define CAP_TO_INDEX(x) ((x) >> 5)	/* 1 << 5 == bits in __u32 */
+#define CAP_TO_MASK(x) (1U << ((x)&31)) /* mask for indexed __u32 */
 
 /* In a system with the [_POSIX_CHOWN_RESTRICTED] option defined, this
    overrides the restriction of changing file ownership and group

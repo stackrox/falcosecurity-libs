@@ -2973,10 +2973,7 @@ FILLER(execve_family_flags, true)
 
 	/* Parameter 23: cap_effective (type: PT_UINT64) */
 	cap = _READ(cred->cap_effective);
-	res = bpf_val_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
-=======
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 3, 0)
-	res = bpf_push_u64_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
 	res = bpf_val_to_ring(data, capabilities_to_scap(((unsigned long)cap.cap[1] << 32) | cap.cap[0]));
 #else
 	res = bpf_val_to_ring(data, capabilities_to_scap((unsigned long)cap.val));
