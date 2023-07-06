@@ -566,6 +566,9 @@ void sinsp_parser::event_cleanup(sinsp_evt *evt)
 //
 bool sinsp_parser::reset(sinsp_evt *evt)
 {
+	if (evt == NULL)
+		return false;
+
 	uint16_t etype = evt->get_type();
 	//
 	// Before anything can happen, the event needs to be
@@ -1304,7 +1307,8 @@ void sinsp_parser::parse_clone_exit(sinsp_evt *evt)
 	// XXX this should absolutely not do a malloc, but get the item from a
 	// preallocated list
 	//
-	sinsp_threadinfo* tinfo = m_inspector->build_threadinfo();
+	auto tinfo_ref = m_inspector->build_threadinfo();
+	auto* tinfo = tinfo_ref.get();
 
 	//
 	// Set the tid and parent tid
@@ -1726,7 +1730,7 @@ void sinsp_parser::parse_clone_exit(sinsp_evt *evt)
 	//
 	// Add the new thread to the table
 	//
-	bool thread_added = m_inspector->add_thread(tinfo);
+	m_inspector->add_thread(tinfo_ref);
 
 	//
 	// Refresh user / loginuser / group
@@ -1761,12 +1765,6 @@ void sinsp_parser::parse_clone_exit(sinsp_evt *evt)
 		               tinfo->m_tid,
 		               tinfo->m_comm.c_str());
 	}
-
-	if (!thread_added) {
-		delete tinfo;
-	}
-
-	return;
 }
 
 void sinsp_parser::parse_execve_enter(sinsp_evt *evt)
@@ -5272,16 +5270,16 @@ namespace
 		}
 		return false;
 	}
-	
+
 	bool check_json_val_is_convertible(const Json::Value& value, Json::ValueType other, const char* field, bool log_message=false)
 	{
 		if(value.isNull()) {
 			return false;
 		}
-	
+
 		if(!value.isConvertibleTo(other)) {
 			std::string err_msg;
-		
+
 			if(log_message) {
 				err_msg = generate_error_message(value, field);
 				SINSP_WARNING("%s",err_msg.c_str());
@@ -5290,7 +5288,7 @@ namespace
 					err_msg = generate_error_message(value, field);
 					SINSP_DEBUG("%s",err_msg.c_str());
 				}
-			}			
+			}
 			return false;
 		}
 		return true;

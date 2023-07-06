@@ -53,6 +53,8 @@ if(NOT MINIMAL_BUILD)
 	endif() # NOT WIN32
 endif()
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+
 if(NOT WIN32 AND NOT APPLE)
 	if(NOT MINIMAL_BUILD)
 		include(grpc)
@@ -191,9 +193,11 @@ if(NOT MINIMAL_BUILD)
 	endif()
 endif()
 
-add_library(sinsp ${SINSP_SOURCES})
+add_library(sinsp STATIC ${SINSP_SOURCES})
 
 set_sinsp_target_properties(sinsp)
+
+set_target_properties(sinsp PROPERTIES COMPILE_FLAGS "-fPIC")
 
 set(SINSP_LIBRARIES
 	scap
@@ -238,13 +242,18 @@ if(NOT WIN32)
 					WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 			add_dependencies(sinsp grpc)
+
+			if(USE_BUNDLED_GRPC)
+				add_dependencies(sinsp grpc)
+				list(APPEND SINSP_LIBRARIES "${GRPC_LIBRARIES}")
+			endif() # USE_BUNDLED_GRPC
+
+			if(NOT NO_LINK_GRPC_LIBS)
+				list(APPEND SINSP_LIBRARIES "${GRPCPP_LIB}" "${GRPC_LIB}" "${PROTOBUF_LIB}" "${CARES_LIB}")
+			endif()
+
 			list(APPEND SINSP_LIBRARIES
-				"${GRPC_LIBRARIES}"
-				"${GRPCPP_LIB}"
-				"${GRPC_LIB}"
 				"${GPR_LIB}"
-				"${PROTOBUF_LIB}"
-				"${CARES_LIB}"
 				"${JQ_LIB}"
 				"${B64_LIB}")
 
@@ -355,3 +364,6 @@ string(REPLACE ";" " " SINSP_PKG_CONFIG_LIBDIRS "${SINSP_PKG_CONFIG_LIBDIRS}")
 list(REMOVE_DUPLICATES SINSP_PKG_CONFIG_INCLUDES)
 string(REPLACE ";" " " SINSP_PKG_CONFIG_INCLUDES "${SINSP_PKG_CONFIG_INCLUDES}")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/libsinsp.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libsinsp.pc @ONLY)
+
+add_library(sinsp-wrapper SHARED wrapper.cpp)
+target_link_libraries(sinsp-wrapper sinsp)

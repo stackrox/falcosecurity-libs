@@ -31,6 +31,9 @@ limitations under the License.
 #include <time.h>
 #include <dirent.h>
 #include "strlcpy.h"
+/* Begin StackRox */
+#include <unistd.h>
+/* End StackRox */
 
 #define SCAP_HANDLE_T struct bpf_engine
 
@@ -106,6 +109,8 @@ static inline void scap_bpf_advance_to_next_evt(scap_device* dev, scap_evt *even
 // subset of features needed.
 //
 
+unsigned char g_bpf_drop_syscalls[SYSCALL_TABLE_SIZE] = {};
+
 struct bpf_map_data {
 	int fd;
 	size_t elf_offset;
@@ -118,12 +123,15 @@ static struct bpf_engine* alloc_handle(scap_t* main_handle, char* lasterr_ptr)
 	if(engine)
 	{
 		engine->m_lasterr = lasterr_ptr;
+        /* Begin StackRox Section */
+        engine->sroxAttachedIdx = BPF_PROG_ATTACHED_MAX;
+        /* End StackRox Section */
 		for(int j=0; j < BPF_PROGS_TAIL_CALLED_MAX; j++)
 		{
 			engine->m_tail_called_fds[j] = -1;
 		}
 
-		for(int j=0; j < BPF_PROG_ATTACHED_MAX; j++)
+		for(int j=0; j < BPF_PROG_ATTACHED_MAX + 128; j++)
 		{
 			engine->m_attached_progs[j].fd = -1;
 		}
@@ -518,6 +526,8 @@ static int32_t load_single_prog(struct bpf_engine* handle, const char *event, st
 	int fd;
 	const char *final_section_name = NULL;
 
+    fprintf(stderr, "loading %s\n", event);
+
 	insns_cnt = size / sizeof(struct bpf_insn);
 
 	char *error = malloc(BPF_LOG_SIZE);
@@ -621,50 +631,55 @@ static int32_t load_single_prog(struct bpf_engine* handle, const char *event, st
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SYS_ENTER], raw_tp, event, fd);
 	}
 
-	if(is_sys_exit(event))
+    else if(is_sys_exit(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SYS_EXIT], raw_tp, event, fd);
 	}
 
-	if(is_sched_proc_exit(event))
+    else if(is_sched_proc_exit(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXIT], raw_tp, event, fd);
 	}
 
-	if(is_sched_switch(event))
+    else if(is_sched_switch(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SCHED_SWITCH], raw_tp, event, fd);
 	}
 
-	if(is_page_fault_user(event))
+    else if(is_page_fault_user(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_PAGE_FAULT_USER], raw_tp, event, fd);
 	}
 
-	if(is_page_fault_kernel(event))
+    else if(is_page_fault_kernel(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_PAGE_FAULT_KERNEL], raw_tp, event, fd);
 	}
 
-	if(is_signal_deliver(event))
+    else if(is_signal_deliver(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SIGNAL_DELIVER], raw_tp, event, fd);
 	}
 
-	if(is_sched_prog_fork_move_args(event))
+    else if(is_sched_prog_fork_move_args(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MOVE_ARGS], raw_tp, event, fd);
 	}
 
-	if(is_sched_prog_fork_missing_child(event))
+    else if(is_sched_prog_fork_missing_child(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_FORK_MISSING_CHILD], raw_tp, event, fd);
 	}
 
-	if(is_sched_prog_exec_missing_exit(event))
+    else if(is_sched_prog_exec_missing_exit(event))
 	{
 		fill_attached_prog_info(&handle->m_attached_progs[BPF_PROG_SCHED_PROC_EXEC_MISSING_EXIT], raw_tp, event, fd);
 	}
+
+    else {
+        fill_attached_prog_info(&handle->m_attached_progs[handle->sroxAttachedIdx], raw_tp, event, fd);
+        handle->sroxAttachedIdx++;
+    }
 
 	return SCAP_SUCCESS;
 }
@@ -1013,6 +1028,7 @@ static int enforce_sc_set(struct bpf_engine* handle)
 			continue;
 		}
 
+
 		if(!sc_set[sc])
 		{
 			set_single_syscall_of_interest(handle, syscall_id, false);
@@ -1023,6 +1039,7 @@ static int enforce_sc_set(struct bpf_engine* handle)
 			sys_exit = true;
 			sched_prog_fork_move_args = true;
 			set_single_syscall_of_interest(handle, syscall_id, true);
+
 		}
 	}
 
@@ -1039,6 +1056,12 @@ static int enforce_sc_set(struct bpf_engine* handle)
 	{
 		sched_prog_exec = true;
 	}
+
+    /* Begin StackRox Section */
+    for (int idx = BPF_PROG_ATTACHED_MAX; idx < handle->sroxAttachedIdx; idx++) {
+        ret = ret ?: attach_bpf_prog(&(handle->m_attached_progs[idx]), handle->m_lasterr);
+    }
+    /* End StackRox Section */
 
 	/* Enable desired tracepoints */
 	if(sys_enter)
@@ -1335,7 +1358,7 @@ int32_t scap_bpf_close(struct scap_engine_handle engine)
 	handle->m_tail_called_cnt = 0;
 
 
-	for(int j = 0; j < BPF_PROG_ATTACHED_MAX; j++)
+	for(int j = 0; j < handle->sroxAttachedIdx; j++)
 	{
 		detach_bpf_prog(&handle->m_attached_progs[j]);
 		unload_bpf_prog(&handle->m_attached_progs[j]);
@@ -1465,6 +1488,17 @@ int32_t scap_bpf_load(
 {
 	int online_cpu;
 	int j;
+
+	/* Begin StackRox */
+	int hotplug_enabled = 0;
+	char hotplug_filename[SCAP_MAX_PATH_SIZE];
+
+	snprintf(hotplug_filename, sizeof(hotplug_filename), "%s/sys/devices/system/cpu/hotplug/states", scap_get_host_root());
+	if(access(hotplug_filename, F_OK) == 0) {
+		hotplug_enabled = 1;
+	}
+	/* End StackRox */
+
 	struct scap_bpf_engine_params* bpf_args = oargs->engine_params;
 
 	if(set_runtime_params(handle) != SCAP_SUCCESS)
@@ -1531,7 +1565,9 @@ int32_t scap_bpf_load(
 		int ret;
 		struct scap_device *dev;
 
-		if(j > 0)
+		/* Begin StackRox */
+		if(hotplug_enabled == 1 && j > 0)
+		/* End StackRox */
 		{
 			char filename[SCAP_MAX_PATH_SIZE];
 			int online;
@@ -1981,7 +2017,7 @@ static int32_t init(scap_t* handle, scap_open_args *oargs)
 		{
 			return rc;
 		}
-	}	
+	}
 
 	/* Store interesting sc codes */
 	memcpy(&engine.m_handle->curr_sc_set, &oargs->ppm_sc_of_interest, sizeof(interesting_ppm_sc_set));

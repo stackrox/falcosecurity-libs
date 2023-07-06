@@ -2182,4 +2182,9 @@ struct ppm_event_entry {
 #define PPM_SKIP_EVENT -4
 #define PPM_FAILURE_FRAME_SCRATCH_MAP_FULL -5	/* this is used only inside bpf, kernel module does not have a frame scratch map*/
 
+/*
+ * machine_info flags.
+ */
+#define PPM_BPF_STATS_ENABLED		(1 << 0)
+
 #endif /* EVENTS_PUBLIC_H_ */

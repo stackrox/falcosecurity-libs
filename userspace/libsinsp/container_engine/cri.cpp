@@ -77,7 +77,9 @@ bool cri_async_source::parse_containerd(const runtime::v1alpha2::ContainerStatus
 			container.m_id.c_str(),
 			info_it->second.c_str());
 
-	m_cri->parse_cri_env(root, container);
+	/* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
+	//m_cri->parse_cri_env(root, container);
+	/* End StackRox */
 	m_cri->parse_cri_json_image(root, container);
 	bool ret = m_cri->parse_cri_ext_container_info(root, container);
 	m_cri->parse_cri_user_info(root, container);
@@ -135,6 +137,8 @@ bool cri_async_source::parse(const key_type& key, sinsp_container_info& containe
 	// This is in Nanoseconds(in CRI API). Need to convert it to seconds.
 	container.m_created_time = static_cast<int64_t>(resp_container.created_at() / ONE_SECOND_IN_NS );
 
+	/* Begin StackRox - Image labels and env vars are not used by StackRox collector (ROX-6200) */
+#if 0
 	for(const auto &pair : resp_container.labels())
 	{
 		if(pair.second.length() <= sinsp_container_info::m_container_label_max_length)
@@ -142,6 +146,8 @@ bool cri_async_source::parse(const key_type& key, sinsp_container_info& containe
 			container.m_labels[pair.first] = pair.second;
 		}
 	}
+#endif
+	/* End StackRox */
 
 	m_cri->parse_cri_image(resp_container, resp_container_info, container);
 	m_cri->parse_cri_mounts(resp_container, container);
@@ -463,5 +469,3 @@ void cri::update_with_size(const std::string& container_id)
 
 	container_cache().replace_container(updated);
 }
-
-
