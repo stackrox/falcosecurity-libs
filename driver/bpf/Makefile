@@ -64,4 +64,9 @@ $(obj)/probe.o: $(src)/probe.c \
 		-fno-stack-protector \
 		-Wno-tautological-compare \
 		-O2 $(BPF_DEBUG_SYMBOLS) -emit-llvm -c $< -o $(patsubst %.o,%.ll,$@)
-	$(LLC) -march=bpf -filetype=obj -o $@ $(patsubst %.o,%.ll,$@)
+	$(LLC) \
+		-march=bpf \
+		-mcpu=probe \
+		-mattr=+alu32 \
+		-filetype=obj \
+		-o $@ $(patsubst %.o,%.ll,$@)
