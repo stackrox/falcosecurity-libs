@@ -1,3 +1,4 @@
+
 #
 # Copyright (C) 2022 The Falco Authors.
 #
@@ -100,6 +101,12 @@ if (BUILD_SHARED_LIBS)
 	message(STATUS "Shared library version: ${FALCOSECURITY_SHARED_LIBS_VERSION}")
 	message(STATUS "Shared library soversion: ${FALCOSECURITY_SHARED_LIBS_SOVERSION}")
 endif()
+
+if(NOT WIN32 AND NOT APPLE)
+	option(NO_LINK_GRPC_LIBS "Do not link gRPC libraries" OFF)
+endif()
+
+option(BUILD_USERSPACE "Build userspace libraries" ON)
 
 include(libscap)
 include(libsinsp)

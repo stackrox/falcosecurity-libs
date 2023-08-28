@@ -74,6 +74,8 @@ BPF_PROBE("raw_syscalls/", sys_enter, sys_enter_args)
 	} else {
 		evt_type = PPME_GENERIC_E;
 		drop_flags = UF_ALWAYS_DROP;
+		// Drop syscall events without UF_USED flag
+		return 0;
 	}
 
 #ifdef BPF_SUPPORTS_RAW_TRACEPOINTS
@@ -145,6 +147,8 @@ BPF_PROBE("raw_syscalls/", sys_exit, sys_exit_args)
 	} else {
 		evt_type = PPME_GENERIC_X;
 		drop_flags = UF_ALWAYS_DROP;
+		// Drop syscall events without UF_USED flag
+		return 0;
 	}
 
 #if defined(CAPTURE_SCHED_PROC_FORK) || defined(CAPTURE_SCHED_PROC_EXEC)
@@ -174,6 +178,7 @@ BPF_PROBE("sched/", sched_process_exit, sched_process_exit_args)
 	return 0;
 }
 
+#if 0 /* StackRox: Drop switch, page fault, and signal events */
 BPF_PROBE("sched/", sched_switch, sched_switch_args)
 {
 	ppm_event_code evt_type;
@@ -215,6 +220,7 @@ BPF_PROBE("signal/", signal_deliver, signal_deliver_args)
 	call_filler(ctx, ctx, evt_type, UF_ALWAYS_DROP);
 	return 0;
 }
+#endif
 
 #ifndef BPF_SUPPORTS_RAW_TRACEPOINTS
 __bpf_section(TP_NAME "sched/sched_process_fork&1")

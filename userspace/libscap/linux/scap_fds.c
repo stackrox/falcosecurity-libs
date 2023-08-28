@@ -1288,6 +1288,15 @@ int32_t scap_fd_scan_fd_dir(struct scap_linux_platform *linux_platform, struct s
 			continue;
 		}
 
+		/* Begin StackRox Section */
+		// StackRox does not track non-socket fds
+		if(!S_ISSOCK(sb.st_mode))
+		{
+			continue;
+		}
+
+		/* End StackRox Section */
+
 		// In no driver mode to limit cpu usage we just parse sockets
 		// because we are interested only on them
 		if(linux_platform->m_minimal_scan && !S_ISSOCK(sb.st_mode))

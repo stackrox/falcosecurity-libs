@@ -32,13 +32,29 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
 		set(KBUILD_FLAGS "${FALCOSECURITY_LIBS_DEBUG_FLAGS}")
 	endif()
 
-	# do not remove this since when WITH_DRIVER is off
-	if(NOT DEFINED DRIVER_NAME)
-		set(DRIVER_NAME "scap")
-	endif()
+    if(NOT DEFINED PROBE_VERSION)
+        set(DRIVER_VERSION "${FALCOSECURITY_LIBS_VERSION}")
+    endif()
 
-	string(REPLACE "-" "_" SCAP_KERNEL_MODULE_NAME "${DRIVER_NAME}")
-	add_definitions(-DSCAP_KERNEL_MODULE_NAME="${SCAP_KERNEL_MODULE_NAME}")
+    if(NOT DEFINED DRIVER_NAME)
+        set(DRIVER_NAME "scap")
+    endif()
+
+    if(NOT DEFINED DRIVER_DEVICE_NAME)
+        set(DRIVER_DEVICE_NAME "${DRIVER_NAME}")
+    endif()
+
+    string(REPLACE "-" "_" SCAP_KERNEL_MODULE_NAME "${DRIVER_NAME}")
+    add_definitions(-DSCAP_KERNEL_MODULE_NAME="${SCAP_KERNEL_MODULE_NAME}")
+
+	if(NOT DEFINED SCAP_PROBE_BPF_FILEPATH)
+		# note that the home folder is prepended by scap at runtime
+        set(SCAP_PROBE_BPF_FILEPATH ".${DRIVER_NAME}/${DRIVER_NAME}-bpf.o")
+	endif()
+endif()
+
+if(NOT DEFINED SCAP_BPF_PROBE_ENV_VAR_NAME)
+	set(SCAP_BPF_PROBE_ENV_VAR_NAME "BPF_PROBE")
 endif()
 
 if(NOT DEFINED SCAP_HOST_ROOT_ENV_VAR_NAME)
@@ -62,6 +78,8 @@ endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+
 add_library(scap
 	scap.c
 	scap_api_version.c
@@ -84,6 +102,13 @@ elseif(EMSCRIPTEN)
 endif()
 
 set_scap_target_properties(scap)
+
+set_target_properties(scap PROPERTIES COMPILE_FLAGS "-fPIC")
+
+if (CMAKE_SYSTEM_NAME MATCHES "SunOS")
+	target_link_libraries(scap
+		socket nsl)
+endif()
 
 add_library(scap_platform_util
 	STATIC

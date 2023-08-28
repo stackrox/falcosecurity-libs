@@ -892,7 +892,18 @@ static int32_t scap_proc_add_from_proc(struct scap_linux_platform* linux_platfor
 	//
 	if(tinfo->pid == tinfo->tid)
 	{
-		res = scap_fd_scan_fd_dir(linux_platform, proclist, dir_name, tinfo, sockets_by_ns, num_fds_ret, error);
+		/* Begin StackRox Section */
+		if((res = scap_fd_scan_fd_dir(linux_platform, proclist, dir_name, tinfo, sockets_by_ns, num_fds_ret, error)) != SCAP_SUCCESS)
+		{
+			// Ensure tinfo is not free'd twice
+			if (procinfo && *procinfo == tinfo)
+				*procinfo = NULL;
+
+			// If res != SCAP_SUCCESS, free thread data for consistency with other locations
+			// in this function where the return value != SCAP_SUCCESS.
+			scap_proc_free(handle, tinfo);
+		}
+		/* End StackRox Section */
 	}
 
 	if(free_tinfo)
@@ -1036,6 +1047,10 @@ static int32_t _scap_proc_scan_proc_dir_impl(struct scap_linux_platform* linux_p
 			// for that process arrives.
 			//
 			//
+			/* Begin StackRox Section */
+			// Log error and continue when proc scrape fails
+			fprintf(stderr, "error reading %s/%"PRIu64" %s\n", procdirname, tid, add_error);
+			/* End StackRox Section */
 			res = SCAP_SUCCESS;
 			//
 			// Continue because if we failed to read details of pid=1234,
@@ -1197,6 +1212,9 @@ struct scap_threadinfo* scap_linux_proc_get(struct scap_platform* platform, stru
 	if(scap_proc_read_thread(linux_platform, proclist, filename, tid, &tinfo, linux_platform->m_lasterr, scan_sockets) != SCAP_SUCCESS)
 	{
 		free(tinfo);
+		/* Begin StackRox Section */
+		// TODO ROX-6096 proc scrape error count statistics
+		/* End StackRox Section */
 		return NULL;
 	}
 

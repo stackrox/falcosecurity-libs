@@ -16,6 +16,7 @@ limitations under the License.
 */
 
 #include <algorithm>
+#include <memory>
 
 #if !defined(MINIMAL_BUILD) && !defined(__EMSCRIPTEN__)
 #ifdef HAS_CAPTURE
@@ -363,15 +364,13 @@ void sinsp_container_manager::notify_new_container(const sinsp_container_info& c
 	// In all other cases, containers will be stored after the proper
 	// PPME_CONTAINER_JSON_2_E event is received by the engine and processed.
 
-	sinsp_evt *evt = new sinsp_evt();
+	auto cevt = std::make_shared<sinsp_evt>();
 
-	if(container_to_sinsp_event(container_to_json(container_info), evt, container_info.get_tinfo(m_inspector)))
+	if(container_to_sinsp_event(container_to_json(container_info), cevt.get(), container_info.get_tinfo(m_inspector)))
 	{
 		g_logger.format(sinsp_logger::SEV_DEBUG,
 				"notify_new_container (%s): created CONTAINER_JSON event, queuing to inspector",
 				container_info.m_id.c_str());
-
-		std::shared_ptr<sinsp_evt> cevt(evt);
 
 		// Enqueue it onto the queue of pending container events for the inspector
 #ifndef __EMSCRIPTEN__	
@@ -383,7 +382,6 @@ void sinsp_container_manager::notify_new_container(const sinsp_container_info& c
 		g_logger.format(sinsp_logger::SEV_ERROR,
 				"notify_new_container (%s): could not create CONTAINER_JSON event, dropping",
 				container_info.m_id.c_str());
-		delete evt;
 	}
 }
 

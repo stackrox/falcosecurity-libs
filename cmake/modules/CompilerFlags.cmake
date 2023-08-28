@@ -69,3 +69,7 @@ else() # MSVC
 
 	add_definitions(-D_HAS_STD_BYTE=0)
 endif()
+
+if(APPLE)
+	set(CMAKE_EXE_LINKER_FLAGS "-pagezero_size 10000 -image_base 100000000")
+endif()

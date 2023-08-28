@@ -591,6 +591,9 @@ void sinsp_parser::event_cleanup(sinsp_evt *evt)
 //
 bool sinsp_parser::reset(sinsp_evt *evt)
 {
+	if (evt == NULL)
+		return false;
+
 	uint16_t etype = evt->get_type();
 	//
 	// Before anything can happen, the event needs to be
@@ -1603,7 +1606,7 @@ void sinsp_parser::parse_clone_exit_caller(sinsp_evt *evt, int64_t child_tid)
 	/*=============================== ADD THREAD TO THE TABLE ===========================*/
 
 	/* Until we use the shared pointer we need it here, after we can move it at the end */
-	bool thread_added = m_inspector->add_thread(child_tinfo);
+	m_inspector->add_thread(child_tinfo);
 
 	/* Refresh user / loginuser / group */
 	if(child_tinfo->m_container_id.empty() == false)
@@ -1632,11 +1635,6 @@ void sinsp_parser::parse_clone_exit_caller(sinsp_evt *evt, int64_t child_tid)
 		DBG_SINSP_INFO("tid collision for %" PRIu64 "(%s)",
 		               tid_collision,
 		               child_tinfo->m_comm.c_str());
-	}
-
-	if(!thread_added)
-	{
-		delete child_tinfo;
 	}
 
 	/*=============================== ADD THREAD TO THE TABLE ===========================*/
@@ -2145,7 +2143,7 @@ void sinsp_parser::parse_clone_exit_child(sinsp_evt *evt)
 	/*=============================== CREATE NEW THREAD-INFO ===========================*/
 
 	/* Add the new thread to the table */
-	bool thread_added = m_inspector->add_thread(child_tinfo);
+	m_inspector->add_thread(child_tinfo);
 
 	/* Update the evt->m_tinfo of the child.
 	 * We update it here, in this way the `on_clone`
@@ -2182,12 +2180,6 @@ void sinsp_parser::parse_clone_exit_child(sinsp_evt *evt)
 #endif
 		/* Right now we have collisions only on the clone() caller */
 		DBG_SINSP_INFO("tid collision for %" PRIu64 "(%s)", tid_collision, child_tinfo->m_comm.c_str());
-	}
-
-	if(!thread_added)
-	{
-		evt->m_tinfo = nullptr;
-		delete child_tinfo;
 	}
 
 	/*=============================== CREATE NEW THREAD-INFO ===========================*/

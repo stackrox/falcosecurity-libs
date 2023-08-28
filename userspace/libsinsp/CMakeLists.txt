@@ -55,6 +55,8 @@ if(NOT MINIMAL_BUILD)
 	endif() # NOT WIN32
 endif()
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+
 if(NOT WIN32 AND NOT APPLE )
 	if(NOT MINIMAL_BUILD AND NOT EMSCRIPTEN)
 		include(grpc)
@@ -191,13 +193,15 @@ if(NOT MINIMAL_BUILD AND NOT EMSCRIPTEN)
 	endif()
 endif()
 
-add_library(sinsp ${SINSP_SOURCES})
+add_library(sinsp STATIC ${SINSP_SOURCES})
 
 if (EMSCRIPTEN)
 	target_compile_options(sinsp PRIVATE "-sDISABLE_EXCEPTION_CATCHING=0")
 endif()
 
 set_sinsp_target_properties(sinsp)
+
+set_target_properties(sinsp PROPERTIES COMPILE_FLAGS "-fPIC")
 
 target_link_libraries(sinsp
 		PUBLIC scap
@@ -404,3 +408,6 @@ string(REPLACE ";" " " SINSP_PKG_CONFIG_LIBDIRS "${SINSP_PKG_CONFIG_LIBDIRS}")
 list(REMOVE_DUPLICATES SINSP_PKG_CONFIG_INCLUDES)
 string(REPLACE ";" " " SINSP_PKG_CONFIG_INCLUDES "${SINSP_PKG_CONFIG_INCLUDES}")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/libsinsp.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libsinsp.pc @ONLY)
+
+add_library(sinsp-wrapper SHARED wrapper.cpp)
+target_link_libraries(sinsp-wrapper sinsp)

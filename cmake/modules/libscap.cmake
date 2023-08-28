@@ -53,7 +53,9 @@ function(set_scap_target_properties target)
 	)
 endfunction()
 
-add_subdirectory(${LIBSCAP_DIR}/userspace/libscap ${PROJECT_BINARY_DIR}/libscap)
+if(BUILD_USERSPACE)
+	add_subdirectory(${LIBSCAP_DIR}/userspace/libscap ${PROJECT_BINARY_DIR}/libscap)
+endif() # BUILD_USERSPACE
 
 set(LIBSCAP_INSTALL_LIBS)
 
@@ -99,11 +101,13 @@ endforeach()
 string(REPLACE ";" " " LIBSCAP_LINK_LIBRARIES_FLAGS "${libscap_link_flags}")
 configure_file(${LIBSCAP_DIR}/userspace/libscap/libscap.pc.in ${PROJECT_BINARY_DIR}/libscap/libscap.pc @ONLY)
 
+if (BUILD_USERSPACE)
 install(TARGETS ${LIBSCAP_INSTALL_LIBS}
 			ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}/${LIBS_PACKAGE_NAME}"
 			LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/${LIBS_PACKAGE_NAME}"
 			RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 			COMPONENT "scap" OPTIONAL)
+endif()
 install(DIRECTORY "${LIBSCAP_INCLUDE_DIR}" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${LIBS_PACKAGE_NAME}/userspace"
 			COMPONENT "scap"
 			FILES_MATCHING PATTERN "*.h"
