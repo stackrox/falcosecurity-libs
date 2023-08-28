@@ -3374,7 +3374,7 @@ FILLER(sys_open_by_handle_at_x, true)
 {
 	/* Parameter 1: ret (type: PT_FD) */
 	long retval = bpf_syscall_get_retval(data->ctx);
-	int res = bpf_push_s64_to_ring(data, retval);
+	int res = bpf_val_to_ring(data, (s64)retval);
 	CHECK_RES(res);
 
 	/* Parameter 2: mountfd (type: PT_FD) */
@@ -3391,7 +3391,7 @@ FILLER(sys_open_by_handle_at_x, true)
 	flags = (u32)open_flags_to_scap(flags);
 	/* update flags if file is created*/	
 	flags |= bpf_get_fd_fmode_created(retval);
-	res = bpf_push_u32_to_ring(data, flags);
+	res = bpf_val_to_ring(data, flags);
 	CHECK_RES(res);
 	
 	/* Parameter 4: path (type: PT_FSPATH) */
