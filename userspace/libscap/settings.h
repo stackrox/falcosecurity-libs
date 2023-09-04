@@ -22,6 +22,6 @@ limitations under the License.
 
 #if !defined(MINIMAL_BUILD) || defined(MINIMAL_BUILD_WITH_EBPF)
 #define USE_ZLIB
-#endif // MINIMAL_BUILD || MINIMAL_BUILD_WITH_EBPF
+#endif // !MINIMAL_BUILD || MINIMAL_BUILD_WITH_EBPF
 
 #define SCAP_NODRIVER_MAX_FD_LOOKUP 20
