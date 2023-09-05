@@ -41,7 +41,6 @@ endif()
 project(falcosecurity-libs)
 
 option(USE_BUNDLED_DEPS "Enable bundled dependencies instead of using the system ones" ON)
-option(MINIMAL_BUILD "Produce a minimal build with only the essential features (no eBPF probe driver, no kubernetes, no mesos, no marathon and no container metadata)" OFF)
 option(MUSL_OPTIMIZED_BUILD "Enable if you want a musl optimized build" OFF)
 option(USE_BUNDLED_DRIVER "Use the driver/ subdirectory in the build process (only available in Linux)" ON)
 option(ENABLE_DRIVERS_TESTS "Enable driver tests (bpf, kernel module, modern bpf)" OFF)
@@ -52,6 +51,13 @@ option(ENABLE_VM_TESTS "Enable driver sanity tests" OFF)
 if(${CMAKE_VERSION} VERSION_LESS "3.1.0" AND BUILD_SHARED_LIBS)
 	# scap_engine_savefile uses target_sources
 	message(FATAL_ERROR "Shared libraries requires CMake 3.1 or later.")
+endif()
+
+option(MINIMAL_BUILD "Produce a minimal build with only the essential features (no eBPF probe driver, no kubernetes, no mesos, no marathon and no container metadata)" OFF)
+option(MINIMAL_BUILD_WITH_EBPF "Produce a minimal build with only the essential features (no kubernetes, no mesos, no marathon and no container metadata)" ON)
+
+if(MINIMAL_BUILD_WITH_EBPF)
+    set(MINIMAL_BUILD ON)
 endif()
 
 include(GNUInstallDirs)

@@ -20,8 +20,8 @@ limitations under the License.
 //
 #define INCLUDE_UNKNOWN_SOCKET_FDS
 
-#ifndef MINIMAL_BUILD
+#if !defined(MINIMAL_BUILD) || defined(MINIMAL_BUILD_WITH_EBPF)
 #define USE_ZLIB
-#endif // MINIMAL_BUILD
+#endif // !MINIMAL_BUILD || MINIMAL_BUILD_WITH_EBPF
 
 #define SCAP_NODRIVER_MAX_FD_LOOKUP 20

@@ -21,7 +21,7 @@ option(BUILD_LIBSCAP_MODERN_BPF "Enable modern bpf probe" OFF)
 
 include(ExternalProject)
 
-if(WIN32 OR NOT MINIMAL_BUILD)
+if(WIN32 OR NOT MINIMAL_BUILD OR MINIMAL_BUILD_WITH_EBPF)
 	include(zlib)
 endif()
 
@@ -116,7 +116,7 @@ add_library(scap_platform_util
 	scap_iflist.c
 	scap_proc_util.c)
 
-if(NOT MINIMAL_BUILD)
+if(NOT MINIMAL_BUILD OR MINIMAL_BUILD_WITH_EBPF)
 target_link_libraries(scap
 	"${ZLIB_LIB}")
 endif()
@@ -204,11 +204,11 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
 	add_subdirectory(engine/udig)
 	target_link_libraries(scap scap_engine_udig)
 
-	if (NOT MINIMAL_BUILD OR BUILD_LIBSCAP_MODERN_BPF)
+    if (NOT MINIMAL_BUILD OR MINIMAL_BUILD_WITH_EBPF OR BUILD_LIBSCAP_MODERN_BPF)
 		include(libelf)
 	endif()
 
-	if (NOT MINIMAL_BUILD)
+    if (NOT MINIMAL_BUILD OR MINIMAL_BUILD_WITH_EBPF)
 		add_definitions(-DHAS_ENGINE_BPF)
 		add_subdirectory(engine/bpf)
 		target_link_libraries(scap scap_engine_bpf)
