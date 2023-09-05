@@ -4,7 +4,7 @@ add_library(scap_engine_savefile
     scap_reader_gzfile.c
     scap_reader_buffered.c)
 
-if(NOT MINIMAL_BUILD)
+if(NOT MINIMAL_BUILD OR MINIMAL_BUILD_WITH_EBPF)
     add_dependencies(scap_engine_savefile zlib)
 endif()
 target_link_libraries(scap_engine_savefile scap_engine_noop ${ZLIB_LIB})
