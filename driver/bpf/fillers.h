@@ -294,7 +294,11 @@ FILLER_RAW(terminate_filler)
 	}
 
 	release_local_state(state);
+#ifndef BPF_SUPPORTS_RAW_TRACEPOINTS
+	return 1;
+#else
 	return 0;
+#endif // BPF_SUPPORTS_RAW_TRACEPOINTS
 }
 
 FILLER(sys_empty, true)
