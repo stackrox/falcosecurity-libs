@@ -283,21 +283,21 @@ if(NOT WIN32)
 						"cri_v1alpha2"
 						"cri_v1"
 					INTERFACE
-						"${GRPC_LIBRARIES}"
-						"${GRPCPP_LIB}"
-						"${GRPC_LIB}"
-						"${GPR_LIB}"
-						"${PROTOBUF_LIB}"
-						"${CARES_LIB}"
+						#"${GRPC_LIBRARIES}"
+						#"${GRPCPP_LIB}"
+						#"${GRPC_LIB}"
+						#"${GPR_LIB}"
+						#"${PROTOBUF_LIB}"
+						#"${CARES_LIB}"
 						"${JQ_LIB}"
 						"${B64_LIB}")
 			list(APPEND SINSP_PKGCONFIG_LIBRARIES
-						"${GRPC_LIBRARIES}"
-						"${GRPCPP_LIB}"
-						"${GRPC_LIB}"
-						"${GPR_LIB}"
-						"${PROTOBUF_LIB}"
-						"${CARES_LIB}"
+						#"${GRPC_LIBRARIES}"
+						#"${GRPCPP_LIB}"
+						#"${GRPC_LIB}"
+						#"${GPR_LIB}"
+						#"${PROTOBUF_LIB}"
+						#"${CARES_LIB}"
 						"${JQ_LIB}"
 						"${B64_LIB}")
 

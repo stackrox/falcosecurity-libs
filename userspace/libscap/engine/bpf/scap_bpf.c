@@ -31,7 +31,6 @@ limitations under the License.
 #include <time.h>
 #include <dirent.h>
 #include "strl.h"
-#include "strlcpy.h"
 /* Begin StackRox */
 #include <unistd.h>
 /* End StackRox */

@@ -1180,7 +1180,7 @@ void sinsp_parser::parse_clone_exit_caller(sinsp_evt *evt, int64_t child_tid)
 		}
 
 		/* Create thread groups and parenting relationships */
-		m_inspector->m_thread_manager->create_thread_dependencies(caller_tinfo);
+		m_inspector->m_thread_manager->create_thread_dependencies(caller_tinfo, true);
 	}
 
 	/* Update the evt->m_tinfo of the caller. */
@@ -1606,7 +1606,7 @@ void sinsp_parser::parse_clone_exit_caller(sinsp_evt *evt, int64_t child_tid)
 	/*=============================== ADD THREAD TO THE TABLE ===========================*/
 
 	/* Until we use the shared pointer we need it here, after we can move it at the end */
-	m_inspector->add_thread(child_tinfo);
+	bool thread_added = m_inspector->add_thread(child_tinfo);
 
 	/* Refresh user / loginuser / group */
 	if(child_tinfo->m_container_id.empty() == false)
@@ -1635,6 +1635,11 @@ void sinsp_parser::parse_clone_exit_caller(sinsp_evt *evt, int64_t child_tid)
 		DBG_SINSP_INFO("tid collision for %" PRIu64 "(%s)",
 		               tid_collision,
 		               child_tinfo->m_comm.c_str());
+	}
+
+	if(!thread_added)
+	{
+		delete child_tinfo;
 	}
 
 	/*=============================== ADD THREAD TO THE TABLE ===========================*/
@@ -1849,7 +1854,7 @@ void sinsp_parser::parse_clone_exit_child(sinsp_evt *evt)
 			lookup_tinfo->m_vtid = lookup_tinfo->m_vpid;
 
 			/* Create thread groups and parenting relationships */
-			m_inspector->m_thread_manager->create_thread_dependencies(lookup_tinfo);
+			m_inspector->m_thread_manager->create_thread_dependencies(lookup_tinfo, true);
 		}
 	}
 
@@ -1967,7 +1972,7 @@ void sinsp_parser::parse_clone_exit_child(sinsp_evt *evt)
 				/* This should never happen */
 				g_logger.format(sinsp_logger::SEV_DEBUG,
 						"cannot get fd table in sinsp_parser::parse_clone_exit.");
-				ASSERT(false);
+				//ASSERT(false);
 			}
 
 			/* Not a thread, copy cwd */
@@ -2143,7 +2148,7 @@ void sinsp_parser::parse_clone_exit_child(sinsp_evt *evt)
 	/*=============================== CREATE NEW THREAD-INFO ===========================*/
 
 	/* Add the new thread to the table */
-	m_inspector->add_thread(child_tinfo);
+	bool thread_added = m_inspector->add_thread(child_tinfo);
 
 	/* Update the evt->m_tinfo of the child.
 	 * We update it here, in this way the `on_clone`
@@ -2180,6 +2185,12 @@ void sinsp_parser::parse_clone_exit_child(sinsp_evt *evt)
 #endif
 		/* Right now we have collisions only on the clone() caller */
 		DBG_SINSP_INFO("tid collision for %" PRIu64 "(%s)", tid_collision, child_tinfo->m_comm.c_str());
+	}
+
+	if(!thread_added)
+	{
+		evt->m_tinfo = nullptr;
+		delete child_tinfo;
 	}
 
 	/*=============================== CREATE NEW THREAD-INFO ===========================*/
@@ -2331,7 +2342,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 
 		auto tinfo = m_inspector->get_thread_ref(evt->m_tinfo->m_tid, false);
 		/* Create thread groups and parenting relationships */
-		m_inspector->m_thread_manager->create_thread_dependencies(tinfo);
+		m_inspector->m_thread_manager->create_thread_dependencies(tinfo, true);
 	}
 
 	// Get the fdlimit

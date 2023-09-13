@@ -956,20 +956,23 @@ void sinsp::on_new_entry_from_proc(void* context,
 	//
 	if(fdinfo == NULL)
 	{
-		auto newti_ref = build_threadinfo();
-		auto* newti = newti_ref.get();
+		bool thread_added = false;
+		sinsp_threadinfo *newti = build_threadinfo();
 		newti->init(tinfo);
 		if(is_nodriver())
 		{
 			auto sinsp_tinfo = find_thread(tid, true);
 			if(sinsp_tinfo == nullptr || newti->m_clone_ts > sinsp_tinfo->m_clone_ts)
 			{
-				m_thread_manager->add_thread(std::move(newti_ref), true);
+				thread_added = m_thread_manager->add_thread(newti, true);
 			}
 		}
 		else
 		{
-			m_thread_manager->add_thread(std::move(newti_ref), true);
+			thread_added = m_thread_manager->add_thread(newti, true);
+		}
+		if (!thread_added) {
+			delete newti;
 		}
 	}
 	else
@@ -978,12 +981,12 @@ void sinsp::on_new_entry_from_proc(void* context,
 
 		if(!sinsp_tinfo)
 		{
-			auto newti_ref = build_threadinfo();
-			auto* newti = newti_ref.get();
+			sinsp_threadinfo *newti = build_threadinfo();
 			newti->init(tinfo);
 
-			if (!m_thread_manager->add_thread(std::move(newti_ref), true)) {
+			if (!m_thread_manager->add_thread(newti, true)) {
 				ASSERT(false);
+				delete newti;
 				return;
 			}
 
@@ -1020,9 +1023,9 @@ void sinsp::import_thread_table()
 	//
 	HASH_ITER(hh, table, pi, tpi)
 	{
-		auto newti = build_threadinfo();
+		sinsp_threadinfo *newti = build_threadinfo();
 		newti->init(pi);
-		m_thread_manager->add_thread(std::move(newti), true);
+		m_thread_manager->add_thread(newti, true);
 	}
 }
 
@@ -1562,9 +1565,9 @@ threadinfo_map_t::ptr_t sinsp::get_thread_ref(int64_t tid, bool query_os_if_not_
 	return m_thread_manager->get_thread_ref(tid, query_os_if_not_found, lookup_only, main_thread);
 }
 
-bool sinsp::add_thread(std::shared_ptr<sinsp_threadinfo> ptinfo)
+bool sinsp::add_thread(const sinsp_threadinfo *ptinfo)
 {
-	return m_thread_manager->add_thread(std::move(ptinfo), false);
+	return m_thread_manager->add_thread((sinsp_threadinfo *)ptinfo, false);
 }
 
 void sinsp::remove_thread(int64_t tid)
@@ -2876,10 +2879,4 @@ bool sinsp::get_track_connection_status()
 void sinsp::set_track_connection_status(bool enabled)
 {
 	m_parser->set_track_connection_status(enabled);
-}
-
-std::shared_ptr<sinsp_threadinfo>
-libsinsp::event_processor::build_threadinfo(sinsp* inspector)
-{
-	return std::make_shared<sinsp_threadinfo>(inspector);
 }

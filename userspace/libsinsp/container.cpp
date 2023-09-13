@@ -79,7 +79,7 @@ bool sinsp_container_manager::remove_inactive_containers()
 
 		threadinfo_map_t* threadtable = m_inspector->m_thread_manager->get_threads();
 
-		threadtable->loop([&] (const sinsp_threadinfo& tinfo) {
+		threadtable->loop([&] (sinsp_threadinfo& tinfo) {
 			if(!tinfo.m_container_id.empty())
 			{
 				containers_in_use.insert(tinfo.m_container_id);

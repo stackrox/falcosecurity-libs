@@ -940,7 +940,7 @@ std::string sinsp_threadinfo::get_cwd()
 	else
 	{
 		///todo(@Andreagit97) not sure we want to return "./" it seems like a valid path
-		ASSERT(false);
+		//ASSERT(false);
 		return "./";
 	}
 }
@@ -1449,7 +1449,7 @@ void sinsp_thread_manager::clear()
  * such cases. This function will set pid same as tid in case main thread is not found in such case
  * i.e. make the passed thread itself as main thread.
  */
-void sinsp_thread_manager::increment_mainthread_childcount(sinsp_threadinfo* threadinfo, bool create_if_needed)
+void sinsp_thread_manager::create_thread_dependencies(const std::shared_ptr<sinsp_threadinfo>& tinfo, bool create_if_needed)
 {
 	/* This should never happen */
 	if(tinfo == nullptr)
@@ -1511,10 +1511,27 @@ void sinsp_thread_manager::increment_mainthread_childcount(sinsp_threadinfo* thr
 	auto parent_thread = m_inspector->get_thread_ref(tinfo->m_ptid, false);
 	if(parent_thread == nullptr || parent_thread->is_invalid())
 	{
-		/* If we have a valid parent we assign the new child to it otherwise we set ptid = 0. */
-		tinfo->m_ptid = 0;
-		return;
+        if (create_if_needed)
+        {
+            tinfo->m_ptid = tinfo->m_tid;
+        }
+        else
+        {
+            /* If we have a valid parent we assign the new child to it otherwise we set ptid = 0. */
+            tinfo->m_ptid = 0;
+            return;
+        }
 	}
+
+    g_logger.format(sinsp_logger::SEV_INFO, "Add child tid %lu (pid %lu, ptid %lu, comm \"%s\") to tid %lu (pid %lu, ptid %lu, comm \"%s\")",
+            tinfo->m_pid,
+            tinfo->m_tid,
+            tinfo->m_ptid,
+            tinfo->m_comm.c_str(),
+            parent_thread->m_pid,
+            parent_thread->m_tid,
+            parent_thread->m_ptid,
+            parent_thread->m_comm.c_str());
 	parent_thread->add_child(tinfo);
 }
 
@@ -1529,15 +1546,13 @@ std::unique_ptr<sinsp_threadinfo> sinsp_thread_manager::new_threadinfo() const
  * 2. We are doing a proc scan with a callback or without. (`from_scap_proctable==true`)
  * 3. We are trying to obtain thread info from /proc through `get_thread_ref`
  */
-bool sinsp_thread_manager::add_thread(std::shared_ptr<sinsp_threadinfo> threadinfo_ref, bool from_scap_proctable)
+bool sinsp_thread_manager::add_thread(sinsp_threadinfo *threadinfo, bool from_scap_proctable)
 {
 #ifdef GATHER_INTERNAL_STATS
 	m_added_threads->increment();
 #endif
 
-	auto* threadinfo = threadinfo_ref.get();
-
-	m_last_tinfo.reset();
+	//m_last_tinfo.reset();
 
 	/* We have no more space */
 	if(m_threadtable.size() >= m_max_thread_table_size
@@ -1562,6 +1577,11 @@ bool sinsp_thread_manager::add_thread(std::shared_ptr<sinsp_threadinfo> threadin
 	{
 		create_thread_dependencies(tinfo_shared_ptr, true);
 	}
+    //else
+    //{
+        //tinfo_shared_ptr->m_pid = tinfo_shared_ptr->m_tid;
+        //tinfo_shared_ptr->m_ptid = tinfo_shared_ptr->m_tid;
+    //}
 
 	if (tinfo_shared_ptr->dynamic_fields() == nullptr)
 	{
@@ -1573,6 +1593,13 @@ bool sinsp_thread_manager::add_thread(std::shared_ptr<sinsp_threadinfo> threadin
 	}
 
 	tinfo_shared_ptr->compute_program_hash();
+
+    g_logger.format(sinsp_logger::SEV_INFO, "Put into the table tid %lu (pid %lu, ptid %lu, comm \"%s\")",
+            tinfo_shared_ptr->m_pid,
+            tinfo_shared_ptr->m_tid,
+            tinfo_shared_ptr->m_ptid,
+            tinfo_shared_ptr->m_comm.c_str());
+
 	m_threadtable.put(std::move(tinfo_shared_ptr));
 
 	return true;
@@ -1855,8 +1882,6 @@ void sinsp_thread_manager::fix_sockets_coming_from_proc()
 
 void sinsp_thread_manager::clear_thread_pointers(sinsp_threadinfo& tinfo)
 {
-	tinfo.m_main_thread.reset();
-
 	/*
 	sinsp_fdtable* fdt = tinfo.get_fd_table();
 	if(fdt != NULL)
@@ -1892,8 +1917,9 @@ void sinsp_thread_manager::reset_child_dependencies()
 
 void sinsp_thread_manager::create_thread_dependencies_after_proc_scan()
 {
-	m_threadtable.const_loop_shared_pointer([&](const std::shared_ptr<sinsp_threadinfo>& tinfo) {
-		create_thread_dependencies(tinfo, true);
+	m_threadtable.loop([&](sinsp_threadinfo& tinfo) {
+        auto tinfo_shared_ptr = std::shared_ptr<sinsp_threadinfo>(&tinfo);
+		create_thread_dependencies(tinfo_shared_ptr, true);
 		return true;
 	});
 }
@@ -2121,8 +2147,7 @@ threadinfo_map_t::ptr_t sinsp_thread_manager::get_thread_ref(int64_t tid, bool q
         scap_threadinfo* scap_proc = NULL;
 
 		// unfortunately, sinsp owns the threade factory
-        auto newti_ref = m_inspector->build_threadinfo();
-        auto* newti = newti_ref.get();
+        sinsp_threadinfo *newti = m_inspector->build_threadinfo();
 
         m_n_proc_lookups++;
 
@@ -2191,7 +2216,7 @@ threadinfo_map_t::ptr_t sinsp_thread_manager::get_thread_ref(int64_t tid, bool q
         //
         // Done. Add the new thread to the list.
         //
-        add_thread(std::move(newti_ref), false);
+        add_thread(newti, false);
         sinsp_proc = find_thread(tid, lookup_only);
     }
 

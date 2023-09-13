@@ -681,30 +681,6 @@ public:
 		m_threads.clear();
 	}
 
-	bool const_loop_shared_pointer(const_shared_ptr_visitor_t callback)
-	{
-		for (auto& it : m_threads)
-		{
-			if (!callback(it.second))
-			{
-				return false;
-			}
-		}
-		return true;
-	}
-
-	bool const_loop(const_visitor_t callback) const
-	{
-		for (const auto& it : m_threads)
-		{
-			if (!callback(*it.second.get()))
-			{
-				return false;
-			}
-		}
-		return true;
-	}
-
 	template <typename Visitor>
 	inline bool loop(const Visitor& callback)
 	{
@@ -738,8 +714,8 @@ public:
 
 	std::unique_ptr<sinsp_threadinfo> new_threadinfo() const;
 	sinsp_threadinfo* find_new_reaper(sinsp_threadinfo*);
-	bool add_thread(std::shared_ptr<sinsp_threadinfo> threadinfo, bool from_scap_proctable);
-	void remove_thread(int64_t tid, bool force);
+	bool add_thread(sinsp_threadinfo *threadinfo, bool from_scap_proctable);
+	void remove_thread(int64_t tid);
 	// Returns true if the table is actually scanned
 	// NOTE: this is implemented in sinsp.cpp so we can inline it from there
 	inline bool remove_inactive_threads();

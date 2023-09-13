@@ -117,11 +117,6 @@ extern const struct ppm_event_entry g_ppm_events[];
 
 extern unsigned char g_bpf_drop_syscalls[];
 
-//
-// udig stuff
-//
-int32_t udig_begin_capture(struct scap_engine_handle engine, char *error);
-
 #ifdef __cplusplus
 }
 #endif

@@ -550,10 +550,10 @@ public:
 
 	libsinsp::event_processor* m_external_event_processor;
 
-	std::shared_ptr<sinsp_threadinfo> build_threadinfo()
+	sinsp_threadinfo* build_threadinfo()
     {
         return m_external_event_processor ? m_external_event_processor->build_threadinfo(this)
-                                          : std::make_shared<sinsp_threadinfo>(this);
+                                          : m_thread_manager->new_threadinfo().release();
     }
 
 	/*!
@@ -1019,7 +1019,7 @@ public:
 	void set_track_connection_status(bool enabled);
 
 VISIBILITY_PROTECTED
-	bool add_thread(std::shared_ptr<sinsp_threadinfo> ptinfo);
+	bool add_thread(const sinsp_threadinfo *ptinfo);
 	void set_mode(scap_mode_t value)
 	{
 		m_mode = value;
