@@ -189,6 +189,8 @@ public:
 	                       ppm_print_format print_format,
 	                       uint32_t len);
 
+	virtual uint8_t* extract(sinsp_evt*, OUT uint32_t* len, bool sanitize_strings = true);
+
 protected:
 	virtual bool compare_nocache(sinsp_evt*);
 
