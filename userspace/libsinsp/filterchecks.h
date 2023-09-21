@@ -184,12 +184,12 @@ public:
 	std::vector<extract_value_t> m_extracted_values;
 	check_cache_metrics *m_cache_metrics = NULL;
 
-protected:
 	// This is a single-value version of extract for subclasses non supporting extracting
 	// multiple values. By default, this returns NULL.
 	// Subclasses are meant to either override this, or the multi-valued extract method.
 	virtual uint8_t* extract(sinsp_evt *evt, OUT uint32_t* len, bool sanitize_strings = true);
-	
+protected:
+
 	bool flt_compare(cmpop op, ppm_param_type type, void* operand1, uint32_t op1_len = 0, uint32_t op2_len = 0);
 	bool flt_compare(cmpop op, ppm_param_type type, std::vector<extract_value_t>& values, uint32_t op2_len = 0);
 
