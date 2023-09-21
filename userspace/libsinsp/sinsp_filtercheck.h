@@ -302,6 +302,8 @@ public:
 			       uint32_t len);
 
 
+	virtual uint8_t* extract(sinsp_evt*, OUT uint32_t* len, bool sanitize_strings = true);
+
 protected:
 	virtual bool compare_nocache(sinsp_evt*);
 
@@ -362,7 +364,7 @@ private:
 	inline void populate_filter_values_with_rhs_extracted_values(const std::vector<extract_value_t>& values);
 	inline void check_rhs_field_type_consistency() const;
 
-	std::list<sinsp_filter_transformer> m_transformers;	
+	std::list<sinsp_filter_transformer> m_transformers;
 	std::unique_ptr<sinsp_filter_check> m_rhs_filter_check = nullptr;
 	std::unique_ptr<filtercheck_field_info> m_transformed_field = nullptr;
 
