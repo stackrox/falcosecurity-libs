@@ -81,17 +81,17 @@ public:
 	/*!
 	  \brief Return the name of the process containing this thread, e.g. "top".
 	*/
-	inline const std::string& get_comm() const { return m_comm; }
+	std::string get_comm() const;
 
 	/*!
 	  \brief Return the name of the process containing this thread from argv[0], e.g. "/bin/top".
 	*/
-	inline const std::string& get_exe() const { return m_exe; }
+	std::string get_exe() const;
 
 	/*!
 	  \brief Return the full executable path of the process containing this thread, e.g. "/bin/top".
 	*/
-	inline const std::string& get_exepath() const { return m_exepath; }
+	std::string get_exepath() const;
 
 	/*!
 	  \brief Return the working directory of the process containing this thread.
@@ -644,11 +644,14 @@ VISIBILITY_PRIVATE
 class threadinfo_map_t
 {
 public:
+	typedef std::function<bool(const std::shared_ptr<sinsp_threadinfo>&)> const_shared_ptr_visitor_t;
+	typedef std::function<bool(const sinsp_threadinfo&)> const_visitor_t;
+	typedef std::function<bool(sinsp_threadinfo&)> visitor_t;
 	typedef std::shared_ptr<sinsp_threadinfo> ptr_t;
 
 	inline void put(ptr_t tinfo)
 	{
-		m_threads[tinfo->m_tid] = std::move(tinfo);
+		m_threads[tinfo->m_tid] = tinfo;
 	}
 
 	inline sinsp_threadinfo* get(uint64_t tid)
@@ -681,8 +684,31 @@ public:
 		m_threads.clear();
 	}
 
-	template <typename Visitor>
-	inline bool loop(const Visitor& callback)
+	bool const_loop_shared_pointer(const_shared_ptr_visitor_t callback)
+	{
+		for (auto& it : m_threads)
+		{
+			if (!callback(it.second))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool const_loop(const_visitor_t callback) const
+	{
+		for (const auto& it : m_threads)
+		{
+			if (!callback(*it.second.get()))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool loop(visitor_t callback)
 	{
 		for (auto& it : m_threads)
 		{

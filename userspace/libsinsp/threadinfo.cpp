@@ -629,6 +629,21 @@ sinsp_threadinfo::cgroups_t& sinsp_threadinfo::cgroups() const
 	return empty;
 }
 
+std::string sinsp_threadinfo::get_comm() const
+{
+	return m_comm;
+}
+
+std::string sinsp_threadinfo::get_exe() const
+{
+	return m_exe;
+}
+
+std::string sinsp_threadinfo::get_exepath() const
+{
+	return m_exepath;
+}
+
 void sinsp_threadinfo::set_args(const char* args, size_t len)
 {
 	m_args.clear();
@@ -940,7 +955,7 @@ std::string sinsp_threadinfo::get_cwd()
 	else
 	{
 		///todo(@Andreagit97) not sure we want to return "./" it seems like a valid path
-		//ASSERT(false);
+		ASSERT(false);
 		return "./";
 	}
 }
@@ -1511,27 +1526,18 @@ void sinsp_thread_manager::create_thread_dependencies(const std::shared_ptr<sins
 	auto parent_thread = m_inspector->get_thread_ref(tinfo->m_ptid, false);
 	if(parent_thread == nullptr || parent_thread->is_invalid())
 	{
-        if (create_if_needed)
-        {
-            tinfo->m_ptid = tinfo->m_tid;
-        }
-        else
-        {
-            /* If we have a valid parent we assign the new child to it otherwise we set ptid = 0. */
-            tinfo->m_ptid = 0;
-            return;
-        }
+		if (create_if_needed)
+		{
+			tinfo->m_ptid = tinfo->m_tid;
+		}
+		else
+		{
+			/* If we have a valid parent we assign the new child to it otherwise we set ptid = 0. */
+			tinfo->m_ptid = 0;
+			return;
+		}
 	}
 
-    g_logger.format(sinsp_logger::SEV_INFO, "Add child tid %lu (pid %lu, ptid %lu, comm \"%s\") to tid %lu (pid %lu, ptid %lu, comm \"%s\")",
-            tinfo->m_pid,
-            tinfo->m_tid,
-            tinfo->m_ptid,
-            tinfo->m_comm.c_str(),
-            parent_thread->m_pid,
-            parent_thread->m_tid,
-            parent_thread->m_ptid,
-            parent_thread->m_comm.c_str());
 	parent_thread->add_child(tinfo);
 }
 
@@ -1551,8 +1557,6 @@ bool sinsp_thread_manager::add_thread(sinsp_threadinfo *threadinfo, bool from_sc
 #ifdef GATHER_INTERNAL_STATS
 	m_added_threads->increment();
 #endif
-
-	//m_last_tinfo.reset();
 
 	/* We have no more space */
 	if(m_threadtable.size() >= m_max_thread_table_size
@@ -1577,11 +1581,6 @@ bool sinsp_thread_manager::add_thread(sinsp_threadinfo *threadinfo, bool from_sc
 	{
 		create_thread_dependencies(tinfo_shared_ptr, true);
 	}
-    //else
-    //{
-        //tinfo_shared_ptr->m_pid = tinfo_shared_ptr->m_tid;
-        //tinfo_shared_ptr->m_ptid = tinfo_shared_ptr->m_tid;
-    //}
 
 	if (tinfo_shared_ptr->dynamic_fields() == nullptr)
 	{
@@ -1593,13 +1592,6 @@ bool sinsp_thread_manager::add_thread(sinsp_threadinfo *threadinfo, bool from_sc
 	}
 
 	tinfo_shared_ptr->compute_program_hash();
-
-    g_logger.format(sinsp_logger::SEV_INFO, "Put into the table tid %lu (pid %lu, ptid %lu, comm \"%s\")",
-            tinfo_shared_ptr->m_pid,
-            tinfo_shared_ptr->m_tid,
-            tinfo_shared_ptr->m_ptid,
-            tinfo_shared_ptr->m_comm.c_str());
-
 	m_threadtable.put(std::move(tinfo_shared_ptr));
 
 	return true;
@@ -1917,9 +1909,8 @@ void sinsp_thread_manager::reset_child_dependencies()
 
 void sinsp_thread_manager::create_thread_dependencies_after_proc_scan()
 {
-	m_threadtable.loop([&](sinsp_threadinfo& tinfo) {
-        auto tinfo_shared_ptr = std::shared_ptr<sinsp_threadinfo>(&tinfo);
-		create_thread_dependencies(tinfo_shared_ptr, true);
+	m_threadtable.const_loop_shared_pointer([&](const std::shared_ptr<sinsp_threadinfo>& tinfo) {
+		create_thread_dependencies(tinfo, true);
 		return true;
 	});
 }

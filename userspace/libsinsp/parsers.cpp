@@ -1972,7 +1972,7 @@ void sinsp_parser::parse_clone_exit_child(sinsp_evt *evt)
 				/* This should never happen */
 				g_logger.format(sinsp_logger::SEV_DEBUG,
 						"cannot get fd table in sinsp_parser::parse_clone_exit.");
-				//ASSERT(false);
+				ASSERT(false);
 			}
 
 			/* Not a thread, copy cwd */

@@ -1225,8 +1225,8 @@ public:
 	//
 	uint32_t m_max_fdtable_size;
 	bool m_automatic_threadtable_purging = true;
-	uint64_t m_thread_timeout_ns = (uint64_t)30 * ONE_SECOND_IN_NS;
-	uint64_t m_inactive_thread_scan_time_ns = (uint64_t)60 * ONE_SECOND_IN_NS;
+	uint64_t m_thread_timeout_ns = (uint64_t)1800 * ONE_SECOND_IN_NS;
+	uint64_t m_inactive_thread_scan_time_ns = (uint64_t)1200 * ONE_SECOND_IN_NS;
 
 	//
 	// Container limits
