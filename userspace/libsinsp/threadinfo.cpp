@@ -1529,6 +1529,7 @@ void sinsp_thread_manager::create_thread_dependencies(const std::shared_ptr<sins
 		if (create_if_needed)
 		{
 			tinfo->m_ptid = tinfo->m_tid;
+			return;
 		}
 		else
 		{
