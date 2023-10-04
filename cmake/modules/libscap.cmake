@@ -60,10 +60,11 @@ endif() # BUILD_USERSPACE
 set(LIBSCAP_INSTALL_LIBS)
 
 # All of the targets in userspace/libscap
-get_directory_property(libscap_subdirs DIRECTORY ${LIBSCAP_DIR}/userspace/libscap SUBDIRECTORIES)
+message("DIRECTORY ${LIBSCAP_DIR}/userspace/libscap")
+#get_directory_property(libscap_subdirs DIRECTORY ${LIBSCAP_DIR}/userspace/libscap SUBDIRECTORIES)
 set(libscap_subdir_targets)
 foreach(libscap_subdir ${LIBSCAP_DIR}/userspace/libscap ${libscap_subdirs})
-	get_directory_property(subdir_targets DIRECTORY ${libscap_subdir} BUILDSYSTEM_TARGETS)
+	#get_directory_property(subdir_targets DIRECTORY ${libscap_subdir} BUILDSYSTEM_TARGETS)
 	list(APPEND libscap_subdir_targets ${subdir_targets})
 endforeach()
 
