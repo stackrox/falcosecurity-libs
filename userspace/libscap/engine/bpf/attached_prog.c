@@ -55,7 +55,7 @@ static int __attach_tp(struct bpf_attached_prog* prog, char* last_err)
 	int efd = 0;
 	int err = 0;
 	char buf[SCAP_MAX_PATH_SIZE];
-	snprintf(buf, sizeof(buf), "%s/sys/kernel/debug/tracing/events/%s/id", scap_get_host_root(), prog->name);
+	snprintf(buf, sizeof(buf), "/sys/kernel/debug/tracing/events/%s/id", prog->name);
 	efd = open(buf, O_RDONLY, 0);
 	if(efd < 0)
 	{
