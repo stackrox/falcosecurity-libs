@@ -17,6 +17,8 @@ limitations under the License.
 
 #pragma once
 
+#include "falcosecurity/log.h"
+
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include <shared_definitions/struct_definitions.h>
@@ -42,6 +44,8 @@ struct internal_state
 	unsigned long buffer_bytes_dim; /* dimension of a single per-CPU ringbuffer in bytes. */
 	int last_ring_read;		/* Last ring from which we have correctly read an event. Could be `-1` if there were no successful reads. */
 	unsigned long last_event_size;	/* Last event correctly read. Could be `0` if there were no successful reads. */
+
+	falcosecurity_log_fn log_fn;
 };
 
 extern struct internal_state g_state;
