@@ -77,7 +77,7 @@ int32_t scap_init_live_int(scap_t* handle, scap_open_args* oargs, const struct s
 
 	handle->m_proc_scan_timeout_ms = oargs->proc_scan_timeout_ms;
 	handle->m_proc_scan_log_interval_ms = oargs->proc_scan_log_interval_ms;
-	handle->m_debug_log_fn = oargs->debug_log_fn;
+	handle->m_log_fn = oargs->log_fn;
 
 	//
 	// Extract machine information
@@ -117,6 +117,8 @@ int32_t scap_init_live_int(scap_t* handle, scap_open_args* oargs, const struct s
 	{
 		handle->m_userlist = NULL;
 	}
+
+	handle->m_log_fn = oargs->log_fn;
 
 	if ((rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{
@@ -194,7 +196,7 @@ int32_t scap_init_udig_int(scap_t* handle, scap_open_args* oargs)
 
 	handle->m_proc_scan_timeout_ms = oargs->proc_scan_timeout_ms;
 	handle->m_proc_scan_log_interval_ms = oargs->proc_scan_log_interval_ms;
-	handle->m_debug_log_fn = oargs->debug_log_fn;
+	handle->m_log_fn = oargs->log_fn;
 
 	//
 	// Extract machine information
@@ -297,7 +299,7 @@ int32_t scap_init_test_input_int(scap_t* handle, scap_open_args* oargs)
 	handle->m_proclist.m_proc_callback_context = oargs->proc_callback_context;
 	handle->m_proclist.m_proclist = NULL;
 
-	handle->m_debug_log_fn = oargs->debug_log_fn;
+	handle->m_log_fn = oargs->log_fn;
 
 	if ((rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{
@@ -344,7 +346,7 @@ int32_t scap_init_gvisor_int(scap_t* handle, scap_open_args* oargs)
 	handle->m_proclist.m_proc_callback_context = oargs->proc_callback_context;
 	handle->m_proclist.m_proclist = NULL;
 
-	handle->m_debug_log_fn = oargs->debug_log_fn;
+	handle->m_log_fn = oargs->log_fn;
 
 	if ((rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{
@@ -390,7 +392,7 @@ int32_t scap_init_offline_int(scap_t* handle, scap_open_args* oargs)
 	handle->m_proclist.m_proc_callback_context = oargs->proc_callback_context;
 	handle->m_proclist.m_proclist = NULL;
 
-	handle->m_debug_log_fn = oargs->debug_log_fn;
+	handle->m_log_fn = oargs->log_fn;
 
 	if((rc = handle->m_vtable->init(handle, oargs)) != SCAP_SUCCESS)
 	{
@@ -439,7 +441,7 @@ int32_t scap_init_nodriver_int(scap_t* handle, scap_open_args* oargs)
 
 	handle->m_proc_scan_timeout_ms = oargs->proc_scan_timeout_ms;
 	handle->m_proc_scan_log_interval_ms = oargs->proc_scan_log_interval_ms;
-	handle->m_debug_log_fn = oargs->debug_log_fn;
+	handle->m_log_fn = oargs->log_fn;
 
 	//
 	// Extract machine information
@@ -516,7 +518,7 @@ int32_t scap_init_plugin_int(scap_t* handle, scap_open_args* oargs)
 	handle->m_proclist.m_proc_callback_context = NULL;
 	handle->m_proclist.m_proclist = NULL;
 
-	handle->m_debug_log_fn = oargs->debug_log_fn;
+	handle->m_log_fn = oargs->log_fn;
 
 	//
 	// Extract machine information
