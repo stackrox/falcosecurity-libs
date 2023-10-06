@@ -201,7 +201,8 @@ set_sinsp_target_properties(sinsp)
 
 target_link_libraries(sinsp
 		PUBLIC scap
-		INTERFACE
+        INTERFACE falcosecurity_log
+		PRIVATE
 			"${CURL_LIBRARIES}"
 			"${JSONCPP_LIB}"
 			"${RE2_LIB}"
