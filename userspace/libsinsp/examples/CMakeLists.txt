@@ -14,6 +14,7 @@
 #
 
 include(jsoncpp)
+include_directories("../../")
 
 set(sources util.cpp test.cpp)
 
