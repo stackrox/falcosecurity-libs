@@ -96,8 +96,6 @@ if(CREATE_TEST_TARGETS AND NOT WIN32)
 	include(gtest)
 endif()
 
-add_subdirectory(userspace/common)
-
 include(libscap)
 include(libsinsp)
 
