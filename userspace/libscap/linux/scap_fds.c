@@ -1232,6 +1232,15 @@ int32_t scap_fd_scan_fd_dir(struct scap_linux_platform *linux_platform,
 		}
 		fdi.fd = fd;
 
+		#if defined(SCAP_SOCKET_ONLY_FD)
+		// SCAP_SOCKET_ONLY_FD is an optimization to deal only with the socket
+		// file descriptors.
+		if(!S_ISSOCK(sb.st_mode))
+		{
+			continue;
+		}
+		#endif
+
 		// In no driver mode to limit cpu usage we just parse sockets
 		// because we are interested only on them.
 		if(linux_platform->m_minimal_scan && !S_ISSOCK(sb.st_mode)) {
