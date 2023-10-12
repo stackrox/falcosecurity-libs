@@ -14,6 +14,7 @@
 #
 
 include(jsoncpp)
+include_directories("../../")
 
 add_executable(sinsp-example util.cpp test.cpp)
 
