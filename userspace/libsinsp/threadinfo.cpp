@@ -26,6 +26,12 @@ limitations under the License.
 #include <libscap/scap-int.h>
 #include <libsinsp/user.h>
 
+#ifdef INTERESTING_SUBSYS
+const std::set<std::string> interesting_subsys = {INTERESTING_SUBSYS};
+#else
+const std::set<std::string> interesting_subsys = {};
+#endif
+
 extern sinsp_evttables g_infotables;
 
 static void copy_ipv6_address(uint32_t (&dest)[4], const uint32_t (&src)[4]) {
@@ -550,7 +556,10 @@ void sinsp_threadinfo::set_cgroups(const std::vector<std::string>& cgroups) {
 			subsys = "blkio";
 		}
 
-		tmp_cgroups.emplace_back(subsys, cgroup);
+		if (interesting_subsys.find(subsys) != interesting_subsys.end())
+		{
+			tmp_cgroups.emplace_back(subsys, cgroup);
+		}
 	}
 
 	m_cgroups = tmp_cgroups;
