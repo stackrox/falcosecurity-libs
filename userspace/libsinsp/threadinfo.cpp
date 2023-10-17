@@ -30,6 +30,12 @@ limitations under the License.
 
 constexpr static const char* s_thread_table_name = "threads";
 
+#ifdef INTERESTING_SUBSYS
+const std::set<std::string> interesting_subsys = {INTERESTING_SUBSYS};
+#else
+const std::set<std::string> interesting_subsys = {};
+#endif
+
 extern sinsp_evttables g_infotables;
 
 static void copy_ipv6_address(uint32_t* dest, uint32_t* src) {
@@ -743,7 +749,10 @@ void sinsp_threadinfo::set_cgroups(const std::vector<std::string>& cgroups) {
 			subsys = "blkio";
 		}
 
-		tmp_cgroups->push_back(std::make_pair(subsys, cgroup));
+		if (interesting_subsys.find(subsys) != interesting_subsys.end())
+		{
+			tmp_cgroups->push_back(std::make_pair(subsys, cgroup));
+		}
 	}
 
 	m_cgroups.swap(tmp_cgroups);
