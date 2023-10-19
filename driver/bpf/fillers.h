@@ -1862,27 +1862,27 @@ static __always_inline int bpf_append_cgroup(struct task_struct *task,
 	struct css_set *cgroups = _READ(task->cgroups);
 	int res;
 
-#if IS_ENABLED(CONFIG_CPUSETS)
+#if IS_ENABLED(CONFIG_CPUSETS) && !defined(BPF_SKIP_CPUSETS)
 	res = __bpf_append_cgroup(cgroups, cpuset_cgrp_id, buf, len);
 	CHECK_RES(res);
 #endif
 
-#if IS_ENABLED(CONFIG_CGROUP_SCHED)
+#if IS_ENABLED(CONFIG_CGROUP_SCHED) && !defined(BPF_SKIP_SCHED)
 	res = __bpf_append_cgroup(cgroups, cpu_cgrp_id, buf, len);
 	CHECK_RES(res);
 #endif
 
-#if IS_ENABLED(CONFIG_CGROUP_CPUACCT)
+#if IS_ENABLED(CONFIG_CGROUP_CPUACCT) && !defined(BPF_SKIP_CPUACCT)
 	res = __bpf_append_cgroup(cgroups, cpuacct_cgrp_id, buf, len);
 	CHECK_RES(res);
 #endif
 
-#if IS_ENABLED(CONFIG_BLK_CGROUP)
+#if IS_ENABLED(CONFIG_BLK_CGROUP) && !defined(BPF_SKIP_BLK_CGROUP)
 	res = __bpf_append_cgroup(cgroups, io_cgrp_id, buf, len);
 	CHECK_RES(res);
 #endif
 
-#if IS_ENABLED(CONFIG_MEMCG)
+#if IS_ENABLED(CONFIG_MEMCG) && !defined(BPF_SKIP_MEMCG)
 	res = __bpf_append_cgroup(cgroups, memory_cgrp_id, buf, len);
 	CHECK_RES(res);
 #endif
