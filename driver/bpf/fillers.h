@@ -6745,8 +6745,8 @@ FILLER(sched_prog_exec_5, false)
 
 #endif
 
-#ifdef CAPTURE_SCHED_PROC_FORK
-/* These `sched_proc_fork` fillers will generate a 
+#if defined(CAPTURE_SCHED_PROC_FORK) && defined(BPF_SUPPORTS_RAW_TRACEPOINTS)
+/* These `sched_proc_fork` fillers will generate a
  * `PPME_SYSCALL_CLONE_20_X` event.
  * 
  * Please note: `is_syscall` is used only if `BPF_RAW_TRACEPOINT`
