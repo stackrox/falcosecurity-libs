@@ -248,6 +248,9 @@ or GPL2.txt for full copies of the license.
 #ifndef __NR_readlink
 #define __NR_readlink 85
 #endif
+#ifndef __NR_uselib
+#define __NR_uselib 86
+#endif
 #ifndef __NR_swapon
 #define __NR_swapon 87
 #endif
@@ -320,6 +323,9 @@ or GPL2.txt for full copies of the license.
 #ifndef __NR_vhangup
 #define __NR_vhangup 111
 #endif
+#ifndef __NR_idle
+#define __NR_idle 112
+#endif
 #ifndef __NR_vm86
 #define __NR_vm86 113
 #endif
@@ -362,11 +368,17 @@ or GPL2.txt for full copies of the license.
 #ifndef __NR_sigprocmask
 #define __NR_sigprocmask 126
 #endif
+#ifndef __NR_create_module
+#define __NR_create_module 127
+#endif
 #ifndef __NR_init_module
 #define __NR_init_module 128
 #endif
 #ifndef __NR_delete_module
 #define __NR_delete_module 129
+#endif
+#ifndef __NR_get_kernel_syms
+#define __NR_get_kernel_syms 130
 #endif
 #ifndef __NR_quotactl
 #define __NR_quotactl 131
@@ -376,6 +388,9 @@ or GPL2.txt for full copies of the license.
 #endif
 #ifndef __NR_fchdir
 #define __NR_fchdir 133
+#endif
+#ifndef __NR_bdflush
+#define __NR_bdflush 134
 #endif
 #ifndef __NR_sysfs
 #define __NR_sysfs 135
@@ -415,6 +430,9 @@ or GPL2.txt for full copies of the license.
 #endif
 #ifndef __NR_fdatasync
 #define __NR_fdatasync 148
+#endif
+#ifndef __NR__sysctl
+#define __NR__sysctl 149
 #endif
 #ifndef __NR_mlock
 #define __NR_mlock 150
@@ -464,8 +482,14 @@ or GPL2.txt for full copies of the license.
 #ifndef __NR_getresuid
 #define __NR_getresuid 165
 #endif
+#ifndef __NR_query_module
+#define __NR_query_module 166
+#endif
 #ifndef __NR_poll
 #define __NR_poll 167
+#endif
+#ifndef __NR_nfsservctl
+#define __NR_nfsservctl 168
 #endif
 #ifndef __NR_setresgid
 #define __NR_setresgid 169
@@ -520,6 +544,9 @@ or GPL2.txt for full copies of the license.
 #endif
 #ifndef __NR_sendfile
 #define __NR_sendfile 186
+#endif
+#ifndef __NR_getpmsg
+#define __NR_getpmsg 187
 #endif
 #ifndef __NR_vfork
 #define __NR_vfork 189
