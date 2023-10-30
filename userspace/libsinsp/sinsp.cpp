@@ -1937,6 +1937,10 @@ void sinsp::set_min_log_severity(sinsp_logger::severity sev) {
 	libsinsp_logger()->set_severity(sev);
 }
 
+void sinsp::disable_log_timestamps() {
+	libsinsp_logger()->disable_timestamps();
+}
+
 sinsp_evttables* sinsp::get_event_info_tables() {
 	return &g_infotables;
 }
