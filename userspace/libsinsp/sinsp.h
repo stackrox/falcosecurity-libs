@@ -388,6 +388,11 @@ public:
 	void set_min_log_severity(sinsp_logger::severity sev);
 
 	/*!
+	 * \brief Remove timestamps from the generated log messages.
+	 */
+	void disable_log_timestamps();
+
+	/*!
 	 * \brief set whether the library will automatically purge the threadtable
 	 *        at specific times. If not, client is responsible for thread lifetime
 	 *        management. If invoked, then the purge interval and thread timeout change
