@@ -32,7 +32,7 @@ limitations under the License.
 // Controls if assertions break execution or if they are just printed to the
 // log
 //
-#define ASSERT_TO_LOG
+//#define ASSERT_TO_LOG
 
 //
 // Controls if the library collects internal performance stats.

@@ -24,11 +24,25 @@ limitations under the License.
 #endif
 #include <assert.h>
 
-#ifdef ASSERT
-#undef ASSERT
-#endif // ASSERT
+#include "falcosecurity/log.h"
+
+#ifndef ASSERT
+
 #ifdef _DEBUG
+
+#ifdef ASSERT_TO_LOG
+#define ASSERT(X) if(!(X)) \
+{ 					\
+	char buf[256]; 	\
+	snprintf(buf, sizeof(buf), "ASSERTION " #X " at %s:%d", __FILE__, __LINE__); \
+	logger_fn("libscap", buf, FALCOSECURITY_LOG_SEV_ERROR); \
+}
+#else // ASSERT_TO_LOG
 #define ASSERT(X) assert(X)
+#endif // ASSERT_TO_LOG
+
 #else // _DEBUG
 #define ASSERT(X)
 #endif // _DEBUG
+
+#endif // ASSERT

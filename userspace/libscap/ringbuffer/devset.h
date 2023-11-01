@@ -37,6 +37,8 @@ limitations under the License.
 struct ppm_ring_buffer_info;
 struct udig_ring_buffer_status;
 
+extern falcosecurity_log_fn logger_fn;
+
 //
 // The device descriptor
 //

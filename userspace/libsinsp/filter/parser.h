@@ -17,6 +17,8 @@ limitations under the License.
 
 #pragma once
 
+#include "logger.h"
+
 #include "ast.h"
 #include <cstdint>
 

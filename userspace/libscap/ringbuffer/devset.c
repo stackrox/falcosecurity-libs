@@ -8,6 +8,8 @@
 #include "../scap.h"
 #include "scap_assert.h"
 
+extern falcosecurity_log_fn logger_fn;
+
 int32_t devset_init(struct scap_device_set *devset, size_t num_devs, char *lasterr)
 {
 	devset->m_ndevs = num_devs;

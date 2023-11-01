@@ -53,6 +53,8 @@ limitations under the License.
 	} \
 }
 
+extern sinsp_logger g_logger;
+
 static inline ss_plugin_state_type typeinfo_to_state_type(const libsinsp::state::typeinfo& i)
 {
 	switch(i.index())
