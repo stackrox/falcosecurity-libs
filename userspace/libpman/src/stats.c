@@ -278,7 +278,6 @@ struct metrics_v2 *pman_get_metrics_v2(uint32_t flags, uint32_t *nstats, int32_t
 					}
 					break;
 				default:
-					ASSERT(false);
 					break;
 				}
 				offset++;

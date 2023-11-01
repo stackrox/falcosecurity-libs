@@ -43,6 +43,8 @@ struct scap_platform* scap_linux_alloc_platform(proc_entry_callback proc_callbac
 }
 #endif
 
+falcosecurity_log_fn logger_fn;
+
 const char* scap_getlasterr(scap_t* handle)
 {
 	return handle ? handle->m_lasterr : "null scap handle";
@@ -65,6 +67,7 @@ int32_t scap_init_engine(scap_t* handle, scap_open_args* oargs, const struct sca
 	}
 
 	handle->m_log_fn = oargs->log_fn;
+	logger_fn = oargs->log_fn;
 
 	if(handle->m_vtable->init && (rc = handle->m_vtable->init(handle, oargs)) != SCAP_SUCCESS)
 	{

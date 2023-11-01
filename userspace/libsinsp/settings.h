@@ -25,6 +25,19 @@ limitations under the License.
 #define SP_EVT_BUF_SIZE 4096
 
 //
+// Controls if assertions break execution or if they are just printed to the
+// log. It's not defined here, because some asserts are used even before
+// settings header is included, so it's easier to provide it at the compile
+// time.
+//
+// #define ASSERT_TO_LOG
+
+//
+// Controls if the library collects internal performance stats.
+//
+#undef GATHER_INTERNAL_STATS
+
+//
 // Max size that the FD table of a process can reach
 //
 #define MAX_FD_TABLE_SIZE 4096
