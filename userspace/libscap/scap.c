@@ -39,6 +39,8 @@ limitations under the License.
 //#define NDEBUG
 #include <assert.h>
 
+falcosecurity_log_fn logger_fn;
+
 const char* scap_getlasterr(scap_t* handle)
 {
 	return handle ? handle->m_lasterr : "null scap handle";
@@ -119,6 +121,7 @@ int32_t scap_init_live_int(scap_t* handle, scap_open_args* oargs, const struct s
 	}
 
 	handle->m_log_fn = oargs->log_fn;
+	logger_fn = oargs->log_fn;
 
 	if ((rc = scap_suppress_init(&handle->m_suppress, oargs->suppressed_comms)) != SCAP_SUCCESS)
 	{

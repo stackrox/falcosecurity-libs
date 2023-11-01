@@ -26,6 +26,7 @@ limitations under the License.
 #include <unordered_map>
 #include <engine/source_plugin/source_plugin_public.h>
 #include "event.h"
+#include "logger.h"
 #include "version.h"
 #include "../plugin/plugin_loader.h"
 
