@@ -115,6 +115,7 @@ add_library(scap_event_schema STATIC
 )
 
 add_dependencies(scap_event_schema uthash)
+target_link_libraries(scap_event_schema scap)
 
 target_include_directories(scap_event_schema
 PUBLIC
