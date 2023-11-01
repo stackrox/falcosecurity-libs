@@ -1,6 +1,8 @@
 #include "sinsp_events.h"
 #include "../utils.h"
 
+extern sinsp_logger g_logger;
+
 const ppm_event_info* libsinsp::events::info(ppm_event_code event_type)
 {
 	ASSERT(event_type < PPM_EVENT_MAX);

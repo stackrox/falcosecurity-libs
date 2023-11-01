@@ -24,6 +24,7 @@ limitations under the License.
 #include <atomic>
 #include <engine/source_plugin/source_plugin_public.h>
 #include "event.h"
+#include "logger.h"
 #include "version.h"
 #include "events/sinsp_events.h"
 #include "state/table_registry.h"

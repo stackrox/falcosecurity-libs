@@ -32,6 +32,7 @@ limitations under the License.
 #include "json/json.h"
 #include "../common/types.h"
 #include "sinsp_public.h"
+#include "logger.h"
 
 class sinsp_evttables;
 typedef union _sinsp_sockinfo sinsp_sockinfo;

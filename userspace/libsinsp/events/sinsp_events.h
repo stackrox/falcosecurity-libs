@@ -18,6 +18,7 @@ limitations under the License.
 #pragma once
 
 #include "sinsp_events_set.h"
+#include "logger.h"
 
 #include <unordered_set>
 #include <string>

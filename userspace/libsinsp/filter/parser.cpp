@@ -46,6 +46,8 @@ static re2::RE2 s_rgx_barestr(RGX_BARESTR, re2::RE2::POSIX);
 using namespace std;
 using namespace libsinsp::filter;
 
+extern sinsp_logger g_logger;
+
 static const vector<string> unary_ops =
 { 
 	"exists"

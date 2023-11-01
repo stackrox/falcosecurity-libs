@@ -21,6 +21,11 @@ limitations under the License.
 #ifndef ASSERT
 
 #include <assert.h>
+
+// We expect the global g_logger be provided from the outside
+class sinsp_logger;
+extern sinsp_logger g_logger;
+
 #ifdef _DEBUG
 
 #ifdef _WIN32
@@ -28,16 +33,32 @@ limitations under the License.
 #endif
 
 #ifdef ASSERT_TO_LOG
-#define ASSERT(X) \
-        if(!(X)) \
-        { \
-                g_logger.format(sinsp_logger::SEV_ERROR, "ASSERTION %s at %s:%d", #X , __FILE__, __LINE__); \
-                assert(X); \
-        }
-#else
+#define ASSERT(X) do {								\
+	if(!(X)) 										\
+	{ 												\
+		g_logger.format(sinsp_logger::SEV_DEBUG, 	\
+						"ASSERTION %s at %s:%d", 	\
+						#X , __FILE__, __LINE__); 	\
+	} 												\
+} while(0)
+#else // ASSERT_TO_LOG
 #define ASSERT(X) assert(X);
 #endif // ASSERT_TO_LOG
+
 #else // _DEBUG
+
+#ifdef ASSERT_TO_LOG
+#define ASSERT(X) do { 								\
+	if(!(X)) 										\
+	{ 												\
+		g_logger.format(sinsp_logger::SEV_DEBUG, 	\
+						"ASSERTION %s at %s:%d", 	\
+						#X , __FILE__, __LINE__); 	\
+	} 												\
+} while(0)
+#else
 #define ASSERT(X)
+#endif // ASSERT_TO_LOG
+
 #endif // _DEBUG
 #endif // ASSERT

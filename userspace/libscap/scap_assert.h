@@ -23,12 +23,55 @@ limitations under the License.
 #include <crtdbg.h>
 #endif
 #include <assert.h>
+#include <stdio.h>
 
-#ifdef ASSERT
-#undef ASSERT
-#endif // ASSERT
+#include "falcosecurity/log.h"
+
+// Define ASSERT only if not done yet, otherwise we might accidentally redefine
+// sinsp version of ASSERT macro
+#ifndef ASSERT
+
+// We expect the global logger_fn be provided from the outside
+extern falcosecurity_log_fn logger_fn;
+
 #ifdef _DEBUG
+
+#ifdef ASSERT_TO_LOG
+#define ASSERT(X) do {													\
+	if(!(X)) { 															\
+		if (logger_fn != NULL) {										\
+			char buf[512]; 												\
+			snprintf(buf, sizeof(buf), 									\
+					 "ASSERTION " #X " at %s:%d", __FILE__, __LINE__); 	\
+			logger_fn("libscap", buf, FALCOSECURITY_LOG_SEV_DEBUG); 	\
+		} 																\
+		else 															\
+		{ 																\
+			assert(X); 													\
+		} 																\
+	} 																	\
+} while(0)
+#else // ASSERT_TO_LOG
 #define ASSERT(X) assert(X)
+#endif // ASSERT_TO_LOG
+
 #else // _DEBUG
+
+#ifdef ASSERT_TO_LOG
+#define ASSERT(X) do {													\
+	if(!(X)) { 															\
+		if (logger_fn != NULL) {										\
+			char buf[512]; 												\
+			snprintf(buf, sizeof(buf), 									\
+					 "ASSERTION " #X " at %s:%d", __FILE__, __LINE__); 	\
+			logger_fn("libscap", buf, FALCOSECURITY_LOG_SEV_DEBUG); 	\
+		} 																\
+	} 																	\
+} while(0)
+#else // ASSERT_TO_LOG
 #define ASSERT(X)
+#endif // ASSERT_TO_LOG
+
 #endif // _DEBUG
+
+#endif // ASSERT

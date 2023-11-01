@@ -30,9 +30,11 @@ limitations under the License.
 
 //
 // Controls if assertions break execution or if they are just printed to the
-// log
+// log. It's not defined here, because some asserts are used even before
+// settings header is included, so it's easier to provide it at the compile
+// time.
 //
-#define ASSERT_TO_LOG
+// #define ASSERT_TO_LOG
 
 //
 // Controls if the library collects internal performance stats.
