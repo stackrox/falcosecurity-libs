@@ -22,15 +22,40 @@ limitations under the License.
 #ifndef ASSERT
 
 #include <assert.h>
+
 #ifdef _DEBUG
 
 #ifdef _WIN32
 #include <cassert>
 #endif
 
+#ifdef ASSERT_TO_LOG
+#define ASSERT(X) do {								\
+	if(!(X)) 										\
+	{ 												\
+		libsinsp_logger()->format(sinsp_logger::SEV_DEBUG, 	\
+						"ASSERTION %s at %s:%d", 	\
+						#X , __FILE__, __LINE__); 	\
+	} 												\
+} while(0)
+#else // ASSERT_TO_LOG
 #define ASSERT(X) assert(X);
+#endif // ASSERT_TO_LOG
 
 #else // _DEBUG
+
+#ifdef ASSERT_TO_LOG
+#define ASSERT(X) do { 								\
+	if(!(X)) 										\
+	{ 												\
+		libsinsp_logger()->format(sinsp_logger::SEV_DEBUG, 	\
+						"ASSERTION %s at %s:%d", 	\
+						#X , __FILE__, __LINE__); 	\
+	} 												\
+} while(0)
+#else
 #define ASSERT(X)
+#endif // ASSERT_TO_LOG
+
 #endif // _DEBUG
 #endif // ASSERT
