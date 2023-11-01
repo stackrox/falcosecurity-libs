@@ -31,6 +31,10 @@ limitations under the License.
 #include <libsinsp/events/sinsp_events.h>
 #include <libsinsp/state/table_registry.h>
 #include <plugin/plugin_loader.h>
+#include "logger.h"
+
+// todo(jasondellaluce: remove this forward declaration)
+class sinsp_filter_check;
 
 #if defined(ENABLE_THREAD_POOL) && !defined(__EMSCRIPTEN__)
 #include <libsinsp/sinsp_thread_pool_bs.h>
