@@ -107,6 +107,7 @@ add_library(
 )
 
 add_dependencies(scap_event_schema uthash)
+target_link_libraries(scap_event_schema scap)
 
 target_include_directories(
 	scap_event_schema

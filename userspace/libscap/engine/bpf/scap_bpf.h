@@ -146,11 +146,11 @@ static inline int32_t scap_bpf_advance_to_evt(struct scap_device *dev,
 			}
 #ifdef _DEBUG
 			struct perf_event_sample *sample = (struct perf_event_sample *)e;
-#endif
 			ASSERT(*len >= sizeof(*sample));
 			ASSERT(*len >= sample->size);
 			ASSERT(e->size == sizeof(*e) + sizeof(sample->size) + sample->size);
 			ASSERT(((scap_evt *)sample->data)->len <= sample->size);
+#endif
 
 			if(skip_current) {
 				skip_current = false;
