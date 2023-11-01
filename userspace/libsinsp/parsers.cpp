@@ -5643,6 +5643,7 @@ void sinsp_parser::parse_memfd_create_exit(sinsp_evt *evt, scap_fd_type type)
 	int64_t fd;
 	uint32_t flags;
 
+	ASSERT(evt->get_tinfo());
 	if(evt->get_tinfo() == nullptr)
 	{
 		return;
@@ -5730,6 +5731,7 @@ void sinsp_parser::parse_pidfd_getfd_exit(sinsp_evt *evt)
 	pidfd = evt->get_param(1)->as<int64_t>();
 
 	/* targetfd */
+	ASSERT(evt->get_param(2)->m_len == sizeof(int64_t));
 	ASSERT(evt->get_param_info(2)->type == PT_FD);
 	targetfd = evt->get_param(2)->as<int64_t>();
 

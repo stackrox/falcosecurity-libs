@@ -38,6 +38,8 @@ limitations under the License.
 
 static char g_ppm_sc_names[PPM_SC_MAX][PPM_MAX_NAME_LEN];
 
+extern falcosecurity_log_fn logger_fn;
+
 static void load_ppm_sc_table()
 {
 	const char *sc_names[PPM_SC_MAX] = {
