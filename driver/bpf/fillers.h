@@ -2993,7 +2993,11 @@ FILLER(execve_family_flags, true)
 	struct timespec64 time = {0};
 
 	/* Parameter 25: exe_file ctime (last status change time, epoch value in nanoseconds) (type: PT_ABSTIME) */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	time = _READ(inode->__i_ctime);
+#else
 	time = _READ(inode->i_ctime);
+#endif
 	res = bpf_val_to_ring_type(data, bpf_epoch_ns_from_time(time), PT_ABSTIME);
 	CHECK_RES(res);
 
@@ -6710,7 +6714,11 @@ FILLER(sched_prog_exec_4, false)
 	struct timespec64 time = {0};
 
 	/* Parameter 25: exe_file ctime (last status change time, epoch value in nanoseconds) (type: PT_ABSTIME) */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	time = _READ(inode->__i_ctime);
+#else
 	time = _READ(inode->i_ctime);
+#endif
 	res = bpf_val_to_ring_type(data, bpf_epoch_ns_from_time(time), PT_ABSTIME);
 	CHECK_RES(res);
 
