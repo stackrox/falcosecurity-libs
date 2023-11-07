@@ -2,10 +2,11 @@ set(PMAN_SOURCES
     src/capture.c
     src/maps.c
     src/lifecycle.c
-    src/programs.c
+    #src/programs.c
     src/ringbuffer.c
     src/configuration.c
     src/state.c
+    src/collector_programs.c
 )
 
 set(PMAN_PRIVATE_INCLUDES
@@ -29,11 +30,9 @@ set(PMAN_LINK_LIBRARIES
     scap_event_schema
 )
 
-if(USE_BUNDLED_MODERN_BPF)
-    set(PMAN_DEPENDENCIES
-        ProbeSkeleton
-    )
-endif()
+set(PMAN_DEPENDENCIES
+    ProbeSkeleton
+)
 
 if(USE_BUNDLED_LIBBPF)
     list(APPEND
