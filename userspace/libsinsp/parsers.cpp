@@ -3810,6 +3810,12 @@ void sinsp_parser::parse_connect_exit(sinsp_evt *evt)
 
 	if(evt->m_fdinfo == NULL)
 	{
+		if (evt->m_tinfo == NULL)
+		{
+			// Out of luck, no thread information
+			return;
+		}
+
 		// Perhaps we dropped the connect enter event.
 		// try harder to be resilient.
 		if(evt->get_num_params() > 2)
