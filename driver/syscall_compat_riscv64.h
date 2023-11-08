@@ -128,9 +128,6 @@ or GPL2.txt for full copies of the license.
 #ifndef __NR_linkat
 #define __NR_linkat 37
 #endif
-#ifndef __NR_renameat
-#define __NR_renameat 38
-#endif
 #ifndef __NR_umount2
 #define __NR_umount2 39
 #endif
@@ -743,6 +740,12 @@ or GPL2.txt for full copies of the license.
 #ifndef __NR_recvmmsg
 #define __NR_recvmmsg 243
 #endif
+#ifndef __NR_riscv_hwprobe
+#define __NR_riscv_hwprobe 258
+#endif
+#ifndef __NR_riscv_flush_icache
+#define __NR_riscv_flush_icache 259
+#endif
 #ifndef __NR_wait4
 #define __NR_wait4 260
 #endif
@@ -934,4 +937,16 @@ or GPL2.txt for full copies of the license.
 #endif
 #ifndef __NR_fchmodat2
 #define __NR_fchmodat2 452
+#endif
+#ifndef __NR_map_shadow_stack
+#define __NR_map_shadow_stack 453
+#endif
+#ifndef __NR_futex_wake
+#define __NR_futex_wake 454
+#endif
+#ifndef __NR_futex_wait
+#define __NR_futex_wait 455
+#endif
+#ifndef __NR_futex_requeue
+#define __NR_futex_requeue 456
 #endif
