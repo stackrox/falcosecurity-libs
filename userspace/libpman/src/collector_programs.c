@@ -59,32 +59,32 @@ static int generic_detach_program(const char *name, struct bpf_link **link)
 	return 0;
 }
 
+#define ATTACH(name, err)                                                      \
+	if(((err) = generic_attach_program(#name,                              \
+					   g_state.skel->progs.name,         \
+					   &g_state.skel->links.name)) != 0) \
+	{                                                                      \
+		return (err);                                                  \
+	}
+
+#define DETACH(name, err)                                                      \
+	if(((err) = generic_detach_program(#name,                              \
+					   &g_state.skel->links.name)) != 0) \
+	{                                                                      \
+		return (err);                                                  \
+	}
+
 static int handle_syscall_enter_programs(bool enable)
 {
 	int result = 0;
 
-#define ATTACH(name)                                                                      \
-	if((result = generic_attach_program(#name,                                        \
-					    g_state.skel->progs.sys_enter_##name,         \
-					    &g_state.skel->links.sys_enter_##name)) != 0) \
-	{                                                                                 \
-		return result;                                                            \
-	}
-
-#define DETACH(name)                                                                      \
-	if((result = generic_detach_program(#name,                                        \
-					    &g_state.skel->links.sys_enter_##name)) != 0) \
-	{                                                                                 \
-		return result;                                                            \
-	}
-
 	if(enable)
 	{
-		ATTACH(sys_enter_chdir);
+		ATTACH(sys_enter_chdir, result);
 	}
 	else
 	{
-		DETACH(sys_enter_chdir);
+		DETACH(sys_enter_chdir, result);
 	}
 
 	return result;
@@ -92,7 +92,18 @@ static int handle_syscall_enter_programs(bool enable)
 
 static int handle_syscall_exit_programs(bool enable)
 {
-	return 0;
+	int result = 0;
+
+	if(enable)
+	{
+		ATTACH(sys_exit_chdir, result);
+	}
+	else
+	{
+		DETACH(sys_exit_chdir, result);
+	}
+
+	return result;
 }
 
 int pman_update_single_program(int tp, bool enabled)
