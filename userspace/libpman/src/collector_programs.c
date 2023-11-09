@@ -59,19 +59,19 @@ static int generic_detach_program(const char *name, struct bpf_link **link)
 	return 0;
 }
 
-#define ATTACH(name, err)                                                      \
-	if(((err) = generic_attach_program(#name,                              \
+#define ATTACH(name, err)                                                    \
+	if(((err) = generic_attach_program(#name,                            \
 					   g_state.skel->progs.name,         \
 					   &g_state.skel->links.name)) != 0) \
-	{                                                                      \
-		return (err);                                                  \
+	{                                                                    \
+		return (err);                                                \
 	}
 
-#define DETACH(name, err)                                                      \
-	if(((err) = generic_detach_program(#name,                              \
+#define DETACH(name, err)                                                    \
+	if(((err) = generic_detach_program(#name,                            \
 					   &g_state.skel->links.name)) != 0) \
-	{                                                                      \
-		return (err);                                                  \
+	{                                                                    \
+		return (err);                                                \
 	}
 
 static int handle_syscall_enter_programs(bool enable)
@@ -81,10 +81,59 @@ static int handle_syscall_enter_programs(bool enable)
 	if(enable)
 	{
 		ATTACH(sys_enter_chdir, result);
+#ifdef __NR_accept
+		ATTACH(sys_enter_accept, result);
+#endif
+		ATTACH(sys_enter_accept4, result);
+		ATTACH(sys_enter_clone, result);
+		ATTACH(sys_enter_close, result);
+		ATTACH(sys_enter_connect, result);
+		ATTACH(sys_enter_execve, result);
+		ATTACH(sys_enter_getsockopt, result);
+		ATTACH(sys_enter_setresgid, result);
+		ATTACH(sys_enter_setresuid, result);
+		ATTACH(sys_enter_setgid, result);
+		ATTACH(sys_enter_setuid, result);
+		ATTACH(sys_enter_shutdown, result);
+		ATTACH(sys_enter_socket, result);
+#ifdef CAPTURE_SOCKETCALL
+		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
+		// socket calls based on those mentioned here.  Therefore
+		// socket calls needs to be synchronized.
+		ATTACH(sys_enter_socketcall, result);
+#endif
+		ATTACH(sys_enter_fchdir, result);
+		ATTACH(sys_enter_fork, result);
+		ATTACH(sys_enter_vfork, result);
 	}
 	else
 	{
 		DETACH(sys_enter_chdir, result);
+		DETACH(sys_enter_chdir, result);
+#ifdef __NR_accept
+		DETACH(sys_enter_accept, result);
+#endif
+		DETACH(sys_enter_accept4, result);
+		DETACH(sys_enter_clone, result);
+		DETACH(sys_enter_close, result);
+		DETACH(sys_enter_connect, result);
+		DETACH(sys_enter_execve, result);
+		DETACH(sys_enter_getsockopt, result);
+		DETACH(sys_enter_setresgid, result);
+		DETACH(sys_enter_setresuid, result);
+		DETACH(sys_enter_setgid, result);
+		DETACH(sys_enter_setuid, result);
+		DETACH(sys_enter_shutdown, result);
+		DETACH(sys_enter_socket, result);
+#ifdef CAPTURE_SOCKETCALL
+		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
+		// socket calls based on those mentioned here.  Therefore
+		// socket calls needs to be synchronized.
+		DETACH(sys_enter_socketcall, result);
+#endif
+		DETACH(sys_enter_fchdir, result);
+		DETACH(sys_enter_fork, result);
+		DETACH(sys_enter_vfork, result);
 	}
 
 	return result;
@@ -97,10 +146,59 @@ static int handle_syscall_exit_programs(bool enable)
 	if(enable)
 	{
 		ATTACH(sys_exit_chdir, result);
+#ifdef __NR_accept
+		ATTACH(sys_exit_accept, result);
+#endif
+		ATTACH(sys_exit_accept4, result);
+		ATTACH(sys_exit_clone, result);
+		ATTACH(sys_exit_close, result);
+		ATTACH(sys_exit_connect, result);
+		ATTACH(sys_exit_execve, result);
+		ATTACH(sys_exit_getsockopt, result);
+		ATTACH(sys_exit_setresgid, result);
+		ATTACH(sys_exit_setresuid, result);
+		ATTACH(sys_exit_setgid, result);
+		ATTACH(sys_exit_setuid, result);
+		ATTACH(sys_exit_shutdown, result);
+		ATTACH(sys_exit_socket, result);
+#ifdef CAPTURE_SOCKETCALL
+		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
+		// socket calls based on those mentioned here.  Therefore
+		// socket calls needs to be synchronized.
+		ATTACH(sys_exit_socketcall, result);
+#endif
+		ATTACH(sys_exit_fchdir, result);
+		ATTACH(sys_exit_fork, result);
+		ATTACH(sys_exit_vfork, result);
 	}
 	else
 	{
 		DETACH(sys_exit_chdir, result);
+		DETACH(sys_exit_chdir, result);
+#ifdef __NR_accept
+		DETACH(sys_exit_accept, result);
+#endif
+		DETACH(sys_exit_accept4, result);
+		DETACH(sys_exit_clone, result);
+		DETACH(sys_exit_close, result);
+		DETACH(sys_exit_connect, result);
+		DETACH(sys_exit_execve, result);
+		DETACH(sys_exit_getsockopt, result);
+		DETACH(sys_exit_setresgid, result);
+		DETACH(sys_exit_setresuid, result);
+		DETACH(sys_exit_setgid, result);
+		DETACH(sys_exit_setuid, result);
+		DETACH(sys_exit_shutdown, result);
+		DETACH(sys_exit_socket, result);
+#ifdef CAPTURE_SOCKETCALL
+		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
+		// socket calls based on those mentioned here.  Therefore
+		// socket calls needs to be synchronized.
+		DETACH(sys_exit_socketcall, result);
+#endif
+		DETACH(sys_exit_fchdir, result);
+		DETACH(sys_exit_fork, result);
+		DETACH(sys_exit_vfork, result);
 	}
 
 	return result;
