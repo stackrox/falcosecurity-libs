@@ -109,7 +109,6 @@ static int handle_syscall_enter_programs(bool enable)
 	else
 	{
 		DETACH(sys_enter_chdir, result);
-		DETACH(sys_enter_chdir, result);
 #ifdef __NR_accept
 		DETACH(sys_enter_accept, result);
 #endif
@@ -173,7 +172,6 @@ static int handle_syscall_exit_programs(bool enable)
 	}
 	else
 	{
-		DETACH(sys_exit_chdir, result);
 		DETACH(sys_exit_chdir, result);
 #ifdef __NR_accept
 		DETACH(sys_exit_accept, result);
