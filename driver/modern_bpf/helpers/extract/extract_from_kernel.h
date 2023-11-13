@@ -55,6 +55,28 @@ static __always_inline u32 extract__syscall_id(struct pt_regs *regs)
 #endif
 }
 
+static __always_inline bool bpf_in_ia32_syscall()
+{
+	uint32_t status = 0;
+	struct task_struct *task = get_current_task();
+
+#if defined(__TARGET_ARCH_x86)
+	READ_TASK_FIELD_INTO(&status, task, thread_info.status);
+	return status & TS_COMPAT;
+#elif defined(__TARGET_ARCH_arm64)
+	READ_TASK_FIELD_INTO(&status, task, thread_info.flags);
+	return status & _TIF_32BIT;
+#elif defined(__TARGET_ARCH_s390)
+	READ_TASK_FIELD_INTO(&status, task, thread_info.flags);
+	return status & _TIF_31BIT;
+#elif defined(__TARGET_ARCH_powerpc)
+	READ_TASK_FIELD_INTO(&status, task, thread_info.flags);
+	return status & _TIF_32BIT;
+#else
+	return false;
+#endif
+}
+
 /**
  * @brief Extract a specific syscall argument
  *
