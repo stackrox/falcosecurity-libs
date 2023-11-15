@@ -96,12 +96,12 @@ static int handle_syscall_enter_programs(bool enable)
 		ATTACH(sys_enter_setuid, result);
 		ATTACH(sys_enter_shutdown, result);
 		ATTACH(sys_enter_socket, result);
-#ifdef CAPTURE_SOCKETCALL
-		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
-		// socket calls based on those mentioned here.  Therefore
-		// socket calls needs to be synchronized.
-		ATTACH(sys_enter_socketcall, result);
-#endif
+		// #ifdef CAPTURE_SOCKETCALL
+		//		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
+		//		// socket calls based on those mentioned here.  Therefore
+		//		// socket calls needs to be synchronized.
+		//		ATTACH(sys_enter_socketcall, result);
+		// #endif
 		ATTACH(sys_enter_fchdir, result);
 		ATTACH(sys_enter_fork, result);
 		ATTACH(sys_enter_vfork, result);
@@ -124,12 +124,12 @@ static int handle_syscall_enter_programs(bool enable)
 		DETACH(sys_enter_setuid, result);
 		DETACH(sys_enter_shutdown, result);
 		DETACH(sys_enter_socket, result);
-#ifdef CAPTURE_SOCKETCALL
-		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
-		// socket calls based on those mentioned here.  Therefore
-		// socket calls needs to be synchronized.
-		DETACH(sys_enter_socketcall, result);
-#endif
+		// #ifdef CAPTURE_SOCKETCALL
+		//		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
+		//		// socket calls based on those mentioned here.  Therefore
+		//		// socket calls needs to be synchronized.
+		//		DETACH(sys_enter_socketcall, result);
+		// #endif
 		DETACH(sys_enter_fchdir, result);
 		DETACH(sys_enter_fork, result);
 		DETACH(sys_enter_vfork, result);
@@ -160,12 +160,12 @@ static int handle_syscall_exit_programs(bool enable)
 		ATTACH(sys_exit_setuid, result);
 		ATTACH(sys_exit_shutdown, result);
 		ATTACH(sys_exit_socket, result);
-#ifdef CAPTURE_SOCKETCALL
-		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
-		// socket calls based on those mentioned here.  Therefore
-		// socket calls needs to be synchronized.
-		ATTACH(sys_exit_socketcall, result);
-#endif
+		// #ifdef CAPTURE_SOCKETCALL
+		//		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
+		//		// socket calls based on those mentioned here.  Therefore
+		//		// socket calls needs to be synchronized.
+		//		ATTACH(sys_exit_socketcall, result);
+		// #endif
 		ATTACH(sys_exit_fchdir, result);
 		ATTACH(sys_exit_fork, result);
 		ATTACH(sys_exit_vfork, result);
@@ -188,12 +188,12 @@ static int handle_syscall_exit_programs(bool enable)
 		DETACH(sys_exit_setuid, result);
 		DETACH(sys_exit_shutdown, result);
 		DETACH(sys_exit_socket, result);
-#ifdef CAPTURE_SOCKETCALL
-		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
-		// socket calls based on those mentioned here.  Therefore
-		// socket calls needs to be synchronized.
-		DETACH(sys_exit_socketcall, result);
-#endif
+		// #ifdef CAPTURE_SOCKETCALL
+		//		// The socketcall handling in driver/bpf/plumbing_helpers.h will filter
+		//		// socket calls based on those mentioned here.  Therefore
+		//		// socket calls needs to be synchronized.
+		//		DETACH(sys_exit_socketcall, result);
+		// #endif
 		DETACH(sys_exit_fchdir, result);
 		DETACH(sys_exit_fork, result);
 		DETACH(sys_exit_vfork, result);
