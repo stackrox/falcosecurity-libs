@@ -33,13 +33,14 @@ extern sinsp_logger g_logger;
 #endif
 
 #ifdef ASSERT_TO_LOG
-#define ASSERT(X) 								\
-if(!(X)) 										\
-{ 												\
-	g_logger.format(sinsp_logger::SEV_DEBUG, 	\
-					"ASSERTION %s at %s:%d", 	\
-					#X , __FILE__, __LINE__); 	\
-}
+#define ASSERT(X) do {								\
+	if(!(X)) 										\
+	{ 												\
+		g_logger.format(sinsp_logger::SEV_DEBUG, 	\
+						"ASSERTION %s at %s:%d", 	\
+						#X , __FILE__, __LINE__); 	\
+	} 												\
+} while(0)
 #else // ASSERT_TO_LOG
 #define ASSERT(X) assert(X);
 #endif // ASSERT_TO_LOG
@@ -47,13 +48,14 @@ if(!(X)) 										\
 #else // _DEBUG
 
 #ifdef ASSERT_TO_LOG
-#define ASSERT(X) \
-if(!(X)) 										\
-{ 												\
-	g_logger.format(sinsp_logger::SEV_DEBUG, 	\
-					"ASSERTION %s at %s:%d", 	\
-					#X , __FILE__, __LINE__); 	\
-}
+#define ASSERT(X) do { 								\
+	if(!(X)) 										\
+	{ 												\
+		g_logger.format(sinsp_logger::SEV_DEBUG, 	\
+						"ASSERTION %s at %s:%d", 	\
+						#X , __FILE__, __LINE__); 	\
+	} 												\
+} while(0)
 #else
 #define ASSERT(X)
 #endif // ASSERT_TO_LOG
