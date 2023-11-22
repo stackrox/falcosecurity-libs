@@ -31,11 +31,10 @@ struct sys_enter_args {
 #else
 struct sys_enter_args {
 	__u64 pad;
-#if defined(RHEL_RELEASE_CODE) && RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 3)
-    // on RHEL 9.3 and newer, support has been added for lazy pre-emption, which
-    // adds some fields to the tracepoint context format. This extra padding
-    // covers those new (unneeded) fields, and ensures the remainder of the structure
-    // is at the correct offsets.
+#ifdef CONFIG_PREEMPT_LAZY
+    // lazy preemption adds some fields to the tracepoint context format.
+    // This extra padding covers those new (unneeded) fields,
+    // and ensures the remainder of the structure is at the correct offsets.
 	__u32 pad2;
 #endif
 	long id;
@@ -51,11 +50,10 @@ struct sys_exit_args {
 #else
 struct sys_exit_args {
 	__u64 pad;
-#if defined(RHEL_RELEASE_CODE) && RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 3)
-    // on RHEL 9.3 and newer, support has been added for lazy pre-emption, which
-    // adds some fields to the tracepoint context format. This extra padding
-    // covers those new (unneeded) fields, and ensures the remainder of the structure
-    // is at the correct offsets.
+#ifdef CONFIG_PREEMPT_LAZY
+    // lazy preemption adds some fields to the tracepoint context format.
+    // This extra padding covers those new (unneeded) fields,
+    // and ensures the remainder of the structure is at the correct offsets.
 	__u32 pad2;
 #endif
 #if !defined(RHEL_RELEASE_CODE) || RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(8, 0)
