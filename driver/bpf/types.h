@@ -31,7 +31,7 @@ struct sys_enter_args {
 #else
 struct sys_enter_args {
 	__u64 pad;
-#ifdef CONFIG_PREEMPT_LAZY
+#ifdef CONFIG_HAVE_PREEMPT_LAZY
     // lazy preemption adds some fields to the tracepoint context format.
     // This extra padding covers those new (unneeded) fields,
     // and ensures the remainder of the structure is at the correct offsets.
@@ -50,7 +50,7 @@ struct sys_exit_args {
 #else
 struct sys_exit_args {
 	__u64 pad;
-#ifdef CONFIG_PREEMPT_LAZY
+#ifdef CONFIG_HAVE_PREEMPT_LAZY
     // lazy preemption adds some fields to the tracepoint context format.
     // This extra padding covers those new (unneeded) fields,
     // and ensures the remainder of the structure is at the correct offsets.
