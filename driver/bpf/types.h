@@ -56,6 +56,8 @@ struct sys_exit_args {
     // and ensures the remainder of the structure is at the correct offsets.
 	__u64 pad2;
 #endif
+// PPM_* macros used here instead of the plain RHEL_* equivalents,
+// since they are defined for all platforms (see ../ppm_version.h)
 #if PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 0)
 	int id;
 #else
