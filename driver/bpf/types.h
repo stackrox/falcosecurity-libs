@@ -56,7 +56,7 @@ struct sys_exit_args {
     // and ensures the remainder of the structure is at the correct offsets.
 	__u64 pad2;
 #endif
-#if !defined(RHEL_RELEASE_CODE) || RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(8, 0)
+#if PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 0)
 	int id;
 #else
 	long id;
