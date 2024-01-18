@@ -51,6 +51,16 @@ bool should_drop(sinsp_evt *evt);
 #include "container_engine/docker/async_source.h"
 #endif
 
+/*
+ * TODO: Trusted exepath is temporary disabled due to it's impact on builtin
+ * policies. Enable as soon as possible.
+ */
+#if defined(ENABLE_TRUSTED_EXEPATH)
+#define USE_TRUSTED_EXEPATH true
+#else
+#define USE_TRUSTED_EXEPATH false
+#endif
+
 extern sinsp_protodecoder_list g_decoderlist;
 extern sinsp_evttables g_infotables;
 
@@ -2451,7 +2461,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	/*
 	 * Get `exepath`
 	 */
-	if(evt->get_num_params() > 27)
+	if(USE_TRUSTED_EXEPATH && evt->get_num_params() > 27)
 	{
 		/* In new event versions, with 28 parameters, we can obtain the full exepath with resolved symlinks
 		 * directly from the kernel.
