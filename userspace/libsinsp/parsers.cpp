@@ -46,6 +46,16 @@ limitations under the License.
 #include <libsinsp/container_engine/docker/async_source.h>
 #endif
 
+/*
+ * TODO: Trusted exepath is temporary disabled due to it's impact on builtin
+ * policies. Enable as soon as possible.
+ */
+#if defined(ENABLE_TRUSTED_EXEPATH)
+#define USE_TRUSTED_EXEPATH true
+#else
+#define USE_TRUSTED_EXEPATH false
+#endif
+
 sinsp_parser::sinsp_parser(sinsp *inspector) :
 	m_inspector(inspector),
 	m_tmp_evt(m_inspector),
@@ -2209,7 +2219,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	/*
 	 * Get `exepath`
 	 */
-	if(evt->get_num_params() > 27)
+	if(USE_TRUSTED_EXEPATH && evt->get_num_params() > 27)
 	{
 		/* In new event versions, with 28 parameters, we can obtain the full exepath with resolved symlinks
 		 * directly from the kernel.
