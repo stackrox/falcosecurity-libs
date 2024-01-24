@@ -2488,6 +2488,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 			&&
 			retrieve_enter_event(enter_evt, evt))
 		{
+                    printf("enter tid: %ld exit tid: %ld\n", enter_evt->get_tid(), evt->get_tid());
 			char fullpath[SCAP_MAX_PATH_SIZE] = {0};
 
 			/* We need to manage the 2 possible cases:
