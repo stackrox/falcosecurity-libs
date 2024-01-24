@@ -2601,6 +2601,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 				}
 			}
 			evt->m_tinfo->m_exepath = fullpath;
+            printf("%s (%s)\n", evt->m_tinfo->m_comm.c_str(), fullpath);
 		}
 	}
 
