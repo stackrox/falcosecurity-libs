@@ -997,6 +997,7 @@ bool sinsp_parser::retrieve_enter_event(sinsp_evt *enter_evt, sinsp_evt *exit_ev
 	//
 	if(!exit_evt->m_tinfo)
 	{
+      printf("no exit tinfo\n");
 		return false;
 	}
 
@@ -1012,10 +1013,13 @@ bool sinsp_parser::retrieve_enter_event(sinsp_evt *enter_evt, sinsp_evt *exit_ev
 #ifdef GATHER_INTERNAL_STATS
 		m_inspector->m_stats->m_n_retrieve_drops++;
 #endif
+        printf("invalid lastevent data\n");
 		return false;
 	}
 
 	enter_evt->init(exit_evt->m_tinfo->m_lastevent_data, exit_evt->m_tinfo->m_lastevent_cpuid);
+
+    printf("etid: %ld xtid: %ld\n", enter_evt->get_tid(), exit_evt->get_tid());
 
 	/* The `execveat` syscall is a wrapper of `execve`, when the call
 	 * succeeds the event returned is simply an `execve` exit event.
@@ -1048,6 +1052,7 @@ bool sinsp_parser::retrieve_enter_event(sinsp_evt *enter_evt, sinsp_evt *exit_ev
 #ifdef GATHER_INTERNAL_STATS
 		m_inspector->m_stats->m_n_retrieve_drops++;
 #endif
+        printf("invalid enter event (e: %ld x: %ld)\n", enter_evt->get_type(), exit_evt->get_type());
 		return false;
 	}
 
@@ -2476,6 +2481,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 		/* ONLY VALID FOR OLD SCAP-FILES:
 		 * In older event versions we can only rely on our userspace reconstruction
 		 */
+        printf("exepath resolution for %s\n", evt->m_tinfo->get_comm().c_str());
 
 		/* We introduced the `filename` argument in the enter event
 		 * only from version `EXECVE_18_E`.
