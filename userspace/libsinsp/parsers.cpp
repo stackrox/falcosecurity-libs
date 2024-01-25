@@ -2603,6 +2603,24 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 			}
 			evt->m_tinfo->m_exepath = fullpath;
 		}
+		else
+		{
+			if (evt->m_tinfo)
+			{
+				g_logger.format(
+					sinsp_logger::SEV_DEBUG,
+					"Cannot resolve exepath, tinfo %p, lastevent_data valid: %d, lastevent_data %p",
+					evt->m_tinfo,
+					evt->m_tinfo->is_lastevent_data_valid(),
+					evt->m_tinfo->m_lastevent_data);
+			}
+			else
+			{
+				g_logger.format(
+					sinsp_logger::SEV_DEBUG,
+					"Cannot resolve exepath, tinfo %p", evt->m_tinfo);
+			}
+		}
 	}
 
 	switch(etype)
