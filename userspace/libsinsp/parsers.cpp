@@ -337,7 +337,7 @@ void sinsp_parser::process_event(sinsp_evt *evt)
 	case PPME_SYSCALL_POLL_E:
 	case PPME_SYSCALL_PPOLL_E:
 	case PPME_SYSCALL_EPOLLWAIT_E:
-		parse_select_poll_epollwait_enter(evt);
+		//parse_select_poll_epollwait_enter(evt);
 		break;
 	case PPME_SYSCALL_UNSHARE_E:
 	case PPME_SYSCALL_SETNS_E:
@@ -592,6 +592,9 @@ void sinsp_parser::event_cleanup(sinsp_evt *evt)
 	if(evt->get_direction() == SCAP_ED_OUT &&
 	   evt->m_tinfo && evt->m_tinfo->m_lastevent_data)
 	{
+		g_logger.format(
+			sinsp_logger::SEV_DEBUG,
+			"Cleanup lastevent, tinfo %d", evt->get_tid());
 		free_event_buffer(evt->m_tinfo->m_lastevent_data);
 		evt->m_tinfo->m_lastevent_data = NULL;
 		evt->m_tinfo->set_lastevent_data_validity(false);
@@ -983,6 +986,11 @@ void sinsp_parser::store_event(sinsp_evt *evt)
 			return;
 		}
 	}
+
+	g_logger.format(
+		sinsp_logger::SEV_DEBUG,
+		"Overwrite lastevent, tinfo %d", evt->get_tid());
+
 	memcpy(tinfo->m_lastevent_data, evt->m_pevt, elen);
 	tinfo->m_lastevent_cpuid = evt->get_cpuid();
 
@@ -2609,8 +2617,8 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 			{
 				g_logger.format(
 					sinsp_logger::SEV_DEBUG,
-					"Cannot resolve exepath, tinfo %p, lastevent_data valid: %d, lastevent_data %p",
-					evt->m_tinfo,
+					"Cannot resolve exepath, tinfo %d, lastevent_data valid: %d, lastevent_data %p",
+					evt->get_tid(),
 					evt->m_tinfo->is_lastevent_data_valid(),
 					evt->m_tinfo->m_lastevent_data);
 			}
@@ -5617,6 +5625,11 @@ void sinsp_parser::parse_select_poll_epollwait_enter(sinsp_evt *evt)
 			throw sinsp_exception("cannot reserve event buffer in sinsp_parser::parse_select_poll_epollwait_enter.");
 		}
 	}
+
+	g_logger.format(
+		sinsp_logger::SEV_DEBUG,
+		"Overwrite lastevent, tinfo %d", evt->get_tid());
+
 	*(uint64_t*)evt->m_tinfo->m_lastevent_data = evt->get_ts();
 }
 void sinsp_parser::parse_fcntl_enter(sinsp_evt *evt)

@@ -164,6 +164,9 @@ sinsp_threadinfo::~sinsp_threadinfo()
 {
 	if(m_lastevent_data)
 	{
+		g_logger.format(
+			sinsp_logger::SEV_DEBUG,
+			"Free lastevent, tinfo %d", m_tid);
 		free(m_lastevent_data);
 	}
 
