@@ -592,12 +592,20 @@ void sinsp_parser::event_cleanup(sinsp_evt *evt)
 	if(evt->get_direction() == SCAP_ED_OUT &&
 	   evt->m_tinfo && evt->m_tinfo->m_lastevent_data)
 	{
+		//if((evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVE_18_E ||
+			//evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVE_19_E ||
+			//evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVEAT_E) &&
+			//(evt->get_type() != PPME_SYSCALL_EXECVE_18_X &&
+			 //evt->get_type() != PPME_SYSCALL_EXECVE_19_X))
+			//// keep exec enter events, until it's an exec exit
+			//return;
+
 		g_logger.format(
 			sinsp_logger::SEV_DEBUG,
 			"Cleanup lastevent, tinfo %d", evt->get_tid());
-		free_event_buffer(evt->m_tinfo->m_lastevent_data);
-		evt->m_tinfo->m_lastevent_data = NULL;
-		evt->m_tinfo->set_lastevent_data_validity(false);
+		//free_event_buffer(evt->m_tinfo->m_lastevent_data);
+		//evt->m_tinfo->m_lastevent_data = NULL;
+		//evt->m_tinfo->set_lastevent_data_validity(false);
 	}
 }
 
