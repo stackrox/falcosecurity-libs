@@ -271,7 +271,6 @@ void sinsp_parser::process_event(sinsp_evt *evt)
 	case PPME_SYSCALL_SETPGID_E:
 	case PPME_SYSCALL_UNLINK_E:
 	case PPME_SYSCALL_UNLINKAT_E:
-		break;
 	case PPME_SYSCALL_EXECVE_18_E:
 	case PPME_SYSCALL_EXECVE_19_E:
 	case PPME_SYSCALL_EXECVEAT_E:
