@@ -1330,6 +1330,11 @@ void sinsp_parser::parse_clone_exit(sinsp_evt *evt)
 			//
 			// Parent found in proc, use its data
 			//
+			g_logger.format(
+				sinsp_logger::SEV_DEBUG,
+				"Found parent in proc, %s",
+				ptinfo->m_exepath);
+
 			tinfo->m_comm = ptinfo->m_comm;
 			tinfo->m_exe = ptinfo->m_exe;
 			tinfo->m_exepath = ptinfo->m_exepath;
@@ -2076,6 +2081,26 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 			}
 		}
 		evt->m_tinfo->m_exepath = fullpath;
+	}
+	else
+	{
+		if (evt->m_tinfo)
+		{
+			g_logger.format(
+				sinsp_logger::SEV_DEBUG,
+				"Cannot resolve exepath, tinfo %d, lastevent type %d, lastevent_data valid: %d, lastevent_data %p, current exepath %s",
+				evt->get_tid(),
+				evt->m_tinfo->m_lastevent_type,
+				evt->m_tinfo->is_lastevent_data_valid(),
+				evt->m_tinfo->m_lastevent_data,
+				evt->m_tinfo->m_exepath);
+		}
+		else
+		{
+			g_logger.format(
+				sinsp_logger::SEV_DEBUG,
+				"Cannot resolve exepath, tinfo %p", evt->m_tinfo);
+		}
 	}
 
 	switch(etype)
