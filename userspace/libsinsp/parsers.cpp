@@ -336,7 +336,7 @@ void sinsp_parser::process_event(sinsp_evt *evt)
 	case PPME_SYSCALL_POLL_E:
 	case PPME_SYSCALL_PPOLL_E:
 	case PPME_SYSCALL_EPOLLWAIT_E:
-		//parse_select_poll_epollwait_enter(evt);
+		parse_select_poll_epollwait_enter(evt);
 		break;
 	case PPME_SYSCALL_UNSHARE_E:
 	case PPME_SYSCALL_SETNS_E:
@@ -591,15 +591,6 @@ void sinsp_parser::event_cleanup(sinsp_evt *evt)
 	if(evt->get_direction() == SCAP_ED_OUT &&
 	   evt->m_tinfo && evt->m_tinfo->m_lastevent_data)
 	{
-		if((evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVE_18_E ||
-			evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVE_19_E ||
-			evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVEAT_E) &&
-			(evt->get_type() != PPME_SYSCALL_EXECVE_18_X &&
-			 evt->get_type() != PPME_SYSCALL_EXECVE_19_X &&
-			 evt->get_type() != PPME_SYSCALL_EXECVEAT_X))
-			// keep exec enter events, until it's an exec exit
-			return;
-
 		g_logger.format(
 			sinsp_logger::SEV_DEBUG,
 			"Cleanup lastevent, tinfo %d", evt->get_tid());
@@ -817,13 +808,6 @@ bool sinsp_parser::reset(sinsp_evt *evt)
 	if(PPME_IS_ENTER(etype))
 	{
 		evt->m_tinfo->m_lastevent_fd = -1;
-		// keep exec enter type
-		if(!(evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVE_18_E ||
-		   evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVE_19_E ||
-		   evt->m_tinfo->m_lastevent_type == PPME_SYSCALL_EXECVEAT_E))
-		{
-			evt->m_tinfo->m_lastevent_type = etype;
-		}
 
 		if(eflags & EF_USES_FD)
 		{
@@ -1008,137 +992,6 @@ void sinsp_parser::store_event(sinsp_evt *evt)
 
 	memcpy(tinfo->m_lastevent_data, evt->m_pevt, elen);
 	tinfo->m_lastevent_cpuid = evt->get_cpuid();
-
-    if(evt->get_type() == PPME_SYSCALL_EXECVE_18_E ||
-       evt->get_type() == PPME_SYSCALL_EXECVE_19_E ||
-       evt->get_type() == PPME_SYSCALL_EXECVEAT_E)
-    {
-        char fullpath[SCAP_MAX_PATH_SIZE] = {0};
-
-        /* We need to manage the 2 possible cases:
-        * - enter event is an `EXECVE`
-        * - enter event is an `EXECVEAT`
-        */
-        if(evt->get_type() == PPME_SYSCALL_EXECVE_18_E ||
-           evt->get_type() == PPME_SYSCALL_EXECVE_19_E)
-        {
-			sinsp_evt_param *parinfo;
-
-            /*
-            * Get filename
-            */
-            parinfo = evt->get_param(0);
-            /* This could happen only if we are not able to get the info from the kernel,
-            * because if the syscall was successful the pathname was surely here the problem
-            * is that for some reason we were not able to get it with our instrumentation,
-            * for example when the `bpf_probe_read()` call fails in BPF.
-            */
-            if(strncmp(parinfo->m_val, "<NA>", 5) == 0)
-            {
-                strlcpy(fullpath, "<NA>", 5);
-            }
-            else
-            {
-                /* Here the filename can be relative or absolute. */
-                sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE,
-                                                evt->m_tinfo->m_cwd.c_str(),
-                                                (uint32_t)evt->m_tinfo->m_cwd.size(),
-                                                parinfo->m_val,
-                                                (uint32_t)parinfo->m_len);
-            }
-        }
-        else if(evt->get_type() == PPME_SYSCALL_EXECVEAT_E)
-        {
-			sinsp_evt_param *parinfo;
-
-            /*
-            * Get dirfd
-            */
-            parinfo = evt->get_param(0);
-            ASSERT(parinfo->m_len == sizeof(int64_t));
-            int64_t dirfd = *(int64_t *)parinfo->m_val;
-
-            /*
-            * Get flags
-            */
-            parinfo = evt->get_param(2);
-            ASSERT(parinfo->m_len == sizeof(uint32_t));
-            uint32_t flags = *(uint32_t *)parinfo->m_val;
-
-            /*
-            * Get pathname
-            */
-
-            /* The pathname could be:
-            * - (1) relative (to dirfd).
-            * - (2) absolute.
-            * - (3) empty in the kernel because the user specified the `AT_EMPTY_PATH` flag.
-            *   In this case, `dirfd` must refer to a file.
-            *   Please note:
-            *   The path is empty in the kernel but in userspace, we will obtain a `<NA>`.
-            * - (4) empty in the kernel because we fail to recover it from the registries.
-            * 	 Please note:
-            *   The path is empty in the kernel but in userspace, we will obtain a `<NA>`.
-            */
-            parinfo = evt->get_param(1);
-            char *pathname = parinfo->m_val;
-            uint32_t namelen = parinfo->m_len;
-
-            /* If the pathname is `<NA>` here we shouldn't have problems during `parse_dirfd`.
-            * It doesn't start with "/" so it is not considered an absolute path.
-            */
-            std::string sdir;
-            parse_dirfd(evt, pathname, dirfd, &sdir);
-
-            /* (4) In this case, we were not able to recover the pathname from the kernel or
-            * we are not able to recover information about `dirfd` in our `sinsp` state.
-            * Fallback to `<NA>`.
-            */
-            if((!(flags & PPM_EXVAT_AT_EMPTY_PATH) && strncmp(pathname, "<NA>", 5) == 0) ||
-            sdir.compare("<UNKNOWN>") == 0)
-            {
-                /* we copy also the string terminator `\0`. */
-                strlcpy(fullpath, "<NA>", 5);
-            }
-            /* (3) In this case we have already obtained the `exepath` and it is `sdir`, we just need
-            * to sanitize it.
-            */
-            else if(flags & PPM_EXVAT_AT_EMPTY_PATH)
-            {
-                /* We explicitly set the `pathlen` to `0`, since `pathname` is `<NA>`
-                * as we said in case (3), and we don't want to consider it as a valid
-                * part of the final path. In this case `sdir` will always be
-                * an absolute path.
-                */
-                sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE,
-                                "\0",
-                                0,
-                                sdir.c_str(),
-                                (uint32_t)sdir.length());
-
-            }
-            /* (2)/(1) If it is relative or absolute we craft the `fullpath` as usual:
-            * - `sdir` + `pathname`
-            */
-            else
-            {
-                sinsp_utils::concatenate_paths(fullpath, SCAP_MAX_PATH_SIZE,
-                                            sdir.c_str(),
-                                            (uint32_t)sdir.length(),
-                                            pathname,
-                                            namelen);
-            }
-        }
-
-        g_logger.format(
-            sinsp_logger::SEV_DEBUG,
-            "Set exepath %s, tinfo %d, event type %d",
-            fullpath,
-            evt->get_tid(),
-            evt->get_type());
-
-        evt->m_tinfo->m_exepath = fullpath;
-    }
 
 #ifdef GATHER_INTERNAL_STATS
 	m_inspector->m_stats->m_n_stored_evts++;
@@ -2645,13 +2498,13 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 		{
 			char fullpath[SCAP_MAX_PATH_SIZE] = {0};
 
-            g_logger.format(
-                sinsp_logger::SEV_DEBUG,
-                "Resolved exepath, tinfo %d, lastevent type %d, lastevent_data valid: %d, lastevent_data %p",
-                evt->get_tid(),
-                evt->m_tinfo->m_lastevent_type,
-                evt->m_tinfo->is_lastevent_data_valid(),
-                evt->m_tinfo->m_lastevent_data);
+			g_logger.format(
+				sinsp_logger::SEV_DEBUG,
+				"Resolved exepath, tinfo %d, lastevent type %d, lastevent_data valid: %d, lastevent_data %p",
+				evt->get_tid(),
+				evt->m_tinfo->m_lastevent_type,
+				evt->m_tinfo->is_lastevent_data_valid(),
+				evt->m_tinfo->m_lastevent_data);
 
 			/* We need to manage the 2 possible cases:
 			* - enter event is an `EXECVE`
@@ -2769,6 +2622,9 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 		{
 			if (evt->m_tinfo)
 			{
+				int64_t tid = evt->get_tid();
+				sinsp_threadinfo *tinfo;
+
 				g_logger.format(
 					sinsp_logger::SEV_DEBUG,
 					"Cannot resolve exepath, tinfo %d, lastevent type %d, lastevent_data valid: %d, lastevent_data %p",
@@ -2776,6 +2632,10 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
                     evt->m_tinfo->m_lastevent_type,
 					evt->m_tinfo->is_lastevent_data_valid(),
 					evt->m_tinfo->m_lastevent_data);
+
+				m_inspector->remove_thread(tid);
+				tinfo = m_inspector->get_thread_ref(tid, true).get();
+				evt->m_tinfo->m_exepath = tinfo->m_exepath;
 			}
 			else
 			{
