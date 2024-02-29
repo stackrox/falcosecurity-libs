@@ -2189,7 +2189,10 @@ threadinfo_map_t::ptr_t sinsp_thread_manager::get_thread_ref(int64_t tid, bool q
         //
         // Done. Add the new thread to the list.
         //
-        add_thread(newti, false);
+        if (!add_thread(newti, false))
+        {
+            delete newti;
+        }
         sinsp_proc = find_thread(tid, lookup_only);
     }
 
