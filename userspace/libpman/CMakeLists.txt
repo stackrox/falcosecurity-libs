@@ -9,7 +9,7 @@ set(PMAN_SOURCES
 )
 
 if (${USE_BUNDLED_MODERN_BPF})
-    list(APPEND PMAN_SOURCES src/programs.c
+    list(APPEND PMAN_SOURCES src/programs.c)
 else()
     list(APPEND PMAN_SOURCES src/collector_programs.c)
 endif()
