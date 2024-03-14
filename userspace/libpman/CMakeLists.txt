@@ -2,12 +2,17 @@ set(PMAN_SOURCES
     src/stats.c
     src/maps.c
     src/lifecycle.c
-    src/programs.c
     src/ringbuffer.c
     src/configuration.c
     src/state.c
     src/sc_set.c
 )
+
+if (${USE_BUNDLED_MODERN_BPF})
+    list(APPEND PMAN_SOURCES src/programs.c
+else()
+    list(APPEND PMAN_SOURCES src/collector_programs.c)
+endif()
 
 set(PMAN_PRIVATE_INCLUDES
     "${ZLIB_INCLUDE}"
