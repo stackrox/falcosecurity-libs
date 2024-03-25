@@ -763,6 +763,18 @@ public:
 	void set_hostname_and_port_resolution_mode(bool enable);
 
 	/*!
+	  \brief Set whether to store user details.
+
+	  \note By default thread information is enriched with the full set of user
+	   information, i.e. name, homedir, shell, group name. The parameter
+	   controls this behavior, an can be used to reduce memory footprint.
+
+	  \param enable If set to false, no extended user information will be
+	   stored in sinsp_threadinfo, only user id/group id will be available.
+	*/
+	void set_user_details(bool enable);
+
+	/*!
 	  \brief Set the runtime flag for resolving the timespan in a human
 	   readable mode.
 
@@ -1116,6 +1128,7 @@ private:
 	bool m_isfatfile_enabled;
 	bool m_isinternal_events_enabled;
 	bool m_hostname_and_port_resolution_enabled;
+	bool m_user_details_enabled;
 	char m_output_time_flag;
 	uint32_t m_max_evt_output_len;
 	bool m_compress;

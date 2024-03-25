@@ -155,9 +155,9 @@ void sinsp_threadinfo::init()
 	m_exe_ino_ctime_duration_clone_ts = 0;
 	m_exe_ino_ctime_duration_pidns_start = 0;
 
-	memset(&m_user, 0, sizeof(scap_userinfo));
-	memset(&m_group, 0, sizeof(scap_groupinfo));
-	memset(&m_loginuser, 0, sizeof(scap_userinfo));
+	m_user = std::make_shared<sinsp_userinfo>();
+	m_loginuser = std::make_shared<sinsp_userinfo>();
+	m_group = std::make_shared<sinsp_groupinfo>();
 }
 
 sinsp_threadinfo::~sinsp_threadinfo()
@@ -574,19 +574,32 @@ void sinsp_threadinfo::set_user(uint32_t uid)
 	if (!user)
 	{
 		auto notify = m_inspector->is_live() || m_inspector->is_syscall_plugin();
-		user = m_inspector->m_usergroup_manager.add_user(m_container_id, m_pid, uid, m_group.gid, NULL, NULL, NULL, notify);
+		user = m_inspector->m_usergroup_manager.add_user(m_container_id, m_pid, uid, m_group->gid, NULL, NULL, NULL, notify);
 	}
+
 	if (user)
 	{
-		memcpy(&m_user, user, sizeof(scap_userinfo));
+		m_user->uid = user->uid;
+		m_user->gid = m_group->gid;
+
+		if (m_inspector->m_user_details_enabled)
+		{
+			m_user->name.assign(user->name, sizeof(user->name));
+			m_user->homedir.assign(user->homedir, sizeof(user->homedir));
+			m_user->shell.assign(user->shell, sizeof(user->shell));
+		}
 	}
 	else
 	{
-		m_user.uid = uid;
-		m_user.gid = m_group.gid;
-		strlcpy(m_user.name, (uid == 0) ? "root" : "<NA>", sizeof(m_user.name));
-		strlcpy(m_user.homedir, (uid == 0) ? "/root" : "<NA>", sizeof(m_user.homedir));
-		strlcpy(m_user.shell, "<NA>", sizeof(m_user.shell));
+		m_user->uid = uid;
+		m_user->gid = m_group->gid;
+
+		if (m_inspector->m_user_details_enabled)
+		{
+			m_user->name = (uid == 0) ? "root" : "<NA>";
+			m_user->homedir = (uid == 0) ? "/root" : "<NA>";
+			m_user->shell = "<NA>";
+		}
 	}
 }
 
@@ -600,30 +613,51 @@ void sinsp_threadinfo::set_group(uint32_t gid)
 	}
 	if (group)
 	{
-		memcpy(&m_group, group, sizeof(scap_groupinfo));
+		m_group->gid = group->gid;
+
+		if (m_inspector->m_user_details_enabled)
+		{
+			m_group->name.assign(group->name, sizeof(group->name));
+		}
 	}
 	else
 	{
-		m_group.gid = gid;
-		strlcpy(m_group.name, (gid == 0) ? "root" : "<NA>", sizeof(m_group.name));
+		m_group->gid = gid;
+		if (m_inspector->m_user_details_enabled)
+		{
+			m_group->name = (gid == 0) ? "root" : "<NA>";
+		}
 	}
-	m_user.gid = m_group.gid;
+	m_user->gid = m_group->gid;
 }
 
 void sinsp_threadinfo::set_loginuser(uint32_t loginuid)
 {
 	scap_userinfo *login_user = m_inspector->m_usergroup_manager.get_user(m_container_id, loginuid);
+
 	if (login_user)
 	{
-		memcpy(&m_loginuser, login_user, sizeof(scap_userinfo));
+		m_loginuser->uid = login_user->uid;
+		m_loginuser->gid = m_group->gid;
+
+		if (m_inspector->m_user_details_enabled)
+		{
+			m_loginuser->name.assign(login_user->name, sizeof(login_user->name));
+			m_loginuser->homedir.assign(login_user->homedir, sizeof(login_user->homedir));
+			m_loginuser->shell.assign(login_user->shell, sizeof(login_user->shell));
+		}
 	}
 	else
 	{
-		m_loginuser.uid = loginuid;
-		m_loginuser.gid = m_group.gid;
-		strlcpy(m_loginuser.name, loginuid == 0 ? "root" : "<NA>", sizeof(m_loginuser.name));
-		strlcpy(m_loginuser.homedir, loginuid == 0  ? "/root" : "<NA>", sizeof(m_loginuser.homedir));
-		strlcpy(m_loginuser.shell, "<NA>", sizeof(m_loginuser.shell));
+		m_loginuser->uid = loginuid;
+		m_loginuser->gid = m_group->gid;
+
+		if (m_inspector->m_user_details_enabled)
+		{
+			m_loginuser->name = loginuid == 0 ? "root" : "<NA>";
+			m_loginuser->homedir = loginuid == 0  ? "/root" : "<NA>";
+			m_loginuser->shell = "<NA>";
+		}
 	}
 }
 
@@ -1945,8 +1979,8 @@ void sinsp_thread_manager::thread_to_scap(sinsp_threadinfo& tinfo, 	scap_threadi
 
 	sctinfo->flags = tinfo.m_flags ;
 	sctinfo->fdlimit = tinfo.m_fdlimit;
-	sctinfo->uid = tinfo.m_user.uid;
-	sctinfo->gid = tinfo.m_group.gid;
+	sctinfo->uid = tinfo.m_user->uid;
+	sctinfo->gid = tinfo.m_group->gid;
 	sctinfo->vmsize_kb = tinfo.m_vmsize_kb;
 	sctinfo->vmrss_kb = tinfo.m_vmrss_kb;
 	sctinfo->vmswap_kb = tinfo.m_vmswap_kb;
@@ -1955,7 +1989,7 @@ void sinsp_thread_manager::thread_to_scap(sinsp_threadinfo& tinfo, 	scap_threadi
 	sctinfo->vtid = tinfo.m_vtid;
 	sctinfo->vpid = tinfo.m_vpid;
 	sctinfo->fdlist = NULL;
-	sctinfo->loginuid = tinfo.m_loginuser.uid;
+	sctinfo->loginuid = tinfo.m_loginuser->uid;
 	sctinfo->filtered_out = false;
 }
 
@@ -2181,9 +2215,9 @@ threadinfo_map_t::ptr_t sinsp_thread_manager::get_thread_ref(int64_t tid, bool q
             newti->m_not_expired_children = 0;
             newti->m_comm = "<NA>";
             newti->m_exe = "<NA>";
-            newti->m_user.uid = 0xffffffff;
-            newti->m_group.gid = 0xffffffff;
-            newti->m_loginuser.uid = 0xffffffff;
+            newti->m_user->uid = 0xffffffff;
+            newti->m_group->gid = 0xffffffff;
+            newti->m_loginuser->uid = 0xffffffff;
         }
 
         //
