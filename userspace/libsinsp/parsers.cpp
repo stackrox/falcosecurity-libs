@@ -46,6 +46,16 @@ limitations under the License.
 #include <libsinsp/container_engine/docker/async_source.h>
 #endif
 
+/*
+ * TODO: Trusted exepath is temporary disabled due to it's impact on builtin
+ * policies. Enable as soon as possible.
+ */
+#if defined(ENABLE_TRUSTED_EXEPATH)
+#define USE_TRUSTED_EXEPATH true
+#else
+#define USE_TRUSTED_EXEPATH false
+#endif
+
 sinsp_parser::sinsp_parser(sinsp *inspector) :
 	m_inspector(inspector),
 	m_tmp_evt(m_inspector),
@@ -2209,7 +2219,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	/*
 	 * Get `exepath`
 	 */
-	if(evt->get_num_params() > 27)
+	if(USE_TRUSTED_EXEPATH && evt->get_num_params() > 27)
 	{
 		/* In new event versions, with 28 parameters, we can obtain the full exepath with resolved symlinks
 		 * directly from the kernel.
@@ -5652,6 +5662,7 @@ void sinsp_parser::parse_memfd_create_exit(sinsp_evt *evt, scap_fd_type type)
 	int64_t fd;
 	uint32_t flags;
 
+	ASSERT(evt->get_tinfo());
 	if(evt->get_tinfo() == nullptr)
 	{
 		return;
@@ -5739,6 +5750,7 @@ void sinsp_parser::parse_pidfd_getfd_exit(sinsp_evt *evt)
 	pidfd = evt->get_param(1)->as<int64_t>();
 
 	/* targetfd */
+	ASSERT(evt->get_param(2)->m_len == sizeof(int64_t));
 	ASSERT(evt->get_param_info(2)->type == PT_FD);
 	targetfd = evt->get_param(2)->as<int64_t>();
 

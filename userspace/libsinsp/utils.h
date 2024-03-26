@@ -37,6 +37,7 @@ limitations under the License.
 #ifdef _MSC_VER
 #define strcasecmp _stricmp
 #endif
+#include "logger.h"
 
 class sinsp_evttables;
 union sinsp_sockinfo;

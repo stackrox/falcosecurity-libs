@@ -16,6 +16,7 @@
 #
 
 include(jsoncpp)
+include_directories("../../")
 
 add_executable(sinsp-example
 	util.cpp
@@ -26,6 +27,8 @@ target_link_libraries(sinsp-example
 	sinsp
 	"${JSONCPP_LIB}"
 )
+
+target_include_directories(sinsp-example "${CMAKE_SOURCE_DIR}/userspace/common")
 
 if (EMSCRIPTEN)
 	target_compile_options(sinsp-example PRIVATE "-sDISABLE_EXCEPTION_CATCHING=0")

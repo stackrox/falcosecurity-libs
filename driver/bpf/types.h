@@ -42,6 +42,12 @@ struct sys_enter_args {
 #else
 struct sys_enter_args {
 	__u64 pad;
+#ifdef CONFIG_HAVE_PREEMPT_LAZY
+    // lazy preemption adds some fields to the tracepoint context format.
+    // This extra padding covers those new (unneeded) fields,
+    // and ensures the remainder of the structure is at the correct offsets.
+	__u32 pad2;
+#endif
 	long id;
 	unsigned long args[6];
 };
@@ -55,7 +61,19 @@ struct sys_exit_args {
 #else
 struct sys_exit_args {
 	__u64 pad;
+#ifdef CONFIG_HAVE_PREEMPT_LAZY
+    // lazy preemption adds some fields to the tracepoint context format.
+    // This extra padding covers those new (unneeded) fields,
+    // and ensures the remainder of the structure is at the correct offsets.
+	__u64 pad2;
+#endif
+// PPM_* macros used here instead of the plain RHEL_* equivalents,
+// since they are defined for all platforms (see ../ppm_version.h)
+#if PPM_RHEL_RELEASE_CODE >= PPM_RHEL_RELEASE_VERSION(8, 0)
+	int id;
+#else
 	long id;
+#endif
 	long ret;
 };
 #endif

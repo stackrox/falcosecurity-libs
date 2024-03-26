@@ -344,11 +344,15 @@ public:
 	void set_min_log_severity(sinsp_logger::severity sev);
 
 	/*!
-	 * \brief Enables or disables an automatic routine that periodically purges
-	 * thread infos from the internal state. If disabled, the client is
-	 * responsible of manually-handling the lifetime of threads.
-	 * When the routine is run, then the purge interval and thread timeout
-	 * change defaults, but with no observable effect.
+	 * \brief Remove timestamps from the generated log messages.
+	 */
+	void disable_log_timestamps();
+
+	/*!
+	 * \brief set whether the library will automatically purge the threadtable
+	 *        at specific times. If not, client is responsible for thread lifetime
+	 *        management. If invoked, then the purge interval and thread timeout change
+	 *        defaults, but have no observable effect.
 	 */
 	void set_auto_threads_purging(bool enabled)
 	{
