@@ -13,9 +13,9 @@ or GPL2.txt for full copies of the license.
  * See 6.2 kernel commit: https://github.com/torvalds/linux/commit/f1a7941243c102a44e8847e3b94ff4ff3ec56f25
  */
 
-#include "../../quirks.h"
+#include "../quirks.h"
 #include "../../ppm_events_public.h"
-#include "../../types.h"
+#include "../types.h"
 
 // struct mm_struct declaration
 #include <linux/mm_types.h>
