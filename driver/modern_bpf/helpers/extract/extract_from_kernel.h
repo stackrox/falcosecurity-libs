@@ -25,7 +25,8 @@
 #define __NR_ia32_socketcall 102
 
 /* Used to convert from page number to KB. */
-#define DO_PAGE_SHIFT(x) (x) << (IOC_PAGE_SHIFT - 10)
+// (IOC_PAGE_SHIFT - 10)
+#define DO_PAGE_SHIFT(x) (x) << 2
 
 /* This enum should simplify the capabilities extraction. */
 enum capability_type {
