@@ -137,7 +137,7 @@ static __always_inline bool bpf_in_ia32_syscall() {
 	status = _READ(task->thread_info.flags);
 	return status & _TIF_31BIT;
 
-#elif defined(CONFIG_PPC64)
+#elif defined(CONFIG_PPC64) && defined(CONFIG_THREAD_INFO_IN_TASK)
 
 	/* See here for the definition:
 	 * https://github.com/torvalds/linux/blob/9b6de136b5f0158c60844f85286a593cb70fb364/arch/powerpc/include/asm/thread_info.h#L127
