@@ -133,6 +133,8 @@ public:
 	//
 	bool m_import_users;
 
+	bool m_user_details_enabled;
+
 private:
 	scap_userinfo *add_host_user(uint32_t uid, uint32_t gid, const char *name, const char *home, const char *shell, bool notify);
 	scap_userinfo *add_container_user(const std::string &container_id, int64_t pid, uint32_t uid, bool notify);
