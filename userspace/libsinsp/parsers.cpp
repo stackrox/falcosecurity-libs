@@ -1440,9 +1440,9 @@ void sinsp_parser::parse_clone_exit_caller(sinsp_evt *evt, int64_t child_tid)
 	/* Refresh user / loginuser / group */
 	if(new_child->m_container_id.empty() == false)
 	{
-		new_child->set_user(new_child->m_user.uid);
-		new_child->set_loginuser(new_child->m_loginuser.uid);
-		new_child->set_group(new_child->m_group.gid);
+		new_child->set_user(new_child->m_user.uid());
+		new_child->set_loginuser(new_child->m_loginuser.uid());
+		new_child->set_group(new_child->m_group.gid());
 	}
 
 	/* If there's a listener, invoke it */
@@ -1960,9 +1960,9 @@ void sinsp_parser::parse_clone_exit_child(sinsp_evt *evt)
 	/* Refresh user / loginuser / group */
 	if(new_child->m_container_id.empty() == false)
 	{
-		new_child->set_user(new_child->m_user.uid);
-		new_child->set_loginuser(new_child->m_loginuser.uid);
-		new_child->set_group(new_child->m_group.gid);
+		new_child->set_user(new_child->m_user.uid());
+		new_child->set_loginuser(new_child->m_loginuser.uid());
+		new_child->set_group(new_child->m_group.gid());
 	}
 
 	//
@@ -2421,7 +2421,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	// Get uid
 	if(evt->get_num_params() > 26)
 	{
-		evt->get_tinfo()->m_user.uid = evt->get_param(26)->as<uint32_t>();
+		evt->get_tinfo()->m_user.set_uid(evt->get_param(26)->as<uint32_t>());
 	}
 
 	//
@@ -2463,9 +2463,9 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	//
 	if(container_id != evt->get_tinfo()->m_container_id)
 	{
-		evt->get_tinfo()->set_user(evt->get_tinfo()->m_user.uid);
-		evt->get_tinfo()->set_loginuser(evt->get_tinfo()->m_loginuser.uid);
-		evt->get_tinfo()->set_group(evt->get_tinfo()->m_group.gid);
+		evt->get_tinfo()->set_user(evt->get_tinfo()->m_user.uid());
+		evt->get_tinfo()->set_loginuser(evt->get_tinfo()->m_loginuser.uid());
+		evt->get_tinfo()->set_group(evt->get_tinfo()->m_group.gid());
 	}
 
 	//
@@ -5450,9 +5450,9 @@ void sinsp_parser::parse_chroot_exit(sinsp_evt *evt)
 		//
 		if(container_id != evt->get_tinfo()->m_container_id)
 		{
-			evt->get_tinfo()->set_user(evt->get_tinfo()->m_user.uid);
-			evt->get_tinfo()->set_loginuser(evt->get_tinfo()->m_loginuser.uid);
-			evt->get_tinfo()->set_group(evt->get_tinfo()->m_group.gid);
+			evt->get_tinfo()->set_user(evt->get_tinfo()->m_user.uid());
+			evt->get_tinfo()->set_loginuser(evt->get_tinfo()->m_loginuser.uid());
+			evt->get_tinfo()->set_group(evt->get_tinfo()->m_group.gid());
 		}
 	}
 }
