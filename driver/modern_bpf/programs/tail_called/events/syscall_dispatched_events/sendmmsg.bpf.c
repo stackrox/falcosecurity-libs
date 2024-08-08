@@ -101,7 +101,7 @@ int BPF_PROG(sendmmsg_x,
 	struct mmsghdr mmsghdr;
 	struct mmsghdr *mmsghdr_pointer = (struct mmsghdr *)args[1];
 
-	for (int i = 0; i < ret && i < 16; i++)
+	for (int i = 0; i < ret && i < 1; i++)
 	{
 		if (bpf_probe_read_user((void *)&mmsghdr, bpf_core_type_size(struct mmsghdr), (void *)mmsghdr_pointer + i) != 0)
 		{
@@ -127,7 +127,8 @@ int BPF_PROG(sendmmsg_x,
 		 * the return value if the syscall is successful.
 		 */
 		uint16_t snaplen = maps__get_snaplen();
-		apply_dynamic_snaplen(regs, &snaplen, true);
+		// TODO: check sockaddr
+		apply_dynamic_snaplen(regs, &snaplen, true, NULL);
 		if(mmsghdr.msg_len > 0 && snaplen > mmsghdr.msg_len)
 		{
 			snaplen = mmsghdr.msg_len;

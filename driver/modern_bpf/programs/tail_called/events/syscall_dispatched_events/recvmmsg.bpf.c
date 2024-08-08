@@ -62,7 +62,7 @@ int BPF_PROG(recvmmsg_x,
 	struct mmsghdr mmsghdr;
 	struct mmsghdr *mmsghdr_pointer = (struct mmsghdr *)args[1];
 
-	for (int i = 0; i < ret && i < 16; i++)
+	for (int i = 0; i < ret && i < 1; i++)
 	{
 		if (bpf_probe_read_user((void *)&mmsghdr, bpf_core_type_size(struct mmsghdr), (void *)mmsghdr_pointer + i) != 0)
 		{
@@ -89,7 +89,7 @@ int BPF_PROG(recvmmsg_x,
 		 * have in the buffer.
 		 */
 		uint16_t snaplen = maps__get_snaplen();
-		apply_dynamic_snaplen(regs, &snaplen, true);
+		apply_dynamic_snaplen(regs, &snaplen, true, NULL);
 		if(snaplen > mmsghdr.msg_len)
 		{
 			snaplen = mmsghdr.msg_len;
