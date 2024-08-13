@@ -16,6 +16,7 @@ limitations under the License.
 
 */
 
+#include "ppm_events_public.h"
 #ifdef _WIN32
 #define NOMINMAX
 #include <winsock2.h>
@@ -183,6 +184,7 @@ void sinsp_parser::process_event(sinsp_evt *evt)
 	case PPME_SYSCALL_SETRLIMIT_E:
 	case PPME_SYSCALL_PRLIMIT_E:
 	case PPME_SOCKET_SENDMSG_E:
+	case PPME_SOCKET_SENDMMSG_E:
 	case PPME_SYSCALL_SENDFILE_E:
 	case PPME_SYSCALL_SETRESUID_E:
 	case PPME_SYSCALL_SETRESGID_E:
@@ -219,6 +221,7 @@ void sinsp_parser::process_event(sinsp_evt *evt)
 	case PPME_SOCKET_RECVMSG_X:
 	case PPME_SOCKET_SENDTO_X:
 	case PPME_SOCKET_SENDMSG_X:
+	case PPME_SOCKET_SENDMMSG_X:
 	case PPME_SYSCALL_READV_X:
 	case PPME_SYSCALL_WRITEV_X:
 	case PPME_SYSCALL_PREAD_X:
@@ -4220,7 +4223,7 @@ void sinsp_parser::parse_rw_exit(sinsp_evt *evt)
 			uint32_t datalen;
 			int32_t tupleparam = -1;
 
-			if(etype == PPME_SOCKET_SENDTO_X || etype == PPME_SOCKET_SENDMSG_X)
+			if(etype == PPME_SOCKET_SENDTO_X || etype == PPME_SOCKET_SENDMSG_X || etype == PPME_SOCKET_SENDMMSG_X)
 			{
 				tupleparam = 2;
 			}

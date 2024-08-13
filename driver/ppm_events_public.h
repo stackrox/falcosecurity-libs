@@ -634,7 +634,7 @@ or GPL2.txt for full copies of the license.
 #define PPM_EXE_WRITABLE		(1 << 0)
 #define PPM_EXE_UPPER_LAYER 	(1 << 1)
 #define PPM_EXE_FROM_MEMFD  	(1 << 2)
-  
+
 /*
  * Execveat flags
  */
@@ -795,12 +795,12 @@ or GPL2.txt for full copies of the license.
 #define PPM_PR_SET_SECUREBITS 28
 
 /*
- * pidfd_open flags	
+ * pidfd_open flags
 */
 #define PPM_PIDFD_NONBLOCK (1<<0)
 
 /*
- * finit_module flags	
+ * finit_module flags
 */
 #define PPM_MODULE_INIT_IGNORE_MODVERSIONS	1
 #define PPM_MODULE_INIT_IGNORE_VERMAGIC     2
@@ -813,7 +813,7 @@ or GPL2.txt for full copies of the license.
 #define PPM_DELETE_MODULE_O_NONBLOCK	(1 << 1)
 
 /*
- * bpf_commands 
+ * bpf_commands
 */
 #define PPM_BPF_MAP_CREATE			0
 #define	PPM_BPF_MAP_LOOKUP_ELEM     1
@@ -840,7 +840,7 @@ or GPL2.txt for full copies of the license.
 #define	PPM_BPF_MAP_LOOKUP_AND_DELETE_ELEM 21
 #define	PPM_BPF_MAP_FREEZE			22
 #define	PPM_BPF_BTF_GET_NEXT_ID		23
-#define	PPM_BPF_MAP_LOOKUP_BATCH	24		
+#define	PPM_BPF_MAP_LOOKUP_BATCH	24
 #define	PPM_BPF_MAP_LOOKUP_AND_DELETE_BATCH 25
 #define	PPM_BPF_MAP_UPDATE_BATCH	26
 #define	PPM_BPF_MAP_DELETE_BATCH	27
