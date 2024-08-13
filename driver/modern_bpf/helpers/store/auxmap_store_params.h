@@ -148,6 +148,29 @@ static __always_inline void auxmap__submit_event_base(struct auxiliary_map *auxm
 }
 
 /////////////////////////////////
+// TRY COPY EVENT FROM AUXMAP TO RINGBUF
+////////////////////////////////
+
+/**
+ * @brief Copy the entire event from the auxiliary map to bpf ringbuf.
+ * If the event is correctly copied in the ringbuf we increments the number
+ * of events sent to userspace, otherwise we increment the dropped events.
+ *
+ * @param auxmap pointer to the auxmap in which we have already written the entire event.
+ * @param ctx BPF prog context
+ */
+static __always_inline int auxmap__try_submit_event(struct auxiliary_map *auxmap)
+{
+	struct ringbuf_map *rb = maps__get_ringbuf_map();
+	if(!rb)
+	{
+		return 1;
+	}
+
+	auxmap__submit_event_base(auxmap, rb);
+	return 0;
+}
+/////////////////////////////////
 // COPY EVENT FROM AUXMAP TO RINGBUF
 ////////////////////////////////
 

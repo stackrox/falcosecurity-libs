@@ -108,15 +108,7 @@ static long handle_exit(uint32_t index, void *ctx)
 
 	auxmap__finalize_event_header(auxmap);
 
-	struct ringbuf_map *rb = maps__get_ringbuf_map();
-	if(!rb)
-	{
-		bpf_printk("failed to get ringbuf");
-		return 1;
-	}
-	auxmap__submit_event_base(auxmap, rb);
-
-	return 0;
+	return auxmap__try_submit_event(auxmap);
 }
 
 SEC("tp_btf/sys_exit")
