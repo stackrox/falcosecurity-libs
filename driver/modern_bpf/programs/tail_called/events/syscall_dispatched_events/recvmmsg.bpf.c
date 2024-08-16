@@ -17,11 +17,11 @@ SEC("tp_btf/sys_enter")
 int BPF_PROG(recvmmsg_e, struct pt_regs *regs, long id)
 {
 	/* Collect parameters at the beginning to manage socketcalls */
-	unsigned long args[1];
-	extract__network_args(args, 1, regs);
+	unsigned long socket_fd = 0;
+	extract__network_args(&socket_fd, 1, regs);
 
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, RECVMSG_E_SIZE, PPME_SOCKET_RECVMSG_E))
+	if(!ringbuf__reserve_space(&ringbuf, ctx, RECVMMSG_E_SIZE, PPME_SOCKET_RECVMMSG_E))
 	{
 		return 0;
 	}
@@ -31,8 +31,7 @@ int BPF_PROG(recvmmsg_e, struct pt_regs *regs, long id)
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
 	/* Parameter 1: fd (type: PT_FD)*/
-	int32_t fd = (int32_t)args[0];
-	ringbuf__store_s64(&ringbuf, (int64_t)fd);
+	ringbuf__store_s64(&ringbuf, (int64_t)(int32_t)socket_fd);
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 

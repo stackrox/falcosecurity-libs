@@ -218,6 +218,7 @@ void sinsp_parser::process_event(sinsp_evt *evt)
 	case PPME_SOCKET_SEND_X:
 	case PPME_SOCKET_RECVFROM_X:
 	case PPME_SOCKET_RECVMSG_X:
+	case PPME_SOCKET_RECVMMSG_X:
 	case PPME_SOCKET_SENDTO_X:
 	case PPME_SOCKET_SENDMSG_X:
 	case PPME_SOCKET_SENDMMSG_X:
@@ -4095,7 +4096,7 @@ void sinsp_parser::parse_rw_exit(sinsp_evt *evt)
 			{
 				tupleparam = 2;
 			}
-			else if(etype == PPME_SOCKET_RECVMSG_X)
+			else if(etype == PPME_SOCKET_RECVMSG_X || etype == PPME_SOCKET_RECVMMSG_X)
 			{
 				tupleparam = 3;
 			}
@@ -4147,7 +4148,7 @@ void sinsp_parser::parse_rw_exit(sinsp_evt *evt)
 			//
 			// Extract the data buffer
 			//
-			if(etype == PPME_SYSCALL_READV_X || etype == PPME_SYSCALL_PREADV_X || etype == PPME_SOCKET_RECVMSG_X)
+			if(etype == PPME_SYSCALL_READV_X || etype == PPME_SYSCALL_PREADV_X || etype == PPME_SOCKET_RECVMSG_X || etype == PPME_SOCKET_RECVMMSG_X)
 			{
 				parinfo = evt->get_param(2);
 			}
@@ -4174,7 +4175,7 @@ void sinsp_parser::parse_rw_exit(sinsp_evt *evt)
 			// accordingly via procfs scan.
 			//
 #ifndef _WIN32
-			if(etype == PPME_SOCKET_RECVMSG_X && evt->get_num_params() >= 5)
+			if((etype == PPME_SOCKET_RECVMSG_X || etype == PPME_SOCKET_RECVMMSG_X) && evt->get_num_params() >= 5)
 			{
 				parinfo = evt->get_param(4);
 				if(parinfo->m_len > sizeof(cmsghdr))
