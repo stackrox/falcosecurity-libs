@@ -89,6 +89,7 @@ int BPF_PROG(sendmmsg_e, struct pt_regs *regs, long id)
 		.regs = regs,
 	};
 
+	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
 	if(LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 17, 0))
 	{
 		bpf_loop(data.vlen < 1024 ? data.vlen : 1024, handle_enter, &data, 0);
@@ -178,6 +179,7 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 		.regs = regs,
 	};
 
+	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
 	if(LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 17, 0))
 	{
 		bpf_loop(ret < 1024 ? ret : 1024, handle_exit, &data, 0);

@@ -149,6 +149,8 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret)
 		.mmh = (struct mmsghdr *)args[1],
 		.regs = regs,
 	};
+
+	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
 	if(LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 17, 0))
 	{
 		bpf_loop(ret, handle_exit, &data, 0);
