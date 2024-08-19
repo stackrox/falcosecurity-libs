@@ -168,6 +168,19 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 {
 	if(ret < 0)
 	{
+		struct auxiliary_map *auxmap = auxmap__get();
+		if(!auxmap)
+		{
+			return 0;
+		}
+
+		auxmap__preload_event_header(auxmap, PPME_SOCKET_SENDMMSG_X);
+
+		/* Parameter 1: res (type: PT_ERRNO) */
+		auxmap__store_s64_param(auxmap, ret);
+
+		/* Parameter 2: data (type: PT_BYTEBUF) */
+		auxmap__store_empty_param(auxmap);
 		return 0;
 	}
 
@@ -182,7 +195,15 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
 	if(LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 17, 0))
 	{
-		bpf_loop(ret < 1024 ? ret : 1024, handle_exit, &data, 0);
+		uint32_t nr_loops = ret < 1024 ? ret : 1024;
+		long total_loops = bpf_loop(nr_loops, handle_exit, &data, 0);
+
+		if(total_loops != nr_loops)
+		{
+			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
+			bpf_printk("failed to tail call into the 'hotplug' prog");
+		}
+
 		return 0;
 	}
 

@@ -109,15 +109,19 @@ static __always_inline void auxmap__finalize_event_header(struct auxiliary_map *
 }
 
 /////////////////////////////////
-// COPY EVENT FROM AUXMAP TO RINGBUF WITHOUT TAILCALLS
+// COPY EVENT FROM AUXMAP TO RINGBUF
 ////////////////////////////////
 
 /**
  * @brief Copy the entire event from the auxiliary map to bpf ringbuf.
- * If the event is correctly copied in the ringbuf we increments the number
- * of events sent to userspace, otherwise we increment the dropped events.
+ * If the event is correctly copied in the ringbuf we increment the number
+ * of events sent to userspace.
+ *
+ * This is a low level version of the push, you will usually want to use
+ * auxmap__submit_event or auxmap__try_submit_event instead.
  *
  * @param auxmap pointer to the auxmap in which we have already written the entire event.
+ * @param rb pointer to the ringbuf that will receive the event.
  */
 static __always_inline void auxmap__submit_event_base(struct auxiliary_map *auxmap, struct ringbuf_map *rb)
 {
@@ -147,17 +151,13 @@ static __always_inline void auxmap__submit_event_base(struct auxiliary_map *auxm
 	}
 }
 
-/////////////////////////////////
-// TRY COPY EVENT FROM AUXMAP TO RINGBUF
-////////////////////////////////
-
 /**
- * @brief Copy the entire event from the auxiliary map to bpf ringbuf.
- * If the event is correctly copied in the ringbuf we increments the number
- * of events sent to userspace, otherwise we increment the dropped events.
+ * @brief Try copying the entire event from the auxiliary map to bpf ringbuf.
+ * If the event is correctly copied in the ringbuf we increment the number
+ * of events sent to userspace.
  *
  * @param auxmap pointer to the auxmap in which we have already written the entire event.
- * @param ctx BPF prog context
+ * @returns 0 on success, 1 otherwise.
  */
 static __always_inline int auxmap__try_submit_event(struct auxiliary_map *auxmap)
 {
@@ -170,9 +170,6 @@ static __always_inline int auxmap__try_submit_event(struct auxiliary_map *auxmap
 	auxmap__submit_event_base(auxmap, rb);
 	return 0;
 }
-/////////////////////////////////
-// COPY EVENT FROM AUXMAP TO RINGBUF
-////////////////////////////////
 
 /**
  * @brief Copy the entire event from the auxiliary map to bpf ringbuf.
