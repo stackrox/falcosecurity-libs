@@ -444,6 +444,11 @@ public:
 	void set_proc_scan_log_interval_ms(uint64_t val);
 
 	/*!
+	 * \brief enabling sinsp state counters on the hot path via initializing the respective smart pointer
+	 */
+	void set_sinsp_stats_v2_enabled();
+
+	/*!
 	  \brief Returns a new instance of a filtercheck supporting fields for
 	  a generic event source (e.g. evt.num, evt.time, evt.pluginname...)
 	*/

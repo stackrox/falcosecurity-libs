@@ -1973,6 +1973,14 @@ void sinsp::set_proc_scan_log_interval_ms(uint64_t val)
 	m_proc_scan_log_interval_ms = val;
 }
 
+void sinsp::set_sinsp_stats_v2_enabled()
+{
+	if (m_sinsp_stats_v2 == nullptr)
+	{
+		m_sinsp_stats_v2 = std::make_shared<sinsp_stats_v2>();
+	}
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Note: this is defined here so we can inline it in sinso::next
 ///////////////////////////////////////////////////////////////////////////////
