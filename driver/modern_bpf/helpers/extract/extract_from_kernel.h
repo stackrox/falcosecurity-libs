@@ -422,7 +422,7 @@ static __always_inline uint64_t extract__capability(struct task_struct *task, en
 {
 	kernel_cap_t cap_struct;
 	unsigned long capability;
-	struct cred *task_cred;
+	const struct cred *task_cred;
 
 	READ_TASK_FIELD_INTO(&task_cred, task, cred);
 
@@ -819,14 +819,14 @@ static __always_inline unsigned long extract__clone_flags(struct task_struct *ta
  */
 static __always_inline void extract__euid(struct task_struct *task, uint32_t *euid)
 {
-	struct cred *task_cred;
+	const struct cred *task_cred;
+	*euid = UINT32_MAX;
 
 	READ_TASK_FIELD_INTO(&task_cred, task, cred);
 
 	if (task_cred == NULL)
 		return;
 
-	*euid = UINT32_MAX;
 	BPF_CORE_READ_INTO(euid, task_cred, euid.val);
 }
 
@@ -838,7 +838,7 @@ static __always_inline void extract__euid(struct task_struct *task, uint32_t *eu
  */
 static __always_inline void extract__egid(struct task_struct *task, uint32_t *egid)
 {
-	struct cred *task_cred;
+	const struct cred *task_cred;
 
 	READ_TASK_FIELD_INTO(&task_cred, task, cred);
 
@@ -983,7 +983,7 @@ static __always_inline uint32_t bpf_map_id_up(struct uid_gid_map *map, uint32_t 
 static __always_inline bool groups_search(struct task_struct *task, uint32_t grp)
 {
 	struct group_info *group_info = NULL;
-	struct cred *task_cred;
+	const struct cred *task_cred;
 
 	READ_TASK_FIELD_INTO(&task_cred, task, cred);
 
@@ -1050,7 +1050,7 @@ static __always_inline bool extract__exe_writable(struct task_struct *task, stru
 
 	uint32_t fsuid;
 	uint32_t fsgid;
-	struct cred *task_cred;
+	const struct cred *task_cred;
 
 	READ_TASK_FIELD_INTO(&task_cred, task, cred);
 
