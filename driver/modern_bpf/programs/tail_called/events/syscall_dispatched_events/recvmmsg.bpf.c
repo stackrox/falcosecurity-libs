@@ -14,7 +14,9 @@ extern int LINUX_KERNEL_VERSION __kconfig;
 /*=============================== ENTER EVENT ===========================*/
 
 SEC("tp_btf/sys_enter")
-int BPF_PROG(recvmmsg_e, struct pt_regs *regs, long id)
+int BPF_PROG(recvmmsg_e,
+	     struct pt_regs *regs,
+	     long id)
 {
 	/* Collect parameters at the beginning to manage socketcalls */
 	unsigned long socket_fd = 0;
@@ -49,6 +51,7 @@ typedef struct recvmmsg_data_s
 	uint32_t fd;
 	struct mmsghdr *mmh;
 	struct pt_regs *regs;
+	void* ctx;
 } recvmmsg_data_t;
 
 static long handle_exit(uint32_t index, void *ctx)
@@ -87,7 +90,7 @@ static long handle_exit(uint32_t index, void *ctx)
 	}
 
 	/* Parameter 3: data (type: PT_BYTEBUF) */
-	auxmap__store_msghdr_data_param(auxmap, (unsigned long)&mmh.msg_hdr, snaplen);
+	auxmap__store_iovec_data_param(auxmap, (unsigned long)mmh.msg_hdr.msg_iov, mmh.msg_hdr.msg_iovlen, snaplen);
 
 	/* Parameter 4: tuple (type: PT_SOCKTUPLE) */
 	auxmap__store_socktuple_param(auxmap, data->fd, INBOUND, (struct sockaddr *)mmh.msg_hdr.msg_name);
@@ -107,7 +110,9 @@ static long handle_exit(uint32_t index, void *ctx)
 
 	auxmap__finalize_event_header(auxmap);
 
-	return auxmap__try_submit_event(auxmap);
+	auxmap__submit_event(auxmap, data->ctx);
+
+	return 0;
 }
 
 SEC("tp_btf/sys_exit")
@@ -137,6 +142,10 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret)
 
 		/* Parameter 5: msg_control (type: PT_BYTEBUF) */
 		auxmap__store_empty_param(auxmap);
+
+		auxmap__finalize_event_header(auxmap);
+
+		auxmap__submit_event(auxmap, ctx);
 		return 0;
 	}
 
@@ -147,6 +156,7 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret)
 		.fd = args[0],
 		.mmh = (struct mmsghdr *)args[1],
 		.regs = regs,
+		.ctx = ctx,
 	};
 
 	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
@@ -156,9 +166,6 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret)
 		return 0;
 	}
 
-	struct mmsghdr mmsghdr;
-	struct mmsghdr *mmsghdr_pointer = (struct mmsghdr *)args[1];
-
 	for(int i = 0; i < ret && i < 12; i++)
 	{
 		handle_exit(i, &data);
@@ -166,5 +173,6 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret)
 
 	return 0;
 }
+
 
 /*=============================== EXIT EVENT ===========================*/

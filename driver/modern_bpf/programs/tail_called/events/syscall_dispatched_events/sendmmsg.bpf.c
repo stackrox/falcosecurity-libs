@@ -17,8 +17,7 @@ typedef struct sendmmsg_enter_s
 {
 	uint32_t fd;
 	struct mmsghdr *mmh;
-	unsigned int vlen;
-	struct pt_regs *regs;
+	void *ctx;
 } sendmmsg_enter_t;
 
 static long handle_enter(uint32_t index, void *ctx)
@@ -45,8 +44,7 @@ static long handle_enter(uint32_t index, void *ctx)
 	auxmap__store_s64_param(auxmap, (int64_t)data->fd);
 
 	/* Parameter 2: size (type: PT_UINT32) */
-	unsigned long msghdr_pointer = (unsigned long)&mmh.msg_hdr;
-	auxmap__store_msghdr_size_param(auxmap, msghdr_pointer);
+	auxmap__store_iovec_size_param(auxmap, (unsigned long)mmh.msg_hdr.msg_iov, mmh.msg_hdr.msg_iovlen);
 
 	/* Parameter 3: tuple (type: PT_SOCKTUPLE)*/
 	/* TODO: Here we don't know if this fd is a socket or not,
@@ -73,7 +71,9 @@ static long handle_enter(uint32_t index, void *ctx)
 
 	auxmap__finalize_event_header(auxmap);
 
-	return auxmap__try_submit_event(auxmap);
+	auxmap__submit_event(auxmap, data->ctx);
+
+	return 0;
 }
 
 SEC("tp_btf/sys_enter")
@@ -82,23 +82,21 @@ int BPF_PROG(sendmmsg_e, struct pt_regs *regs, long id)
 	/* Collect parameters at the beginning to manage socketcalls */
 	unsigned long args[3];
 	extract__network_args(args, 3, regs);
+	unsigned int vlen = args[2];
 	sendmmsg_enter_t data = {
 		.fd = args[0],
 		.mmh = (struct mmsghdr *)args[1],
-		.vlen = args[2],
-		.regs = regs,
+		.ctx = ctx,
 	};
 
 	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
 	if(LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 17, 0))
 	{
-		bpf_loop(data.vlen < 1024 ? data.vlen : 1024, handle_enter, &data, 0);
+		bpf_loop(vlen < 1024 ? vlen : 1024, handle_enter, &data, 0);
 		return 0;
 	}
 
-	struct mmsghdr mmsghdr;
-
-	for(int i = 0; i < data.vlen && i < MAX_IOVCNT; i++)
+	for(int i = 0; i < vlen && i < MAX_IOVCNT; i++)
 	{
 		handle_enter(i, &data);
 	}
@@ -114,6 +112,7 @@ typedef struct sendmmsg_exit_s
 {
 	struct mmsghdr *mmh;
 	struct pt_regs *regs;
+	void *ctx;
 } sendmmsg_exit_t;
 
 static long handle_exit(uint32_t index, void *ctx)
@@ -154,13 +153,15 @@ static long handle_exit(uint32_t index, void *ctx)
 
 	/* Parameter 2: data (type: PT_BYTEBUF) */
 	unsigned long msghdr_pointer = (unsigned long)&mmh.msg_hdr;
-	auxmap__store_msghdr_data_param(auxmap, msghdr_pointer, snaplen);
+	auxmap__store_iovec_data_param(auxmap, (unsigned long)mmh.msg_hdr.msg_iov, mmh.msg_hdr.msg_iovlen, snaplen);
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
 	auxmap__finalize_event_header(auxmap);
 
-	return auxmap__try_submit_event(auxmap);
+	auxmap__submit_event(auxmap, data->ctx);
+
+	return 0;
 }
 
 SEC("tp_btf/sys_exit")
@@ -181,6 +182,10 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 
 		/* Parameter 2: data (type: PT_BYTEBUF) */
 		auxmap__store_empty_param(auxmap);
+
+		auxmap__finalize_event_header(auxmap);
+
+		auxmap__submit_event(auxmap, ctx);
 		return 0;
 	}
 
@@ -190,6 +195,7 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 	sendmmsg_exit_t data = {
 		.mmh = (struct mmsghdr *)args[1],
 		.regs = regs,
+		.ctx = ctx,
 	};
 
 	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
@@ -197,12 +203,6 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 	{
 		uint32_t nr_loops = ret < 1024 ? ret : 1024;
 		long total_loops = bpf_loop(nr_loops, handle_exit, &data, 0);
-
-		if(total_loops != nr_loops)
-		{
-			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
-			bpf_printk("failed to tail call into the 'hotplug' prog");
-		}
 
 		return 0;
 	}
