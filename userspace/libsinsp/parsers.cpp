@@ -794,6 +794,12 @@ bool sinsp_parser::reset(sinsp_evt *evt)
 				tinfo->m_lastevent_fd = evt->get_param(1)->as<int64_t>();
 			}
 
+			// sendmmsg sends all data in the exit event, fd included
+			if(etype == PPME_SOCKET_SENDMMSG_X)
+			{
+				tinfo->m_lastevent_fd = evt->get_param(1)->as<int64_t>();
+			}
+
 			evt->set_fd_info(tinfo->get_fd(tinfo->m_lastevent_fd));
 
 			if(evt->get_fd_info() == NULL)
@@ -4223,9 +4229,13 @@ void sinsp_parser::parse_rw_exit(sinsp_evt *evt)
 			uint32_t datalen;
 			int32_t tupleparam = -1;
 
-			if(etype == PPME_SOCKET_SENDTO_X || etype == PPME_SOCKET_SENDMSG_X || etype == PPME_SOCKET_SENDMMSG_X)
+			if(etype == PPME_SOCKET_SENDTO_X || etype == PPME_SOCKET_SENDMSG_X)
 			{
 				tupleparam = 2;
+			}
+			else if(etype == PPME_SOCKET_SENDMMSG_X)
+			{
+				tupleparam = 4;
 			}
 
 			if(tupleparam != -1 && (evt->get_fd_info()->m_name.length() == 0 || !evt->get_fd_info()->is_tcp_socket()))
@@ -4235,7 +4245,13 @@ void sinsp_parser::parse_rw_exit(sinsp_evt *evt)
 				// If the fd still doesn't contain tuple info (because the socket is a datagram one or because some event was lost),
 				// add it here.
 				//
-				if(!retrieve_enter_event(enter_evt, evt))
+
+				// sendmmsg has all data in the exit event itself.
+				if (etype == PPME_SOCKET_SENDMMSG_X)
+				{
+					enter_evt = evt;
+				}
+				else if(!retrieve_enter_event(enter_evt, evt))
 				{
 					return;
 				}
@@ -4279,7 +4295,14 @@ void sinsp_parser::parse_rw_exit(sinsp_evt *evt)
 			//
 			// Extract the data buffer
 			//
-			parinfo = evt->get_param(1);
+			if(etype == PPME_SOCKET_SENDMMSG_X)
+			{
+				parinfo = evt->get_param(2);
+			}
+			else
+			{
+				parinfo = evt->get_param(1);
+			}
 			datalen = parinfo->m_len;
 			data = parinfo->m_val;
 
