@@ -9,8 +9,6 @@
 #include <helpers/interfaces/fixed_size_event.h>
 #include <helpers/interfaces/variable_size_event.h>
 
-extern int LINUX_KERNEL_VERSION __kconfig;
-
 /*=============================== ENTER EVENT ===========================*/
 
 SEC("tp_btf/sys_enter")
@@ -160,7 +158,7 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret)
 	};
 
 	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
-	if(LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 17, 0))
+	if(bpf_core_enum_value_exists(enum bpf_func_id, BPF_FUNC_loop))
 	{
 		bpf_loop(ret, handle_exit, &data, 0);
 		return 0;
