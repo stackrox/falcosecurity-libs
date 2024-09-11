@@ -103,11 +103,15 @@ static long handle_exit(uint32_t index, void *ctx)
 	}
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
+	struct ringbuf_map *rb = maps__get_ringbuf_map();
+	if(!rb)
+	{
+		return 1;
+	}
+
 	auxmap__finalize_event_header(auxmap);
 
-	auxmap__submit_event(auxmap, data->ctx);
-
-	return 0;
+	return auxmap__try_submit_event(auxmap);
 }
 
 SEC("tp_btf/sys_exit")
@@ -159,13 +163,21 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 	{
 		uint32_t nr_loops = ret < 1024 ? ret : 1024;
 		long total_loops = bpf_loop(nr_loops, handle_exit, &data, 0);
-
+		if (total_loops != nr_loops)
+		{
+			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
+			bpf_printk("failed to tail call into the 'hotplug' prog");
+		}
 		return 0;
 	}
 
 	for(int i = 0; i < ret && i < MAX_IOVCNT; i++)
 	{
-		handle_exit(i, &data);
+		if(handle_exit(i, &data) != 0)
+		{
+			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
+			bpf_printk("failed to tail call into the 'hotplug' prog");
+		}
 	}
 
 	return 0;

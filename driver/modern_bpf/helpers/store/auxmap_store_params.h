@@ -114,22 +114,14 @@ static __always_inline void auxmap__finalize_event_header(struct auxiliary_map *
 
 /**
  * @brief Copy the entire event from the auxiliary map to bpf ringbuf.
- * If the event is correctly copied in the ringbuf we increments the number
+ * If the event is correctly copied in the ringbuf we increment the number
  * of events sent to userspace, otherwise we increment the dropped events.
  *
  * @param auxmap pointer to the auxmap in which we have already written the entire event.
- * @param ctx BPF prog context
+ * @param rb pointer to the ringbuffer where the event should be published to.
  */
-static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap, void* ctx)
+static __always_inline void auxmap__submit_event_base(struct auxiliary_map *auxmap, struct ringbuf_map* rb)
 {
-	struct ringbuf_map *rb = maps__get_ringbuf_map();
-	if(!rb)
-	{
-		bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
-		bpf_printk("failed to tail call into the 'hotplug' prog");
-		return;
-	}
-
 	struct counter_map *counter = maps__get_counter_map();
 	if(!counter)
 	{
@@ -153,7 +145,49 @@ static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap, v
 	{
 		counter->n_drops_buffer++;
 		compute_event_types_stats(auxmap->event_type, counter);
+		return;
 	}
+	return;
+}
+
+/**
+ * @brief Try to copy the entire event from the auxiliary map to bpf ringbuf.
+ * If the event is correctly copied in the ringbuf we increments the number
+ * of events sent to userspace, otherwise we increment the dropped events.
+ *
+ * @param auxmap pointer to the auxmap in which we have already written the entire event.
+ */
+static __always_inline int auxmap__try_submit_event(struct auxiliary_map *auxmap)
+{
+	struct ringbuf_map *rb = maps__get_ringbuf_map();
+	if(!rb)
+	{
+		return 1;
+	}
+
+	auxmap__submit_event_base(auxmap, rb);
+	return 0;
+}
+
+/**
+ * @brief Copy the entire event from the auxiliary map to bpf ringbuf.
+ * If the event is correctly copied in the ringbuf we increments the number
+ * of events sent to userspace, otherwise we increment the dropped events.
+ *
+ * @param auxmap pointer to the auxmap in which we have already written the entire event.
+ * @param ctx BPF prog context
+ */
+static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap, void* ctx)
+{
+	struct ringbuf_map *rb = maps__get_ringbuf_map();
+	if(!rb)
+	{
+		bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
+		bpf_printk("failed to tail call into the 'hotplug' prog");
+		return;
+	}
+
+	auxmap__submit_event_base(auxmap, rb);
 }
 
 /////////////////////////////////
@@ -348,12 +382,12 @@ static __always_inline uint16_t auxmap__store_bytebuf_param(struct auxiliary_map
  */
 static __always_inline void auxmap__store_charbufarray_as_bytebuf(struct auxiliary_map *auxmap, unsigned long start_pointer, uint16_t len_to_read, uint16_t max_len)
 {
-	/* Here we read an array of charbufs starting from a pointer. 
+	/* Here we read an array of charbufs starting from a pointer.
 	 * We could also read the array element per element but
 	 * since we know the total len we read it as a `bytebuf`.
 	 * Since this is an array of charbufs the `\0` after every argument are preserved.
 	 * We just need to add a final `\0` in case we args are too long and we have a partial
-	 * read. 
+	 * read.
 	 */
 	if(len_to_read >= max_len)
 	{
@@ -406,7 +440,7 @@ static __always_inline void auxmap__store_exe_args_failure(struct auxiliary_map 
 		exe_len = push__charbuf(auxmap->data, &auxmap->payload_pos, charbuf_pointer, MAX_PROC_EXE, USER);
 		push__param_len(auxmap->data, &auxmap->lengths_pos, exe_len);
 	}
-	
+
 	/* Here we read the pointers to `args` and we store it.
 	 * `payload_pos` points after `exe`
 	 */
@@ -695,7 +729,7 @@ static __always_inline void auxmap__store_socktuple_param(struct auxiliary_map *
 		BPF_CORE_READ_INTO(&port_remote, sk, __sk_common.skc_dport);
 
 		/* Kernel doesn't always fill sk->__sk_common in sendto and sendmsg syscalls (as in the case of an UDP connection).
-		 * We fallback to the address from userspace when the kernel-provided address is NULL */ 
+		 * We fallback to the address from userspace when the kernel-provided address is NULL */
 		if (port_remote == 0 && usrsockaddr != NULL)
 		{
 			struct sockaddr_in usrsockaddr_in = {};
@@ -747,7 +781,7 @@ static __always_inline void auxmap__store_socktuple_param(struct auxiliary_map *
 		BPF_CORE_READ_INTO(&port_remote, sk, __sk_common.skc_dport);
 
 		/* Kernel doesn't always fill sk->__sk_common in sendto and sendmsg syscalls (as in the case of an UDP connection).
-		 * We fallback to the address from userspace when the kernel-provided address is NULL */ 
+		 * We fallback to the address from userspace when the kernel-provided address is NULL */
 		if (port_remote == 0 && usrsockaddr != NULL)
 		{
 			struct sockaddr_in6 usrsockaddr_in6 = {};
@@ -755,7 +789,7 @@ static __always_inline void auxmap__store_socktuple_param(struct auxiliary_map *
 			bpf_probe_read_kernel(&ipv6_remote, sizeof(uint32_t)*4, usrsockaddr_in6.sin6_addr.in6_u.u6_addr32);
 			port_remote = usrsockaddr_in6.sin6_port;
 		}
-		
+
 		/* Pack the tuple info:
 		 * - socket family
 		 * - src_ipv6
@@ -819,7 +853,7 @@ static __always_inline void auxmap__store_socktuple_param(struct auxiliary_map *
 			 * An `abstract socket address` is distinguished (from a
 			 * pathname socket) by the fact that sun_path[0] is a null byte
 			 * ('\0').
-			 * 
+			 *
 			 * So in this case, we need to skip the initial `\0`.
 			 */
 			start_reading_point = (unsigned long)path + 1;
@@ -1140,7 +1174,7 @@ static __always_inline void auxmap__store_msghdr_size_param(struct auxiliary_map
  * @param auxmap pointer to the auxmap in which we are storing the param.
  * @param msghdr_pointer pointer to `user_msghdr` struct.
  * @param len_to_read imposed snaplen.
- * 
+ *
  * @return the `user_msghdr` struct that has been read.
  */
 static __always_inline struct user_msghdr auxmap__store_msghdr_data_param(struct auxiliary_map *auxmap, unsigned long msghdr_pointer, unsigned long len_to_read)
