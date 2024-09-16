@@ -37,6 +37,59 @@ int BPF_PROG(sendmmsg_e, struct pt_regs *regs, long id)
 
 /*=============================== EXIT EVENT ===========================*/
 
+__always_inline static int handle_hotplug() {
+	/* We assume that the ring buffer for CPU 0 is always there so we send the
+	 * HOT-PLUG event through this buffer.
+	 */
+	uint32_t cpu_0 = 0;
+	struct ringbuf_map *rb = bpf_map_lookup_elem(&ringbuf_maps, &cpu_0);
+	if(!rb)
+	{
+		bpf_printk("unable to obtain the ring buffer for CPU 0");
+		return 0;
+	}
+
+	struct counter_map *counter = bpf_map_lookup_elem(&counter_maps, &cpu_0);
+	if(!counter)
+	{
+		bpf_printk("unable to obtain the counter map for CPU 0");
+		return 0;
+	}
+
+	/* This counts the event seen by the drivers even if they are dropped because the buffer is full. */
+	counter->n_evts++;
+
+	/* If we are not able to reserve space we stop here
+	 * the event collection.
+	 */
+	struct ringbuf_struct ringbuf;
+	ringbuf.reserved_event_size = HOTPLUG_E_SIZE;
+	ringbuf.event_type = PPME_CPU_HOTPLUG_E;
+	ringbuf.data = bpf_ringbuf_reserve(rb, HOTPLUG_E_SIZE, 0);
+	if(!ringbuf.data)
+	{
+		counter->n_drops_buffer++;
+		return 0;
+	}
+
+	ringbuf__store_event_header(&ringbuf);
+
+	/*=============================== COLLECT PARAMETERS ===========================*/
+
+	/* Parameter 1: cpu (type: PT_UINT32) */
+	uint32_t current_cpu_id = (uint32_t)bpf_get_smp_processor_id();
+	ringbuf__store_u32(&ringbuf, current_cpu_id);
+
+	/* Parameter 2: action (type: PT_UINT32) */
+	/* Right now we don't have actions we always send 0 */
+	ringbuf__store_u32(&ringbuf, 0);
+
+	/*=============================== COLLECT PARAMETERS ===========================*/
+
+	ringbuf__submit_event(&ringbuf);
+	return 0;
+}
+
 typedef struct sendmmsg_exit_s
 {
 	uint32_t fd;
@@ -45,7 +98,7 @@ typedef struct sendmmsg_exit_s
 	void *ctx;
 } sendmmsg_exit_t;
 
-static long handle_exit(uint32_t index, void *ctx)
+__always_inline static long handle_exit(uint32_t index, void *ctx)
 {
 	sendmmsg_exit_t *data = (sendmmsg_exit_t *)ctx;
 	struct mmsghdr mmh;
@@ -144,7 +197,10 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 
 		auxmap__finalize_event_header(auxmap);
 
-		auxmap__submit_event(auxmap, ctx);
+		if (auxmap__try_submit_event(auxmap) != 0)
+		{
+			return handle_hotplug();
+		}
 		return 0;
 	}
 
@@ -165,8 +221,7 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 		long total_loops = bpf_loop(nr_loops, handle_exit, &data, 0);
 		if (total_loops != nr_loops)
 		{
-			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
-			bpf_printk("failed to tail call into the 'hotplug' prog");
+			return handle_hotplug();
 		}
 		return 0;
 	}
@@ -175,8 +230,7 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 	{
 		if(handle_exit(i, &data) != 0)
 		{
-			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
-			bpf_printk("failed to tail call into the 'hotplug' prog");
+			return handle_hotplug();
 		}
 	}
 
