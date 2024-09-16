@@ -88,7 +88,6 @@ static long handle_exit(uint32_t index, void *ctx)
 	}
 
 	/* Parameter 4: data (type: PT_BYTEBUF) */
-	unsigned long msghdr_pointer = (unsigned long)&mmh.msg_hdr;
 	auxmap__store_iovec_data_param(auxmap, (unsigned long)mmh.msg_hdr.msg_iov, mmh.msg_hdr.msg_iovlen, snaplen);
 
 	/* Parameter 5: tuple (type: PT_SOCKTUPLE)*/
@@ -102,12 +101,6 @@ static long handle_exit(uint32_t index, void *ctx)
 		auxmap__store_empty_param(auxmap);
 	}
 	/*=============================== COLLECT PARAMETERS  ===========================*/
-
-	struct ringbuf_map *rb = maps__get_ringbuf_map();
-	if(!rb)
-	{
-		return 1;
-	}
 
 	auxmap__finalize_event_header(auxmap);
 
@@ -158,26 +151,16 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 		.ctx = ctx,
 	};
 
-	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
 	if(bpf_core_enum_value_exists(enum bpf_func_id, BPF_FUNC_loop))
 	{
 		uint32_t nr_loops = ret < 1024 ? ret : 1024;
-		long total_loops = bpf_loop(nr_loops, handle_exit, &data, 0);
-		if (total_loops != nr_loops)
-		{
-			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
-			bpf_printk("failed to tail call into the 'hotplug' prog");
-		}
+		bpf_loop(nr_loops, handle_exit, &data, 0);
 		return 0;
 	}
 
 	for(int i = 0; i < ret && i < MAX_IOVCNT; i++)
 	{
-		if(handle_exit(i, &data) != 0)
-		{
-			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
-			bpf_printk("failed to tail call into the 'hotplug' prog");
-		}
+		handle_exit(i, &data);
 	}
 
 	return 0;

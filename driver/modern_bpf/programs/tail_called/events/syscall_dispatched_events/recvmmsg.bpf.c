@@ -106,12 +106,6 @@ static long handle_exit(uint32_t index, void *ctx)
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
-	struct ringbuf_map *rb = maps__get_ringbuf_map();
-	if(!rb)
-	{
-		return 1;
-	}
-
 	auxmap__finalize_event_header(auxmap);
 
 	return auxmap__try_submit_event(auxmap);
@@ -161,16 +155,10 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret)
 		.ctx = ctx,
 	};
 
-	// TODO: Update vmlinux.h so we can test against BPF_FUNC_loop
 	if(bpf_core_enum_value_exists(enum bpf_func_id, BPF_FUNC_loop))
 	{
 		uint32_t nr_loops = ret < 1024 ? ret : 1024;
-		long total_loops = bpf_loop(nr_loops, handle_exit, &data, 0);
-		if (total_loops != nr_loops)
-		{
-			bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_HOTPLUG_E);
-			bpf_printk("failed to tail call into the 'hotplug' prog");
-		}
+		bpf_loop(nr_loops, handle_exit, &data, 0);
 		return 0;
 	}
 
