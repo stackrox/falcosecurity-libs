@@ -137,7 +137,7 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 
 		auxmap__finalize_event_header(auxmap);
 
-		auxmap__submit_event(auxmap, ctx);
+		auxmap__try_submit_event(auxmap);
 		return 0;
 	}
 
