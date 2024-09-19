@@ -19,6 +19,7 @@ limitations under the License.
 #include "state.h"
 #include <driver/feature_gates.h>
 #include <libpman.h>
+#include <scap.h>
 
 /* Some notes about how a bpf program must be detached without unloading it:
  * https://lore.kernel.org/bpf/CAEf4BzZ8=dV0wvggAKnD64yXnhcXhdf1ovCT_LBd17RtJJXrdA@mail.gmail.com/T/
@@ -295,6 +296,33 @@ int pman_detach_signal_deliver()
 		return errno;
 	}
 	g_state.skel->links.signal_deliver = NULL;
+	return 0;
+}
+
+int pman_set_autoload_programs(const bool ppm_sc_of_interest[])
+{
+	char buff[4096];
+
+	for (unsigned int i = 0; i < PPM_SC_MAX; i++) {
+		const char* name = scap_get_ppm_sc_name(i);
+		unsigned int name_len = strlen(name) < 4093 ? strlen(name) : 4093;
+		memcpy(buff, name, name_len);
+
+		buff[name_len] = '_';
+		buff[name_len + 1] = 'e';
+		buff[name_len + 2] = '\0';
+		struct bpf_program* prog = bpf_object__find_program_by_name(g_state.skel->obj, buff);
+		if (prog != NULL) {
+			bpf_program__set_autoload(prog, ppm_sc_of_interest[i]);
+		}
+
+		buff[name_len + 1] = 'x';
+		prog = bpf_object__find_program_by_name(g_state.skel->obj, buff);
+		if (prog != NULL) {
+			bpf_program__set_autoload(prog, ppm_sc_of_interest[i]);
+		}
+	}
+
 	return 0;
 }
 

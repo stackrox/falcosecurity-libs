@@ -241,6 +241,14 @@ extern "C"
 	 */
 	int pman_detach_signal_deliver(void);
 
+	/**
+	 * @brief Mark programs for uninteresting syscalls to no autoload
+	 *
+	 * @param ppm_sc_of_interest list of interesting ppm_sc.
+	 * @returns `0` on success, `errno` in case of error.
+	 */
+	int pman_set_autoload_programs(const bool ppm_sc_of_interest[]);
+
 	/////////////////////////////
 	// MANAGE RINGBUFFERS
 	/////////////////////////////
@@ -423,9 +431,10 @@ extern "C"
 	 * syscall_exit_tail_table(syscall_id, exit_program_fd).
 	 * Returns the fd of the right bpf program to call.
 	 *
+	 * @param ppm_sc_of_interest List of interesting syscalls.
 	 * @return `0` on success, `errno` in case of error.
 	 */
-	int pman_fill_syscalls_tail_table(void);
+	int pman_fill_syscalls_tail_table(bool ppm_sc_of_interest[]);
 
 	/**
 	 * @brief Performs all necessary operations on maps before the
@@ -443,9 +452,10 @@ extern "C"
 	 * - Set values to BPF global variables.
 	 * - Fill tail tables.
 	 *
+	 * @param ppm_sc_of_interest List of interesting syscalls.
 	 * @return `0` on success, `errno` in case of error.
 	 */
-	int pman_finalize_maps_after_loading(void);
+	int pman_finalize_maps_after_loading(bool ppm_sc_of_interest[]);
 
 	/**
 	 * @brief Mark a single syscall as (un)interesting
