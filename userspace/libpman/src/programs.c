@@ -299,9 +299,9 @@ int pman_detach_signal_deliver()
 	return 0;
 }
 
-int pman_set_autoload_programs(const bool ppm_sc_of_interest[])
+int pman_set_autoload_programs(const bool ppm_sc_of_interest[PPM_SC_MAX])
 {
-	char buff[4096];
+	char buff[256];
 
 	for (unsigned int i = 0; i < PPM_SC_MAX; i++) {
 		const char* name = scap_get_ppm_sc_name(i);

@@ -208,7 +208,7 @@ clean_add_program_to_tail_table:
 	return errno;
 }
 
-int pman_fill_syscalls_tail_table(bool ppm_sc_of_interest[])
+int pman_fill_syscalls_tail_table(const bool ppm_sc_of_interest[PPM_SC_MAX])
 {
 	int syscall_enter_tail_table_fd = 0;
 	int syscall_exit_tail_table_fd = 0;
@@ -364,7 +364,7 @@ int pman_prepare_maps_before_loading()
 	return err;
 }
 
-int pman_finalize_maps_after_loading(bool ppm_sc_of_interest[])
+int pman_finalize_maps_after_loading(const bool ppm_sc_of_interest[PPM_SC_MAX])
 {
 	int err;
 
