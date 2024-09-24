@@ -301,11 +301,12 @@ int pman_detach_signal_deliver()
 
 int pman_set_autoload_programs(const bool ppm_sc_of_interest[PPM_SC_MAX])
 {
-	char buff[256];
+	static const size_t BUFF_SIZE = 256;
+	char buff[BUFF_SIZE];
 
 	for (unsigned int i = 0; i < PPM_SC_MAX; i++) {
 		const char* name = scap_get_ppm_sc_name(i);
-		unsigned int name_len = strlen(name) < 4093 ? strlen(name) : 4093;
+		unsigned int name_len = strlen(name) < BUFF_SIZE - 3 ? strlen(name) : BUFF_SIZE - 3;
 		memcpy(buff, name, name_len);
 
 		buff[name_len] = '_';
