@@ -24,7 +24,7 @@ int BPF_PROG(sendmmsg_e, struct pt_regs *regs, long id)
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
-	// Here we have no parameter to collect.
+	// Here we have no parameters to collect.
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
@@ -80,7 +80,6 @@ static long handle_exit(uint32_t index, void *ctx)
 	 * the return value if the syscall is successful.
 	 */
 	uint16_t snaplen = maps__get_snaplen();
-	// TODO: check sockaddr
 	apply_dynamic_snaplen(data->regs, &snaplen, true, NULL);
 	if(mmh.msg_len > 0 && snaplen > mmh.msg_len)
 	{
@@ -158,6 +157,8 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret)
 		return 0;
 	}
 
+	// This loop should go up to 1024, however, the verifier prevents us
+	// from doing so, so we cap it at a lower number and hope that's enough.
 	for(int i = 0; i < ret && i < MAX_IOVCNT; i++)
 	{
 		handle_exit(i, &data);

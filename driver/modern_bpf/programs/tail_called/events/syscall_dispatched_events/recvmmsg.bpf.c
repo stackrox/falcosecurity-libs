@@ -162,7 +162,9 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret)
 		return 0;
 	}
 
-	for(int i = 0; i < ret && i < 12; i++)
+	// This loop should go up to 1024, however, the verifier prevents us
+	// from doing so, so we cap it at a lower number and hope that's enough.
+	for(int i = 0; i < ret && i < MAX_IOVCNT; i++)
 	{
 		handle_exit(i, &data);
 	}
