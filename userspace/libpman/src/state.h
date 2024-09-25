@@ -32,9 +32,6 @@ limitations under the License.
 /* Pay attention this need to be bumped every time we add a new bpf program that is directly attached into the kernel */
 #define MODERN_BPF_PROG_ATTACHED_MAX 9
 
-#define BPF_LOG_BIG_BUF_SIZE (UINT32_MAX >> 8) /* Recommended log buffer size, taken from libbpf. Used for verifier logs */
-#define BPF_LOG_SMALL_BUF_SIZE 8192 /* Used for libbpf non-verifier logs */
-
 struct metrics_v2;
 
 struct internal_state
@@ -62,8 +59,6 @@ struct internal_state
 	uint16_t n_attached_progs;				  /* number of attached progs */
 	struct metrics_v2* stats;				  /* array of stats collected by libpman */
 
-	char* log_buf; /* buffer used to store logs before sending them to the log_fn */
-	size_t log_buf_size; /* size of the log buffer */
 	falcosecurity_log_fn log_fn;
 };
 
