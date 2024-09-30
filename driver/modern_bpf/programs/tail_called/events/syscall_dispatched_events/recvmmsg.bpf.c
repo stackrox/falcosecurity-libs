@@ -68,26 +68,11 @@ static __always_inline long handle_exit(uint32_t index, void *ctx) {
 	/* Parameter 3: size (type: PT_UINT32) */
 	auxmap__store_u32_param(auxmap, (uint32_t)mmh.msg_len);
 
-	/* We read the minimum between `snaplen` and what we really
-	 * have in the buffer.
-	 */
-	dynamic_snaplen_args snaplen_args = {
-	        .only_port_range = true,
-	        .evt_type = PPME_SOCKET_RECVMMSG_X,
-	        .mmsg_index = index,
-	        .mm_args = data->args,
-	};
-	uint16_t snaplen = maps__get_snaplen();
-	apply_dynamic_snaplen(NULL, &snaplen, &snaplen_args);
-	if(snaplen > mmh.msg_len) {
-		snaplen = mmh.msg_len;
-	}
-
 	/* Parameter 4: data (type: PT_BYTEBUF) */
 	auxmap__store_iovec_data_param(auxmap,
 	                               (unsigned long)mmh.msg_hdr.msg_iov,
 	                               mmh.msg_hdr.msg_iovlen,
-	                               snaplen);
+	                               0);
 
 	/* Parameter 5: tuple (type: PT_SOCKTUPLE) */
 	auxmap__store_socktuple_param(auxmap,
@@ -163,7 +148,6 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret) {
 
 	uint32_t nr_loops = ret < MAX_SENDMMSG_RECVMMSG_SIZE ? ret : MAX_SENDMMSG_RECVMMSG_SIZE;
 	bpf_loop(nr_loops, handle_exit, &data, 0);
-
 	return 0;
 }
 
@@ -212,8 +196,12 @@ int BPF_PROG(recvmmsg_old_x, struct pt_regs *regs, long ret) {
 	        .args = args,
 	};
 
-	// Send only first message
-	handle_exit(0, &data);
+	// This loop should go up to 1024, however, the verifier prevents us
+	// from doing so, so we cap it at a lower number and hope that's enough.
+	for(int i = 0; i < ret && i < MAX_IOVCNT; i++) {
+		handle_exit(i, &data);
+	}
+
 
 	return 0;
 }

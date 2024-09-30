@@ -277,7 +277,7 @@ clean_add_program_to_tail_table:
 	return errno;
 }
 
-int pman_fill_syscalls_tail_table() {
+int pman_fill_syscalls_tail_table(const bool ppm_sc_of_interest[PPM_SC_MAX]) {
 	int syscall_enter_tail_table_fd = 0;
 	int syscall_exit_tail_table_fd = 0;
 	int enter_event_type = 0;
@@ -298,6 +298,10 @@ int pman_fill_syscalls_tail_table() {
 	}
 
 	for(int syscall_id = 0; syscall_id < SYSCALL_TABLE_SIZE; syscall_id++) {
+		if(!ppm_sc_of_interest[g_syscall_table[syscall_id].ppm_sc]) {
+			continue;
+		}
+
 		/* Get event type from `g_syscall_table` */
 		enter_event_type = g_syscall_table[syscall_id].enter_event_type;
 		exit_event_type = g_syscall_table[syscall_id].exit_event_type;
@@ -446,7 +450,7 @@ int pman_prepare_maps_before_loading() {
 	return err;
 }
 
-int pman_finalize_maps_after_loading() {
+int pman_finalize_maps_after_loading(const bool ppm_sc_of_interest[PPM_SC_MAX]) {
 	int err;
 	struct capture_settings settings = {};
 	err = pman_update_capture_settings(&settings);
@@ -465,7 +469,7 @@ int pman_finalize_maps_after_loading() {
 
 	/* We have to fill all ours tail tables. */
 	pman_fill_interesting_syscalls_table_64bit();
-	err = pman_fill_syscalls_tail_table();
+	err = pman_fill_syscalls_tail_table(ppm_sc_of_interest);
 	err = err ?: pman_fill_syscall_exit_extra_tail_table();
 	return err;
 }

@@ -149,7 +149,6 @@ int BPF_PROG(sendmmsg_x, struct pt_regs *regs, long ret) {
 
 	uint32_t nr_loops = ret < MAX_SENDMMSG_RECVMMSG_SIZE ? ret : MAX_SENDMMSG_RECVMMSG_SIZE;
 	bpf_loop(nr_loops, handle_exit, &data, 0);
-
 	return 0;
 }
 
@@ -195,8 +194,11 @@ int BPF_PROG(sendmmsg_old_x, struct pt_regs *regs, long ret) {
 	        .args = args,
 	};
 
-	// Only first message
-	handle_exit(0, &data);
+	// This loop should go up to 1024, however, the verifier prevents us
+	// from doing so, so we cap it at a lower number and hope that's enough.
+	for(int i = 0; i < ret && i < MAX_IOVCNT; i++) {
+		handle_exit(i, &data);
+	}
 
 	return 0;
 }

@@ -18,6 +18,7 @@ limitations under the License.
 
 #pragma once
 
+#include "ppm_events_public.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -250,6 +251,19 @@ int pman_attach_signal_deliver(void);
  */
 int pman_detach_signal_deliver(void);
 
+/**
+ * @brief Mark programs for uninteresting syscalls to not autoload
+ *
+ * The provided list of syscalls is an array of booleans, where true
+ * means the syscall is interesting and should be loaded into the
+ * kernel, otherwise it will be skipped. The index for each element
+ * corresponds to a syscall as defined in `driver/ppm_events_public.h`
+ *
+ * @param ppm_sc_of_interest list of interesting ppm_sc.
+ * @returns `0` on success, `errno` in case of error.
+ */
+int pman_set_autoload_programs(const bool ppm_sc_of_interest[PPM_SC_MAX]);
+
 /////////////////////////////
 // MANAGE RINGBUFFERS
 /////////////////////////////
@@ -431,9 +445,17 @@ int pman_fill_syscall_exit_extra_tail_table(void);
  * syscall_exit_tail_table(syscall_id, exit_program_fd).
  * Returns the fd of the right bpf program to call.
  *
+ * @param ppm_sc_of_interest List of interesting syscalls.
+ *
+ * The provided list of syscalls is an array of booleans, where true
+ * means the syscall has been loaded into the kernel and a file
+ * descriptor for it should be added to the tail call map, otherwise
+ * it will be skipped. The index for each element corresponds to a
+ * syscall as defined in `driver/ppm_events_public.h`
+ *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_fill_syscalls_tail_table(void);
+int pman_fill_syscalls_tail_table(const bool ppm_sc_of_interest[PPM_SC_MAX]);
 
 /**
  * @brief Performs all necessary operations on maps before the
@@ -451,9 +473,16 @@ int pman_prepare_maps_before_loading(void);
  * - Set values to BPF global variables.
  * - Fill tail tables.
  *
+ * The provided list of syscalls is an array of booleans, where true
+ * means the syscall has been loaded into the kernel and a file
+ * descriptor for it should be added to the tail call map, otherwise
+ * it will be skipped. The index for each element corresponds to a
+ * syscall as defined in `driver/ppm_events_public.h`
+ *
+ * @param ppm_sc_of_interest List of interesting syscalls.
  * @return `0` on success, `errno` in case of error.
  */
-int pman_finalize_maps_after_loading(void);
+int pman_finalize_maps_after_loading(const bool ppm_sc_of_interest[PPM_SC_MAX]);
 
 /**
  * @brief Mark a single syscall as (un)interesting
