@@ -208,7 +208,7 @@ clean_add_program_to_tail_table:
 	return errno;
 }
 
-int pman_fill_syscalls_tail_table()
+int pman_fill_syscalls_tail_table(const bool ppm_sc_of_interest[PPM_SC_MAX])
 {
 	int syscall_enter_tail_table_fd = 0;
 	int syscall_exit_tail_table_fd = 0;
@@ -233,6 +233,9 @@ int pman_fill_syscalls_tail_table()
 
 	for(int syscall_id = 0; syscall_id < SYSCALL_TABLE_SIZE; syscall_id++)
 	{
+		if (!ppm_sc_of_interest[g_syscall_table[syscall_id].ppm_sc]) {
+			continue;
+		}
 
 		/* Get event type from `g_syscall_table` */
 		enter_event_type = g_syscall_table[syscall_id].enter_event_type;
@@ -361,7 +364,7 @@ int pman_prepare_maps_before_loading()
 	return err;
 }
 
-int pman_finalize_maps_after_loading()
+int pman_finalize_maps_after_loading(const bool ppm_sc_of_interest[PPM_SC_MAX])
 {
 	int err;
 
@@ -378,7 +381,7 @@ int pman_finalize_maps_after_loading()
 	pman_fill_syscall_sampling_table();
 	pman_fill_syscall_tracepoint_table();
 	pman_fill_ia32_to_64_table();
-	err = pman_fill_syscalls_tail_table();
+	err = pman_fill_syscalls_tail_table(ppm_sc_of_interest);
 	err = err ?: pman_fill_extra_event_prog_tail_table();
 	return err;
 }

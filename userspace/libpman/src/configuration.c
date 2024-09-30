@@ -220,7 +220,7 @@ bool check_location(const char* path)
 	{
 		goto cleanup;
 	}
-	
+
 	// Return the dimension of the file
 	long sz = ftell(f);
 	if (sz < 0)
@@ -234,7 +234,7 @@ bool check_location(const char* path)
 		goto cleanup;
 	}
 
-	// pre-alloc memory to read all of BTF data 
+	// pre-alloc memory to read all of BTF data
 	file_content = malloc(sz);
 	if (!file_content)
 	{

@@ -187,17 +187,15 @@
 #define MMAP2_E_SIZE HEADER_LEN + sizeof(uint64_t) * 3 + sizeof(int64_t) + sizeof(uint32_t) * 2 + PARAM_LEN * 6
 #define MMAP2_X_SIZE HEADER_LEN + sizeof(int64_t) + sizeof(uint32_t) * 3 + PARAM_LEN * 4
 #define SEMGET_E_SIZE HEADER_LEN + sizeof(int32_t) * 2 + sizeof(uint32_t) + PARAM_LEN * 3
-#define SEMGET_X_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN 
+#define SEMGET_X_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
 #define SEMCTL_E_SIZE HEADER_LEN + sizeof(int32_t) * 3 + sizeof(uint16_t) + PARAM_LEN * 4
 #define SEMCTL_X_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
 #define SELECT_E_SIZE HEADER_LEN
 #define SELECT_X_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
 #define SPLICE_E_SIZE HEADER_LEN + sizeof(int64_t) * 2 + sizeof(uint64_t) + sizeof(uint32_t) + PARAM_LEN * 4
 #define SPLICE_X_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
-#define RECVMMSG_E_SIZE HEADER_LEN
-#define RECVMMSG_X_SIZE HEADER_LEN
+#define RECVMMSG_E_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
 #define SENDMMSG_E_SIZE HEADER_LEN
-#define SENDMMSG_X_SIZE HEADER_LEN
 #define SEMOP_E_SIZE HEADER_LEN + sizeof(int32_t) + PARAM_LEN
 #define SEMOP_X_SIZE HEADER_LEN + sizeof(int64_t) + sizeof(uint32_t) + sizeof(uint16_t) * 4 + sizeof(int16_t) * 2 + PARAM_LEN * 8
 #define GETRESUID_E_SIZE HEADER_LEN
@@ -210,9 +208,9 @@
 #define LSTAT_E_SIZE HEADER_LEN
 #define FSTAT_E_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
 #define FSTAT_X_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
-#define LSEEK_E_SIZE HEADER_LEN + sizeof(int64_t) + sizeof(uint64_t) + sizeof(uint8_t) + 3 * PARAM_LEN 
+#define LSEEK_E_SIZE HEADER_LEN + sizeof(int64_t) + sizeof(uint64_t) + sizeof(uint8_t) + 3 * PARAM_LEN
 #define LSEEK_X_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
-#define LLSEEK_E_SIZE HEADER_LEN + sizeof(int64_t) + sizeof(uint64_t) + sizeof(uint8_t) + 3 * PARAM_LEN 
+#define LLSEEK_E_SIZE HEADER_LEN + sizeof(int64_t) + sizeof(uint64_t) + sizeof(uint8_t) + 3 * PARAM_LEN
 #define LLSEEK_X_SIZE HEADER_LEN + sizeof(int64_t) + PARAM_LEN
 #define WRITE_E_SIZE HEADER_LEN + sizeof(int64_t) + sizeof(uint32_t) + PARAM_LEN * 2
 #define WRITEV_E_SIZE HEADER_LEN + sizeof(int64_t) + sizeof(uint32_t) + PARAM_LEN * 2

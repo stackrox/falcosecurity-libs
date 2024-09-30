@@ -174,7 +174,7 @@ static int32_t calibrate_socket_file_ops(struct scap_engine_handle engine)
 	 */
 	pid_t scap_tid = syscall(__NR_gettid);
 	pman_set_scap_tid(scap_tid);
-	
+
 	/* We just need to enable the socket syscall for the socket calibration */
 	engine.m_handle->curr_sc_set.ppm_sc[PPM_SC_SOCKET] = 1;
 	if(scap_modern_bpf__start_capture(engine) != SCAP_SUCCESS)
@@ -274,8 +274,9 @@ int32_t scap_modern_bpf__init(scap_t* handle, scap_open_args* oargs)
 	ret = pman_open_probe();
 	ret = ret ?: pman_prepare_ringbuf_array_before_loading();
 	ret = ret ?: pman_prepare_maps_before_loading();
+	ret = ret ?: pman_set_autoload_programs(oargs->ppm_sc_of_interest.ppm_sc);
 	ret = ret ?: pman_load_probe();
-	ret = ret ?: pman_finalize_maps_after_loading();
+	ret = ret ?: pman_finalize_maps_after_loading(oargs->ppm_sc_of_interest.ppm_sc);
 	ret = ret ?: pman_finalize_ringbuf_array_after_loading();
 	if(ret != SCAP_SUCCESS)
 	{
