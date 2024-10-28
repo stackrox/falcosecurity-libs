@@ -78,7 +78,7 @@ static long handle_exit(uint32_t index, void *ctx) {
 	 * the return value if the syscall is successful.
 	 */
 	uint16_t snaplen = maps__get_snaplen();
-	apply_dynamic_snaplen(data->regs, &snaplen, true, NULL);
+	apply_dynamic_snaplen(data->regs, &snaplen, true, PPME_SOCKET_SENDMMSG_X);
 	if(mmh.msg_len > 0 && snaplen > mmh.msg_len) {
 		snaplen = mmh.msg_len;
 	}

@@ -75,7 +75,7 @@ static long handle_exit(uint32_t index, void *ctx) {
 	 * have in the buffer.
 	 */
 	uint16_t snaplen = maps__get_snaplen();
-	apply_dynamic_snaplen(data->regs, &snaplen, true, NULL);
+	apply_dynamic_snaplen(data->regs, &snaplen, true, PPME_SOCKET_RECVMMSG_X);
 	if(snaplen > mmh.msg_len) {
 		snaplen = mmh.msg_len;
 	}
