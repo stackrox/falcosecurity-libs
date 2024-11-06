@@ -16,8 +16,7 @@ int BPF_PROG(mprotect_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, MPROTECT_E_SIZE, PPME_SYSCALL_MPROTECT_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, MPROTECT_E_SIZE, PPME_SYSCALL_MPROTECT_E)) {
 		return 0;
 	}
 
@@ -54,10 +53,9 @@ int BPF_PROG(mprotect_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-        if(!ringbuf__reserve_space(&ringbuf, ctx, MPROTECT_X_SIZE, PPME_SYSCALL_MPROTECT_X))
-        {
-                return 0;
-        }
+	if(!ringbuf__reserve_space(&ringbuf, MPROTECT_X_SIZE, PPME_SYSCALL_MPROTECT_X)) {
+		return 0;
+	}
 
         ringbuf__store_event_header(&ringbuf);
 

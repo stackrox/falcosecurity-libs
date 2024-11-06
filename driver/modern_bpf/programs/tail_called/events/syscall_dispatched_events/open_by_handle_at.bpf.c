@@ -17,8 +17,9 @@ int BPF_PROG(open_by_handle_at_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, OPEN_BY_HANDLE_AT_E_SIZE, PPME_SYSCALL_OPEN_BY_HANDLE_AT_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf,
+	                           OPEN_BY_HANDLE_AT_E_SIZE,
+	                           PPME_SYSCALL_OPEN_BY_HANDLE_AT_E)) {
 		return 0;
 	}
 
@@ -124,7 +125,7 @@ int BPF_PROG(t1_open_by_handle_at_x, struct pt_regs *regs, long ret)
 
 	auxmap__finalize_event_header(auxmap);
 
-	auxmap__submit_event(auxmap, ctx);
+	auxmap__submit_event(auxmap);
 
 	return 0;
 }

@@ -16,8 +16,7 @@ int BPF_PROG(bpf_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, BPF_E_SIZE, PPME_SYSCALL_BPF_2_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, BPF_E_SIZE, PPME_SYSCALL_BPF_2_E)) {
 		return 0;
 	}
 
@@ -46,8 +45,7 @@ int BPF_PROG(bpf_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, BPF_X_SIZE, PPME_SYSCALL_BPF_2_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, BPF_X_SIZE, PPME_SYSCALL_BPF_2_X)) {
 		return 0;
 	}
 

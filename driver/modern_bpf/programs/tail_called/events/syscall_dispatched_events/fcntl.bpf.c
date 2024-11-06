@@ -31,8 +31,7 @@ int BPF_PROG(fcntl_e,
 	}
 
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, FCNTL_E_SIZE, PPME_SYSCALL_FCNTL_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, FCNTL_E_SIZE, PPME_SYSCALL_FCNTL_E)) {
 		return 0;
 	}
 
@@ -70,8 +69,7 @@ int BPF_PROG(fcntl_x,
 	}
 
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, FCNTL_X_SIZE, PPME_SYSCALL_FCNTL_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, FCNTL_X_SIZE, PPME_SYSCALL_FCNTL_X)) {
 		return 0;
 	}
 

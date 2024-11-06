@@ -16,8 +16,7 @@ int BPF_PROG(getdents64_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, GETDENTS64_E_SIZE, PPME_SYSCALL_GETDENTS64_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, GETDENTS64_E_SIZE, PPME_SYSCALL_GETDENTS64_E)) {
 		return 0;
 	}
 
@@ -46,8 +45,7 @@ int BPF_PROG(getdents64_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, GETDENTS64_X_SIZE, PPME_SYSCALL_GETDENTS64_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, GETDENTS64_X_SIZE, PPME_SYSCALL_GETDENTS64_X)) {
 		return 0;
 	}
 

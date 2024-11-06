@@ -16,8 +16,7 @@ int BPF_PROG(userfaultfd_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, USERFAULTFD_E_SIZE, PPME_SYSCALL_USERFAULTFD_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, USERFAULTFD_E_SIZE, PPME_SYSCALL_USERFAULTFD_E)) {
 		return 0;
 	}
 
@@ -44,8 +43,7 @@ int BPF_PROG(userfaultfd_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, USERFAULTFD_X_SIZE, PPME_SYSCALL_USERFAULTFD_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, USERFAULTFD_X_SIZE, PPME_SYSCALL_USERFAULTFD_X)) {
 		return 0;
 	}
 

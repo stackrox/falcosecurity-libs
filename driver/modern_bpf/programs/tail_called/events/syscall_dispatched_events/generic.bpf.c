@@ -16,8 +16,7 @@ int BPF_PROG(generic_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, GENERIC_E_SIZE, PPME_GENERIC_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, GENERIC_E_SIZE, PPME_GENERIC_E)) {
 		return 0;
 	}
 
@@ -60,8 +59,7 @@ int BPF_PROG(generic_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, GENERIC_X_SIZE, PPME_GENERIC_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, GENERIC_X_SIZE, PPME_GENERIC_X)) {
 		return 0;
 	}
 

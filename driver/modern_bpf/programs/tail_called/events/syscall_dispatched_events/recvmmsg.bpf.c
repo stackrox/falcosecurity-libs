@@ -21,8 +21,7 @@ int BPF_PROG(recvmmsg_e,
 	extract__network_args(&socket_fd, 1, regs);
 
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, RECVMMSG_E_SIZE, PPME_SOCKET_RECVMMSG_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, RECVMMSG_E_SIZE, PPME_SOCKET_RECVMMSG_E)) {
 		return 0;
 	}
 

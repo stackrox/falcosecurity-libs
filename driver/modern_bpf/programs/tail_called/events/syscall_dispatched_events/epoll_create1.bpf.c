@@ -16,8 +16,7 @@ int BPF_PROG(epoll_create1_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, EPOLL_CREATE1_E_SIZE, PPME_SYSCALL_EPOLL_CREATE1_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, EPOLL_CREATE1_E_SIZE, PPME_SYSCALL_EPOLL_CREATE1_E)) {
 		return 0;
 	}
 
@@ -46,8 +45,7 @@ int BPF_PROG(epoll_create1_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, EPOLL_CREATE1_X_SIZE, PPME_SYSCALL_EPOLL_CREATE1_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, EPOLL_CREATE1_X_SIZE, PPME_SYSCALL_EPOLL_CREATE1_X)) {
 		return 0;
 	}
 
