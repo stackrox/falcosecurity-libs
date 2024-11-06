@@ -164,7 +164,7 @@ int BPF_PROG(execve_x,
 	/* We have to split here the bpf program, otherwise, it is too large
 	 * for the verifier (limit 1000000 instructions).
 	 */
-	bpf_tail_call(ctx, &extra_event_prog_tail_table, T1_EXECVE_X);
+	bpf_tail_call(ctx, &extra_syscall_calls, T1_EXECVE_X);
 	return 0;
 }
 
@@ -308,7 +308,7 @@ int BPF_PROG(t1_execve_x,
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
-	bpf_tail_call(ctx, &extra_event_prog_tail_table, T2_EXECVE_X);
+	bpf_tail_call(ctx, &extra_syscall_calls, T2_EXECVE_X);
 	return 0;
 }
 
