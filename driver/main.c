@@ -122,7 +122,7 @@ struct event_data_t {
 		/* Here we save only the child task struct since it is the
 		 * unique parameter we will use in our `f_sched_prog_fork`
 		 * filler. On the other side the `f_sched_prog_exec` filler
-		 * won't need any tracepoint parameter so we don't need a 
+		 * won't need any tracepoint parameter so we don't need a
 		 * internal struct here.
 		 */
 		struct {
@@ -597,7 +597,7 @@ static int ppm_release(struct inode *inode, struct file *filp)
 	       ring->info->n_drops_buffer_dir_file_exit,
 	       ring->info->n_drops_buffer_other_interest_enter,
 	       ring->info->n_drops_buffer_other_interest_exit,
-	       ring->info->n_drops_buffer_close_exit,	
+	       ring->info->n_drops_buffer_close_exit,
 	       ring->info->n_drops_buffer_proc_exit,
 	       ring->info->n_drops_pf,
 	       ring->info->n_preemptions,
@@ -1527,7 +1527,7 @@ static inline void drops_buffer_syscall_categories_counters(ppm_event_code event
 		break;
 	case PPME_PROCEXIT_1_E:
 		ring_info->n_drops_buffer_proc_exit++;
-		break;			
+		break;
 	// exit
 	case PPME_SYSCALL_OPEN_X:
 	case PPME_SYSCALL_CREAT_X:
@@ -1969,7 +1969,7 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 		/*
 		 * Fire the filler callback
 		 */
-		
+
 		/* For events with category `PPMC_SCHED_PROC_EXEC` or `PPMC_SCHED_PROC_FORK`
 		 * we need to call dedicated fillers that are not in our `g_ppm_events` table.
 		 */
@@ -1991,11 +1991,11 @@ static int record_event_consumer(struct ppm_consumer_t *consumer,
 #endif
 
 		default:
-			if (likely(g_ppm_events[event_type].filler_callback)) 
+			if (likely(g_ppm_events[event_type].filler_callback))
 			{
 				cbres = g_ppm_events[event_type].filler_callback(&args);
-			} 
-			else 
+			}
+			else
 			{
 				pr_err("corrupted filler for event type %d: NULL callback\n", event_type);
 				ASSERT(0);
@@ -2187,7 +2187,7 @@ TRACEPOINT_PROBE(syscall_enter_probe, struct pt_regs *regs, long id)
 #else
 		// Unsupported arch
 		return;
-#endif		
+#endif
 	}
 	else
 	{
@@ -2268,7 +2268,7 @@ TRACEPOINT_PROBE(syscall_exit_probe, struct pt_regs *regs, long ret)
  	 * tracing about to attempt one, returns the system call number.
  	 * If @task is not executing a system call, i.e. it's blocked
  	 * inside the kernel for a fault or signal, returns -1.
-	 * 
+	 *
 	 * The syscall id could be overwritten if we are in a socket call.
 	 */
 	event_data.event_info.syscall_data.id = syscall_get_nr(current, regs);
@@ -2407,7 +2407,10 @@ TRACEPOINT_PROBE(sched_switch_probe, bool preempt, struct task_struct *prev, str
 	 * Need to indicate ATOMIC (i.e. interrupt) context to avoid the event
 	 * handler calling printk() and potentially deadlocking the system.
 	 */
-	record_event_all_consumers(PPME_SCHEDSWITCH_6_E, UF_USED | UF_ATOMIC, &event_data, KMOD_PROG_SCHED_SWITCH);
+	record_event_all_consumers(PPME_SCHEDSWITCH_6_E,
+	                           UF_ALWAYS_DROP | UF_ATOMIC,
+	                           &event_data,
+	                           KMOD_PROG_SCHED_SWITCH);
 }
 #endif
 
@@ -2492,7 +2495,7 @@ TRACEPOINT_PROBE(sched_proc_exec_probe, struct task_struct *p, pid_t old_pid, st
 	event_data.category = PPMC_SCHED_PROC_EXEC;
 	record_event_all_consumers(PPME_SYSCALL_EXECVE_19_X, UF_NEVER_DROP, &event_data, KMOD_PROG_SCHED_PROC_EXEC);
 }
-#endif 
+#endif
 
 #ifdef CAPTURE_SCHED_PROC_FORK
 TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_struct *child)
@@ -2501,7 +2504,7 @@ TRACEPOINT_PROBE(sched_proc_fork_probe, struct task_struct *parent, struct task_
 
 	g_n_tracepoint_hit_inc();
 
-	/* We are not interested in kernel threads. 
+	/* We are not interested in kernel threads.
 	 * The current thread here is the `parent`.
 	 */
 	if(unlikely(current->flags & PF_KTHREAD))
@@ -2650,7 +2653,7 @@ static void visit_tracepoint(struct tracepoint *tp, void *priv)
 
 #ifdef CAPTURE_SCHED_PROC_FORK
 	else if (!strcmp(tp->name, kmod_prog_names[KMOD_PROG_SCHED_PROC_FORK]))
-		tp_sched_proc_fork = tp;	
+		tp_sched_proc_fork = tp;
 #endif
 }
 
@@ -3042,7 +3045,7 @@ static int set_g_buffer_bytes_dim(const char *val, const struct kernel_param *kp
 
 	/* `kstrtoul` is defined only on these kernels.
 	 * https://elixir.bootlin.com/linux/v2.6.39/source/include/linux/kernel.h#L197
-	 */ 
+	 */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)
 	int ret = 0;
 	ret = kstrtoul(val, 10, &dim);
@@ -3052,7 +3055,7 @@ static int set_g_buffer_bytes_dim(const char *val, const struct kernel_param *kp
 		return -EINVAL;
 	}
 #else
-	/* You can find more info about the simple_strtoull behavior here! 
+	/* You can find more info about the simple_strtoull behavior here!
 	 * https://elixir.bootlin.com/linux/latest/source/arch/x86/boot/string.c#L120
 	 */
 	char* endp = NULL;
