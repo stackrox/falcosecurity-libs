@@ -17,8 +17,7 @@ int BPF_PROG(unlinkat_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, UNLINKAT_E_SIZE, PPME_SYSCALL_UNLINKAT_2_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, UNLINKAT_E_SIZE, PPME_SYSCALL_UNLINKAT_2_E)) {
 		return 0;
 	}
 
@@ -77,7 +76,7 @@ int BPF_PROG(unlinkat_x,
 
 	auxmap__finalize_event_header(auxmap);
 
-	auxmap__submit_event(auxmap, ctx);
+	auxmap__submit_event(auxmap);
 
 	return 0;
 }

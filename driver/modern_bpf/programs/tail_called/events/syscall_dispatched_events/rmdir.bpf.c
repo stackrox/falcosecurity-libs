@@ -17,8 +17,7 @@ int BPF_PROG(rmdir_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, RMDIR_E_SIZE, PPME_SYSCALL_RMDIR_2_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, RMDIR_E_SIZE, PPME_SYSCALL_RMDIR_2_E)) {
 		return 0;
 	}
 
@@ -65,7 +64,7 @@ int BPF_PROG(rmdir_x,
 
 	auxmap__finalize_event_header(auxmap);
 
-	auxmap__submit_event(auxmap, ctx);
+	auxmap__submit_event(auxmap);
 
 	return 0;
 }

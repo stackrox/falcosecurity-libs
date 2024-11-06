@@ -17,8 +17,7 @@ int BPF_PROG(vfork_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, VFORK_E_SIZE, PPME_SYSCALL_VFORK_20_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, VFORK_E_SIZE, PPME_SYSCALL_VFORK_20_E)) {
 		return 0;
 	}
 
@@ -244,7 +243,7 @@ int BPF_PROG(t2_vfork_x,
 
 	auxmap__finalize_event_header(auxmap);
 
-	auxmap__submit_event(auxmap, ctx);
+	auxmap__submit_event(auxmap);
 	return 0;
 }
 

@@ -16,8 +16,7 @@ int BPF_PROG(mmap_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, MMAP_E_SIZE, PPME_SYSCALL_MMAP_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, MMAP_E_SIZE, PPME_SYSCALL_MMAP_E)) {
 		return 0;
 	}
 
@@ -66,8 +65,7 @@ int BPF_PROG(mmap_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, MMAP_X_SIZE, PPME_SYSCALL_MMAP_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, MMAP_X_SIZE, PPME_SYSCALL_MMAP_X)) {
 		return 0;
 	}
 

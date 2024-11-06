@@ -12,17 +12,13 @@
 /*=============================== ENTER EVENT ===========================*/
 
 SEC("tp_btf/sys_enter")
-int BPF_PROG(memfd_create_e,
-         struct pt_regs *regs,
-         long id)
-{
-    struct ringbuf_struct ringbuf;
-    if(!ringbuf__reserve_space(&ringbuf, ctx, MEMFD_CREATE_E_SIZE, PPME_SYSCALL_MEMFD_CREATE_E))
-    {
-        return 0;
-    }
-    
-    ringbuf__store_event_header(&ringbuf);
+int BPF_PROG(memfd_create_e, struct pt_regs *regs, long id) {
+	struct ringbuf_struct ringbuf;
+	if(!ringbuf__reserve_space(&ringbuf, MEMFD_CREATE_E_SIZE, PPME_SYSCALL_MEMFD_CREATE_E)) {
+		return 0;
+	}
+
+	ringbuf__store_event_header(&ringbuf);
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
@@ -66,7 +62,7 @@ int BPF_PROG(memfd_create_x,
 
     auxmap__finalize_event_header(auxmap);
 
-    auxmap__submit_event(auxmap, ctx);
+	auxmap__submit_event(auxmap);
 
     return 0;
 }

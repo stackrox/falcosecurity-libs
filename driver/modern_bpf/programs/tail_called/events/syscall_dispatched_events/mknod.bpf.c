@@ -17,8 +17,7 @@ int BPF_PROG(mknod_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, MKNOD_E_SIZE, PPME_SYSCALL_MKNOD_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, MKNOD_E_SIZE, PPME_SYSCALL_MKNOD_E)) {
 		return 0;
 	}
 
@@ -76,7 +75,7 @@ int BPF_PROG(mknod_x,
 
 	auxmap__finalize_event_header(auxmap);
 
-	auxmap__submit_event(auxmap, ctx);
+	auxmap__submit_event(auxmap);
 
 	return 0;
 }
