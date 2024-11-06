@@ -8,9 +8,8 @@
 
 #include <helpers/interfaces/fixed_size_event.h>
 
-SEC("tp_btf/sys_enter")
-int BPF_PROG(t1_hotplug_e)
-{
+SEC("tp_btf/sys_exit")
+int BPF_PROG(t1_hotplug_e) {
 	/* We assume that the ring buffer for CPU 0 is always there so we send the
 	 * HOT-PLUG event through this buffer.
 	 */
