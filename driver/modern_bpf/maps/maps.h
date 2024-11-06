@@ -61,18 +61,9 @@ __weak bool g_64bit_interesting_syscalls_table[SYSCALL_TABLE_SIZE];
  * @brief Given the syscall id on 64-bit-architectures returns:
  * - `UF_NEVER_DROP` if the syscall must not be dropped in the sampling logic.
  * - `UF_ALWAYS_DROP` if the syscall must always be dropped in the sampling logic.
- * - `UF_NONE` if we drop the syscall depends on the sampling ratio. 
+ * - `UF_NONE` if we drop the syscall depends on the sampling ratio.
  */
 __weak uint8_t g_64bit_sampling_syscall_table[SYSCALL_TABLE_SIZE];
-
-/**
- * @brief Given the tracepoint enum returns:
- * - `UF_NEVER_DROP` if the syscall must not be dropped in the sampling logic.
- * - `UF_ALWAYS_DROP` if the syscall must always be dropped in the sampling logic.
- * - `UF_NONE` if we drop the syscall depends on the sampling ratio. 
- */
-/// TOOD: we need to change the dimension! we need to create a dedicated enum for tracepoints!
-__weak uint8_t g_64bit_sampling_tracepoint_table[PPM_EVENT_MAX];
 
 /**
  * @brief Given the syscall id on 32-bit x86 arch returns
@@ -91,6 +82,11 @@ __weak struct capture_settings g_settings;
  * `DROP_E` and `DROP_X` events
  */
 __weak bool is_dropping;
+
+/**
+ * @brief Pointer we use to understand if we are operating on a socket.
+ */
+__weak void *socket_file_ops = NULL;
 
 /*=============================== BPF GLOBAL VARIABLES ===============================*/
 
@@ -194,7 +190,7 @@ struct ringbuf_map
 /**
  * @brief This array of maps will contain a variable number of ring buffers
  * according to the user-provided configuration. It could also contain only
- * one buffer shared between all CPUs. 
+ * one buffer shared between all CPUs.
  */
 struct
 {

@@ -15,12 +15,9 @@
  */
 #ifdef CAPTURE_PAGE_FAULTS
 SEC("tp_btf/page_fault_user")
-int BPF_PROG(pf_user,
-	     unsigned long address, struct pt_regs *regs,
-	     unsigned long error_code)
-{
-	if(sampling_logic(ctx, PPME_PAGE_FAULT_E, MODERN_BPF_TRACEPOINT))
-	{
+int BPF_PROG(pf_user, unsigned long address, struct pt_regs *regs, unsigned long error_code) {
+	// In case of dropping mode we don't want this kind of events.
+	if(maps__get_dropping_mode()) {
 		return 0;
 	}
 
