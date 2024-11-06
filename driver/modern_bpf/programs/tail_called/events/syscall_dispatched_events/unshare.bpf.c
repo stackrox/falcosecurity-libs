@@ -16,8 +16,7 @@ int BPF_PROG(unshare_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, UNSHARE_E_SIZE, PPME_SYSCALL_UNSHARE_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, UNSHARE_E_SIZE, PPME_SYSCALL_UNSHARE_E)) {
 		return 0;
 	}
 
@@ -46,8 +45,7 @@ int BPF_PROG(unshare_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, UNSHARE_X_SIZE, PPME_SYSCALL_UNSHARE_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, UNSHARE_X_SIZE, PPME_SYSCALL_UNSHARE_X)) {
 		return 0;
 	}
 

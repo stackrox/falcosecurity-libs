@@ -20,8 +20,7 @@ int BPF_PROG(socket_e,
 	extract__network_args(args, 3, regs);
 
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, SOCKET_E_SIZE, PPME_SOCKET_SOCKET_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, SOCKET_E_SIZE, PPME_SOCKET_SOCKET_E)) {
 		return 0;
 	}
 
@@ -61,8 +60,7 @@ int BPF_PROG(socket_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, SOCKET_X_SIZE, PPME_SOCKET_SOCKET_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, SOCKET_X_SIZE, PPME_SOCKET_SOCKET_X)) {
 		return 0;
 	}
 

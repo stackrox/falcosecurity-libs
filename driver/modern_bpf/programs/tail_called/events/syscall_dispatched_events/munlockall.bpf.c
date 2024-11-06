@@ -16,8 +16,7 @@ int BPF_PROG(munlockall_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, MUNLOCKALL_E_SIZE, PPME_SYSCALL_MUNLOCKALL_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, MUNLOCKALL_E_SIZE, PPME_SYSCALL_MUNLOCKALL_E)) {
 		return 0;
 	}
 
@@ -42,8 +41,7 @@ int BPF_PROG(munlockall_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, MUNLOCKALL_X_SIZE, PPME_SYSCALL_MUNLOCKALL_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, MUNLOCKALL_X_SIZE, PPME_SYSCALL_MUNLOCKALL_X)) {
 		return 0;
 	}
 

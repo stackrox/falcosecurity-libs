@@ -16,8 +16,7 @@ int BPF_PROG(timerfd_create_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, TIMERFD_CREATE_E_SIZE, PPME_SYSCALL_TIMERFD_CREATE_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, TIMERFD_CREATE_E_SIZE, PPME_SYSCALL_TIMERFD_CREATE_E)) {
 		return 0;
 	}
 
@@ -50,8 +49,7 @@ int BPF_PROG(timerfd_create_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, TIMERFD_CREATE_X_SIZE, PPME_SYSCALL_TIMERFD_CREATE_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, TIMERFD_CREATE_X_SIZE, PPME_SYSCALL_TIMERFD_CREATE_X)) {
 		return 0;
 	}
 

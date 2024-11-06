@@ -16,8 +16,7 @@ int BPF_PROG(mlock2_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, MLOCK2_E_SIZE, PPME_SYSCALL_MLOCK2_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, MLOCK2_E_SIZE, PPME_SYSCALL_MLOCK2_E)) {
 		return 0;
 	}
 
@@ -42,8 +41,7 @@ int BPF_PROG(mlock2_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, MLOCK2_X_SIZE, PPME_SYSCALL_MLOCK2_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, MLOCK2_X_SIZE, PPME_SYSCALL_MLOCK2_X)) {
 		return 0;
 	}
 
