@@ -276,14 +276,11 @@ clean_fill_syscalls_tail_table:
 	return errno;
 }
 
-int pman_fill_extra_event_prog_tail_table()
-{
-	int extra_event_prog_tail_table_fd = 0;
+int pman_fill_extra_syscall_calls_table() {
+	int extra_syscall_call_table_fd = bpf_map__fd(g_state.skel->maps.extra_syscall_calls);
 	const char* tail_prog_name;
 
-	extra_event_prog_tail_table_fd = bpf_map__fd(g_state.skel->maps.extra_event_prog_tail_table);
-	if(extra_event_prog_tail_table_fd <= 0)
-	{
+	if(extra_syscall_call_table_fd <= 0) {
 		pman_print_error("unable to get the extra event programs tail table");
 		return errno;
 	}
@@ -297,9 +294,8 @@ int pman_fill_extra_event_prog_tail_table()
 			continue;
 		}
 
-		if(add_bpf_program_to_tail_table(extra_event_prog_tail_table_fd, tail_prog_name, j))
-		{
-			close(extra_event_prog_tail_table_fd);
+		if(add_bpf_program_to_tail_table(extra_syscall_call_table_fd, tail_prog_name, j)) {
+			close(extra_syscall_call_table_fd);
 			return errno;
 		}
 	}
@@ -370,6 +366,6 @@ int pman_finalize_maps_after_loading(const bool ppm_sc_of_interest[PPM_SC_MAX])
 	pman_fill_syscall_sampling_table();
 	pman_fill_ia32_to_64_table();
 	err = pman_fill_syscalls_tail_table(ppm_sc_of_interest);
-	err = err ?: pman_fill_extra_event_prog_tail_table();
+	err = err ?: pman_fill_extra_syscall_calls_table();
 	return err;
 }
