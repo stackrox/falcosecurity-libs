@@ -133,11 +133,11 @@ static const char* event_prog_names[PPM_EVENT_MAX] = {
 	[PPME_SYSCALL_RENAMEAT2_X] = "renameat2_x",
 	[PPME_SYSCALL_PIPE_E] = "pipe_e",
 	[PPME_SYSCALL_PIPE_X] = "pipe_x",
-	[PPME_SYSCALL_READV_E] = "readv_e", 
+	[PPME_SYSCALL_READV_E] = "readv_e",
 	[PPME_SYSCALL_READV_X] = "readv_x",
-	[PPME_SYSCALL_PREADV_E] = "preadv_e", 
+	[PPME_SYSCALL_PREADV_E] = "preadv_e",
 	[PPME_SYSCALL_PREADV_X] = "preadv_x",
-	[PPME_SYSCALL_PREAD_E] = "pread64_e", 
+	[PPME_SYSCALL_PREAD_E] = "pread64_e",
 	[PPME_SYSCALL_PREAD_X] = "pread64_x",
 	[PPME_SYSCALL_BPF_2_E] = "bpf_e",
 	[PPME_SYSCALL_BPF_2_X] = "bpf_x",
@@ -345,10 +345,6 @@ static const char* extra_event_prog_names[TAIL_EXTRA_EVENT_PROG_MAX] = {
 	[T1_CLONE3_X] = "t1_clone3_x",
 	[T1_FORK_X] = "t1_fork_x",
 	[T1_VFORK_X] = "t1_vfork_x",
-#ifdef CAPTURE_SCHED_PROC_EXEC
-	[T1_SCHED_PROC_EXEC] = "t1_sched_p_exec",
-	[T2_SCHED_PROC_EXEC] = "t2_sched_p_exec",
-#endif
 #ifdef CAPTURE_SCHED_PROC_FORK
 	[T1_SCHED_PROC_FORK] = "t1_sched_p_fork",
 	[T2_SCHED_PROC_FORK] = "t2_sched_p_fork",

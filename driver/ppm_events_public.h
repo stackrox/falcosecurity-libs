@@ -633,7 +633,7 @@ or GPL2.txt for full copies of the license.
 #define PPM_EXE_WRITABLE		(1 << 0)
 #define PPM_EXE_UPPER_LAYER 	(1 << 1)
 #define PPM_EXE_FROM_MEMFD  	(1 << 2)
-  
+
 /*
  * Execveat flags
  */
@@ -794,12 +794,12 @@ or GPL2.txt for full copies of the license.
 #define PPM_PR_SET_SECUREBITS 28
 
 /*
- * pidfd_open flags	
+ * pidfd_open flags
 */
 #define PPM_PIDFD_NONBLOCK (1<<0)
 
 /*
- * finit_module flags	
+ * finit_module flags
 */
 #define PPM_MODULE_INIT_IGNORE_MODVERSIONS	1
 #define PPM_MODULE_INIT_IGNORE_VERMAGIC     2
@@ -812,7 +812,7 @@ or GPL2.txt for full copies of the license.
 #define PPM_DELETE_MODULE_O_NONBLOCK	(1 << 1)
 
 /*
- * bpf_commands 
+ * bpf_commands
 */
 #define PPM_BPF_MAP_CREATE			0
 #define	PPM_BPF_MAP_LOOKUP_ELEM     1
@@ -839,7 +839,7 @@ or GPL2.txt for full copies of the license.
 #define	PPM_BPF_MAP_LOOKUP_AND_DELETE_ELEM 21
 #define	PPM_BPF_MAP_FREEZE			22
 #define	PPM_BPF_BTF_GET_NEXT_ID		23
-#define	PPM_BPF_MAP_LOOKUP_BATCH	24		
+#define	PPM_BPF_MAP_LOOKUP_BATCH	24
 #define	PPM_BPF_MAP_LOOKUP_AND_DELETE_BATCH 25
 #define	PPM_BPF_MAP_UPDATE_BATCH	26
 #define	PPM_BPF_MAP_DELETE_BATCH	27
@@ -1488,15 +1488,14 @@ typedef enum {
  * - `X` = means that we need this extra tail call for the exit event, `E` means enter the event.
  *
  */
-enum extra_event_prog_code
-{
+// todo!: rename this `extra_syscall_exit_calls`.
+enum extra_event_prog_code {
 	T1_EXECVE_X = 0,
 	T1_EXECVEAT_X = 1,
 	T1_CLONE_X = 2,
 	T1_CLONE3_X = 3,
 	T1_FORK_X = 4,
 	T1_VFORK_X = 5,
-	T1_SCHED_PROC_EXEC = 6,
 	T1_SCHED_PROC_FORK = 7,
 	T2_SCHED_PROC_FORK = 8,
 	T2_CLONE_X = 9,
@@ -1509,7 +1508,6 @@ enum extra_event_prog_code
 	T1_OPEN_BY_HANDLE_AT_X =16,
 	T2_EXECVE_X = 17,
 	T2_EXECVEAT_X = 18,
-	T2_SCHED_PROC_EXEC = 19,
 	TAIL_EXTRA_EVENT_PROG_MAX = 20
 };
 
