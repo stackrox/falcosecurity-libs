@@ -11,15 +11,11 @@
 /*=============================== ENTER EVENT ===========================*/
 
 SEC("tp_btf/sys_enter")
-int BPF_PROG(getresuid_e,
-	     struct pt_regs *regs,
-	     long id)
-{
-        struct ringbuf_struct ringbuf;
-        if(!ringbuf__reserve_space(&ringbuf, ctx, GETRESUID_E_SIZE, PPME_SYSCALL_GETRESUID_E))
-        {
-                return 0;
-        }
+int BPF_PROG(getresuid_e, struct pt_regs *regs, long id) {
+	struct ringbuf_struct ringbuf;
+	if(!ringbuf__reserve_space(&ringbuf, GETRESUID_E_SIZE, PPME_SYSCALL_GETRESUID_E)) {
+		return 0;
+	}
 
         ringbuf__store_event_header(&ringbuf);
 
@@ -42,10 +38,9 @@ int BPF_PROG(getresuid_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-        if(!ringbuf__reserve_space(&ringbuf, ctx, GETRESUID_X_SIZE, PPME_SYSCALL_GETRESUID_X))
-        {
-                return 0;
-        }
+	if(!ringbuf__reserve_space(&ringbuf, GETRESUID_X_SIZE, PPME_SYSCALL_GETRESUID_X)) {
+		return 0;
+	}
 
 	ringbuf__store_event_header(&ringbuf);
 

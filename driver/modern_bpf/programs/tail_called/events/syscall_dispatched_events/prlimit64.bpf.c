@@ -16,8 +16,7 @@ int BPF_PROG(prlimit64_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, PRLIMIT64_E_SIZE, PPME_SYSCALL_PRLIMIT_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, PRLIMIT64_E_SIZE, PPME_SYSCALL_PRLIMIT_E)) {
 		return 0;
 	}
 
@@ -50,8 +49,7 @@ int BPF_PROG(prlimit64_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, PRLIMIT64_X_SIZE, PPME_SYSCALL_PRLIMIT_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, PRLIMIT64_X_SIZE, PPME_SYSCALL_PRLIMIT_X)) {
 		return 0;
 	}
 
@@ -85,7 +83,7 @@ int BPF_PROG(prlimit64_x,
 		ringbuf__store_s64(&ringbuf, old_rlimit.rlim_cur);
 
 		/* Parameter 5: oldmax (type: PT_INT64) */
-		ringbuf__store_s64(&ringbuf, old_rlimit.rlim_max);	
+		ringbuf__store_s64(&ringbuf, old_rlimit.rlim_max);
 	}
 	else
 	{

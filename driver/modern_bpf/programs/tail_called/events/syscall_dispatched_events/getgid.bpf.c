@@ -11,15 +11,11 @@
 /*=============================== ENTER EVENT ===========================*/
 
 SEC("tp_btf/sys_enter")
-int BPF_PROG(getgid_e,
-	     struct pt_regs *regs,
-	     long id)
-{
-        struct ringbuf_struct ringbuf;
-        if(!ringbuf__reserve_space(&ringbuf, ctx, GETGID_E_SIZE, PPME_SYSCALL_GETGID_E))
-        {
-                return 0;
-        }
+int BPF_PROG(getgid_e, struct pt_regs *regs, long id) {
+	struct ringbuf_struct ringbuf;
+	if(!ringbuf__reserve_space(&ringbuf, GETGID_E_SIZE, PPME_SYSCALL_GETGID_E)) {
+		return 0;
+	}
 
         ringbuf__store_event_header(&ringbuf);
 
@@ -37,19 +33,13 @@ int BPF_PROG(getgid_e,
 /*=============================== EXIT EVENT ===========================*/
 
 SEC("tp_btf/sys_exit")
-int BPF_PROG(getgid_x,
-	     struct pt_regs *regs,
-	     long ret)
-{
-        struct ringbuf_struct ringbuf;
-        if(!ringbuf__reserve_space(&ringbuf, ctx, GETGID_X_SIZE, PPME_SYSCALL_GETGID_X))
-        {
-                return 0;
-        }
+int BPF_PROG(getgid_x, struct pt_regs *regs, long ret) {
+	struct ringbuf_struct ringbuf;
+	if(!ringbuf__reserve_space(&ringbuf, GETGID_X_SIZE, PPME_SYSCALL_GETGID_X)) {
+		return 0;
+	}
 
         ringbuf__store_event_header(&ringbuf);
-
-
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
         /* Parameter 1: gid (type: PT_GID) */

@@ -11,20 +11,16 @@
 /*=============================== ENTER EVENT ===========================*/
 
 SEC("tp_btf/sys_enter")
-int BPF_PROG(pidfd_getfd_e,
-         struct pt_regs *regs,
-         long id)
-{
-    struct ringbuf_struct ringbuf;
-    if(!ringbuf__reserve_space(&ringbuf, ctx, PIDFD_GETFD_E_SIZE, PPME_SYSCALL_PIDFD_GETFD_E))
-	{
+int BPF_PROG(pidfd_getfd_e, struct pt_regs *regs, long id) {
+	struct ringbuf_struct ringbuf;
+	if(!ringbuf__reserve_space(&ringbuf, PIDFD_GETFD_E_SIZE, PPME_SYSCALL_PIDFD_GETFD_E)) {
 		return 0;
 	}
 
     ringbuf__store_event_header(&ringbuf);
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
-    
+
     // Here we have no parameters to collect.
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
@@ -43,18 +39,16 @@ int BPF_PROG(pidfd_getfd_x,
          struct pt_regs *regs,
          long ret)
 
-{   
-   
- struct ringbuf_struct ringbuf;
-    if(!ringbuf__reserve_space(&ringbuf, ctx, PIDFD_GETFD_X_SIZE, PPME_SYSCALL_PIDFD_GETFD_X))
-	{
+{
+	struct ringbuf_struct ringbuf;
+	if(!ringbuf__reserve_space(&ringbuf, PIDFD_GETFD_X_SIZE, PPME_SYSCALL_PIDFD_GETFD_X)) {
 		return 0;
 	}
 
     ringbuf__store_event_header(&ringbuf);
 
 	/*=============================== COLLECT PARAMETERS  ===========================*/
-    
+
     /* Parameter 1: ret (type: PT_FD) */
     ringbuf__store_s64(&ringbuf, ret);
 

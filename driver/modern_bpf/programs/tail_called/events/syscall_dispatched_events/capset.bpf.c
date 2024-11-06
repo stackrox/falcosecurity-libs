@@ -16,8 +16,7 @@ int BPF_PROG(capset_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, CAPSET_E_SIZE, PPME_SYSCALL_CAPSET_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, CAPSET_E_SIZE, PPME_SYSCALL_CAPSET_E)) {
 		return 0;
 	}
 
@@ -44,8 +43,7 @@ int BPF_PROG(capset_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, CAPSET_X_SIZE, PPME_SYSCALL_CAPSET_X))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, CAPSET_X_SIZE, PPME_SYSCALL_CAPSET_X)) {
 		return 0;
 	}
 

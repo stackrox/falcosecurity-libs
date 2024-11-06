@@ -15,8 +15,7 @@ SEC("tp_btf/sys_enter")
 int BPF_PROG(sendmmsg_e, struct pt_regs *regs, long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, SENDMMSG_E_SIZE, PPME_SOCKET_SENDMMSG_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, SENDMMSG_E_SIZE, PPME_SOCKET_SENDMMSG_E)) {
 		return 0;
 	}
 

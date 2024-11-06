@@ -17,8 +17,7 @@ int BPF_PROG(readv_e,
 	     long id)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, READV_E_SIZE, PPME_SYSCALL_READV_E))
-	{
+	if(!ringbuf__reserve_space(&ringbuf, READV_E_SIZE, PPME_SYSCALL_READV_E)) {
 		return 0;
 	}
 
@@ -93,7 +92,7 @@ int BPF_PROG(readv_x,
 
 	auxmap__finalize_event_header(auxmap);
 
-	auxmap__submit_event(auxmap, ctx);
+	auxmap__submit_event(auxmap);
 
 	return 0;
 }
