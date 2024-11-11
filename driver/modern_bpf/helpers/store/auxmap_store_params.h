@@ -117,10 +117,15 @@ static __always_inline void auxmap__finalize_event_header(struct auxiliary_map *
  * of events sent to userspace, otherwise we increment the dropped events.
  *
  * @param auxmap pointer to the auxmap in which we have already written the entire event.
- * @param rb pointer to the ringbuffer where the event should be published to.
  */
-static __always_inline void auxmap__submit_event_base(struct auxiliary_map *auxmap,
-                                                      struct ringbuf_map *rb) {
+static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap) {
+	struct ringbuf_map *rb = maps__get_ringbuf_map();
+	if(!rb) {
+		// this should never happen because we check it in sys_enter/sys_exit
+		bpf_printk("FAILURE: unable to obtain the ring buffer");
+		return;
+	}
+
 	struct counter_map *counter = maps__get_counter_map();
 	if(!counter) {
 		return;
@@ -145,42 +150,6 @@ static __always_inline void auxmap__submit_event_base(struct auxiliary_map *auxm
 		return;
 	}
 	return;
-}
-
-/**
- * @brief Try to copy the entire event from the auxiliary map to bpf ringbuf.
- * If the event is correctly copied in the ringbuf we increment the number
- * of events sent to userspace, otherwise we increment the dropped events.
- *
- * @param auxmap pointer to the auxmap in which we have already written the entire event.
- * @returns 0 if we got the ringbuffer correctly.
- */
-static __always_inline int auxmap__try_submit_event(struct auxiliary_map *auxmap) {
-	struct ringbuf_map *rb = maps__get_ringbuf_map();
-	if(!rb) {
-		return 1;
-	}
-
-	auxmap__submit_event_base(auxmap, rb);
-	return 0;
-}
-
-/**
- * @brief Copy the entire event from the auxiliary map to bpf ringbuf.
- * If the event is correctly copied in the ringbuf we increment the number
- * of events sent to userspace, otherwise we increment the dropped events.
- *
- * @param auxmap pointer to the auxmap in which we have already written the entire event.
- */
-static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap) {
-	struct ringbuf_map *rb = maps__get_ringbuf_map();
-	if(!rb) {
-		// this should never happen because we check it in sys_enter/sys_exit
-		bpf_printk("FAILURE: unable to obtain the ring buffer");
-		return;
-	}
-
-	auxmap__submit_event_base(auxmap, rb);
 }
 
 /////////////////////////////////

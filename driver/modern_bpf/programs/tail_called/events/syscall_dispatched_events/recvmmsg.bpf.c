@@ -106,7 +106,9 @@ static long handle_exit(uint32_t index, void *ctx) {
 
 	auxmap__finalize_event_header(auxmap);
 
-	return auxmap__try_submit_event(auxmap);
+	auxmap__submit_event(auxmap);
+
+	return 0;
 }
 
 SEC("tp_btf/sys_exit")
@@ -136,7 +138,7 @@ int BPF_PROG(recvmmsg_x, struct pt_regs *regs, long ret) {
 
 		auxmap__finalize_event_header(auxmap);
 
-		auxmap__try_submit_event(auxmap);
+		auxmap__submit_event(auxmap);
 		return 0;
 	}
 
