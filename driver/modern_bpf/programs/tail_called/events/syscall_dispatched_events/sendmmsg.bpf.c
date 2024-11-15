@@ -43,7 +43,7 @@ int BPF_PROG(sendmmsg_x,
 	     long ret)
 {
 	struct ringbuf_struct ringbuf;
-	if(!ringbuf__reserve_space(&ringbuf, ctx, SENDMMSG_X_SIZE, PPME_SOCKET_SENDMMSG_X))
+	if(!ringbuf__reserve_space(&ringbuf, SENDMMSG_X_SIZE, PPME_SOCKET_SENDMMSG_X))
 	{
 		return 0;
 	}
