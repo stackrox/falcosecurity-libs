@@ -8,11 +8,8 @@
 
 #include <helpers/interfaces/fixed_size_event.h>
 
-/*=============================== ENTER EVENT ===========================*/
-
-SEC("tp_btf/sys_enter")
-int BPF_PROG(t1_drop_e)
-{
+SEC("tp_btf/sys_exit")
+int BPF_PROG(t1_drop_e) {
 	struct ringbuf_struct ringbuf;
 	if(!ringbuf__reserve_space(&ringbuf, DROP_E_SIZE, PPME_DROP_E)) {
 		return 0;
@@ -29,10 +26,6 @@ int BPF_PROG(t1_drop_e)
 	ringbuf__submit_event(&ringbuf);
 	return 0;
 }
-
-/*=============================== ENTER EVENT ===========================*/
-
-/*=============================== EXIT EVENT ===========================*/
 
 SEC("tp_btf/sys_exit")
 int BPF_PROG(t1_drop_x)
@@ -53,5 +46,3 @@ int BPF_PROG(t1_drop_x)
 	ringbuf__submit_event(&ringbuf);
 	return 0;
 }
-
-/*=============================== EXIT EVENT ===========================*/
