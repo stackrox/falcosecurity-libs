@@ -1464,11 +1464,21 @@ void sinsp_parser::parse_clone_exit_caller(sinsp_evt *evt, int64_t child_tid)
 	}
 	/*=============================== ADD THREAD TO THE TABLE ===========================*/
 
-	libsinsp_logger()->format(
-		sinsp_logger::SEV_DEBUG,
-		"Clone Thread %d:%d (tinfo %p, tinfo_ref %p)",
-		evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
-		evt->get_tinfo(), evt->get_tinfo_ref());
+	if (evt->get_thread_info() != nullptr)
+	{
+		libsinsp_logger()->format(
+			sinsp_logger::SEV_DEBUG,
+			"Clone Thread %d:%d (tinfo %p, tinfo_ref %p)",
+			evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
+			evt->get_tinfo(), evt->get_tinfo_ref());
+	}
+	else
+	{
+		libsinsp_logger()->format(
+			sinsp_logger::SEV_DEBUG,
+			"Clone Thread null (tinfo %p, tinfo_ref %p)",
+			evt->get_tinfo(), evt->get_tinfo_ref());
+	}
 
 	return;
 }
@@ -2490,11 +2500,21 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 	 * if `evt->get_tinfo()->m_tginfo->get_thread_count() > 1` it means
 	 * we still have some not leader threads in the group.
 	 */
-	libsinsp_logger()->format(
-		sinsp_logger::SEV_DEBUG,
-		"Exec Thread %d:%d (tinfo %p, tinfo_ref %p)",
-		evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
-		evt->get_tinfo(), evt->get_tinfo_ref());
+	if (evt->get_thread_info() != nullptr)
+	{
+		libsinsp_logger()->format(
+			sinsp_logger::SEV_DEBUG,
+			"Exec Thread %d:%d (tinfo %p, tinfo_ref %p)",
+			evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
+			evt->get_tinfo(), evt->get_tinfo_ref());
+	}
+	else
+	{
+		libsinsp_logger()->format(
+			sinsp_logger::SEV_DEBUG,
+			"Exec Thread null (tinfo %p, tinfo_ref %p)",
+			evt->get_tinfo(), evt->get_tinfo_ref());
+	}
 
 	if(evt->get_tinfo()->m_tginfo != nullptr && evt->get_tinfo()->m_tginfo->get_thread_count() > 1)
 	{
@@ -2506,22 +2526,40 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 			 */
 			if(thread_ptr == nullptr || thread_ptr->is_main_thread())
 			{
-				libsinsp_logger()->format(
-					sinsp_logger::SEV_DEBUG,
-					"Keep thread %d:%d", thread_ptr->m_pid, thread_ptr->m_tid);
+				if (thread_ptr != nullptr)
+				{
+					libsinsp_logger()->format(
+						sinsp_logger::SEV_DEBUG,
+						"Keep thread %d:%d", thread_ptr->m_pid, thread_ptr->m_tid);
+				}
+				else
+				{
+					libsinsp_logger()->format(sinsp_logger::SEV_DEBUG, "Keep null thread");
+				}
 				continue;
 			}
+
 			libsinsp_logger()->format(
 				sinsp_logger::SEV_DEBUG,
 				"Remove thread %d:%d", thread_ptr->m_pid, thread_ptr->m_tid);
 			m_inspector->remove_thread(thread_ptr->m_tid);
 		}
 
-		libsinsp_logger()->format(
-			sinsp_logger::SEV_DEBUG,
-			"Exec Thread after %d:%d (tinfo %p, tinfo_ref %p)",
-			evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
-			evt->get_tinfo(), evt->get_tinfo_ref());
+		if (evt->get_thread_info() != nullptr)
+		{
+			libsinsp_logger()->format(
+				sinsp_logger::SEV_DEBUG,
+				"Exec Thread after %d:%d (tinfo %p, tinfo_ref %p)",
+				evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
+				evt->get_tinfo(), evt->get_tinfo_ref());
+		}
+		else
+		{
+			libsinsp_logger()->format(
+				sinsp_logger::SEV_DEBUG,
+				"Exec Thread after null (tinfo %p, tinfo_ref %p)",
+				evt->get_tinfo(), evt->get_tinfo_ref());
+		}
 	}
 	return;
 }

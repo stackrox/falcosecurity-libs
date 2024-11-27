@@ -199,12 +199,24 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 			case PPME_SYSCALL_VFORK_17_X:
 			case PPME_SYSCALL_VFORK_20_X:
 			case PPME_SYSCALL_CLONE3_X:
-				libsinsp_logger()->format(
-					sinsp_logger::SEV_DEBUG,
-					"FilterCheck: event %d, thread %d:%d (tinfo %p, tinfo_ref %p)",
-					evt->get_scap_evt()->type,
-					evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
-					evt->get_tinfo(), evt->get_tinfo_ref());
+				if (evt->get_thread_info() != nullptr)
+				{
+					libsinsp_logger()->format(
+						sinsp_logger::SEV_DEBUG,
+						"FilterCheck: event %d, thread %d:%d (tinfo %p, tinfo_ref %p)",
+						evt->get_scap_evt()->type,
+						evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
+						evt->get_tinfo(), evt->get_tinfo_ref());
+				}
+				else
+				{
+					libsinsp_logger()->format(
+						sinsp_logger::SEV_DEBUG,
+						"FilterCheck event %d, thread null (tinfo %p, tinfo_ref %p)",
+						evt->get_scap_evt()->type,
+						evt->get_tinfo(), evt->get_tinfo_ref());
+				}
+
 				break;
 			default:
 				break;
