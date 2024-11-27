@@ -183,7 +183,34 @@ uint8_t* sinsp_filter_check_container::extract(sinsp_evt *evt, OUT uint32_t* len
 
 	if(!tinfo->m_container_id.empty())
 	{
-		container_info = m_inspector->m_container_manager.get_container(tinfo->m_container_id);	
+		switch(evt->get_scap_evt()->type)
+		{
+			case PPME_SYSCALL_EXECVE_18_E:
+			case PPME_SYSCALL_EXECVE_19_E:
+			case PPME_SYSCALL_EXECVEAT_E:
+			case PPME_SYSCALL_CLONE_11_X:
+			case PPME_SYSCALL_CLONE_16_X:
+			case PPME_SYSCALL_CLONE_17_X:
+			case PPME_SYSCALL_CLONE_20_X:
+			case PPME_SYSCALL_FORK_X:
+			case PPME_SYSCALL_FORK_17_X:
+			case PPME_SYSCALL_FORK_20_X:
+			case PPME_SYSCALL_VFORK_X:
+			case PPME_SYSCALL_VFORK_17_X:
+			case PPME_SYSCALL_VFORK_20_X:
+			case PPME_SYSCALL_CLONE3_X:
+				libsinsp_logger()->format(
+					sinsp_logger::SEV_DEBUG,
+					"FilterCheck: event %d, thread %d:%d (tinfo %p, tinfo_ref %p)",
+					evt->get_scap_evt()->type,
+					evt->get_thread_info()->m_pid, evt->get_thread_info()->m_tid,
+					evt->get_tinfo(), evt->get_tinfo_ref());
+				break;
+			default:
+				break;
+		}
+
+		container_info = m_inspector->m_container_manager.get_container(tinfo->m_container_id);
 	}
 
 	switch(m_field_id)

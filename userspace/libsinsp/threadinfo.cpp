@@ -1711,6 +1711,10 @@ void sinsp_thread_manager::remove_thread(int64_t tid)
 	if(thread_to_remove->is_invalid() || thread_to_remove->m_tginfo == nullptr)
 	{
 		thread_to_remove->remove_child_from_parent();
+
+		libsinsp_logger()->format(sinsp_logger::SEV_DEBUG,
+			"Remove Thread %d", tid);
+
 		m_threadtable.erase(tid);
 		m_last_tid = -1;
 		return;
@@ -1801,6 +1805,10 @@ void sinsp_thread_manager::remove_thread(int64_t tid)
 		 */
 		thread_to_remove->remove_child_from_parent();
 		m_thread_groups.erase(thread_to_remove->m_pid);
+
+		libsinsp_logger()->format(sinsp_logger::SEV_DEBUG,
+			"Remove Thread %d", thread_to_remove->m_pid);
+
 		m_threadtable.erase(thread_to_remove->m_pid);
 	}
 
@@ -1812,6 +1820,10 @@ void sinsp_thread_manager::remove_thread(int64_t tid)
 	if(!thread_to_remove->is_main_thread())
 	{
 		thread_to_remove->remove_child_from_parent();
+
+		libsinsp_logger()->format(sinsp_logger::SEV_DEBUG,
+			"Remove Thread %d", tid);
+
 		m_threadtable.erase(tid);
 	}
 
