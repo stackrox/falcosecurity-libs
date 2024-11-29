@@ -2524,7 +2524,9 @@ void sinsp_parser::parse_execve_exit(sinsp_evt *evt)
 			/* we don't want to remove the main thread since it is the one
 			 * running in this parser!
 			 */
-			if(thread_ptr == nullptr || thread_ptr->is_main_thread())
+			if(thread_ptr == nullptr ||
+			   thread_ptr->is_main_thread() ||
+			   thread_ptr->m_tid == evt->get_tinfo()->m_tid)
 			{
 				if (thread_ptr != nullptr)
 				{
