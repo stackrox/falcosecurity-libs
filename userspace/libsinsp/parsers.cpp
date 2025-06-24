@@ -1973,7 +1973,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt &evt, sinsp_parser_verdict &verdi
 	/*
 	 * Get `exepath`
 	 */
-	if(USE_TRUSTED_EXEPATH && evt->get_num_params() > 27) {
+	if(USE_TRUSTED_EXEPATH && evt.get_num_params() > 27) {
 		/* In new event versions, with 28 parameters, we can obtain the full exepath with resolved
 		 * symlinks directly from the kernel.
 		 */

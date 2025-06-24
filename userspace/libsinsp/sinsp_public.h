@@ -22,6 +22,7 @@ limitations under the License.
 #ifndef ASSERT
 
 #include <assert.h>
+#include <libsinsp/logger.h>
 
 #ifdef _DEBUG
 
@@ -30,6 +31,7 @@ limitations under the License.
 #endif
 
 #ifdef ASSERT_TO_LOG
+
 #define ASSERT(X)                                              \
 	do {                                                       \
 		if(!(X)) {                                             \
