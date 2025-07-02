@@ -16,6 +16,7 @@ limitations under the License.
 
 */
 
+#include "events_prog_table.h"
 #include "state.h"
 #include <driver/feature_gates.h>
 #include <libpman.h>
@@ -256,30 +257,22 @@ int pman_detach_signal_deliver() {
 	return 0;
 }
 
-int pman_set_autoload_programs(const bool ppm_sc_of_interest[PPM_SC_MAX]) {
-	static const size_t BUFF_SIZE = 256;
-	char buff[BUFF_SIZE];
-
-	for(unsigned int i = 0; i < PPM_SC_MAX; i++) {
-		const char* name = scap_get_ppm_sc_name(i);
-		unsigned int name_len = strlen(name) < BUFF_SIZE - 3 ? strlen(name) : BUFF_SIZE - 3;
-		memcpy(buff, name, name_len);
-
-		buff[name_len] = '_';
-		buff[name_len + 1] = 'e';
-		buff[name_len + 2] = '\0';
-		struct bpf_program* prog = bpf_object__find_program_by_name(g_state.skel->obj, buff);
-		if(prog != NULL && ppm_sc_of_interest[i] == false) {
-			bpf_program__set_autoload(prog, false);
+int pman_disable_uninteresting_programs(const bool ppm_sc_of_interest[PPM_SC_MAX]) {
+	for(unsigned int i = 0; i < PPM_EVENT_MAX; i++) {
+		if(ppm_sc_of_interest[i]) {
+			// Ignore interesting syscalls
+			continue;
 		}
 
-		buff[name_len + 1] = 'x';
-		prog = bpf_object__find_program_by_name(g_state.skel->obj, buff);
-		if(prog != NULL && ppm_sc_of_interest[i] == false) {
-			bpf_program__set_autoload(prog, false);
+		const event_prog_t* progs = event_prog_table[i];
+		for(unsigned int idx = 0; i < MAX_FEATURE_CHECKS && progs[idx].name != NULL; idx++) {
+			struct bpf_program* p =
+			        bpf_object__find_program_by_name(g_state.skel->obj, progs[idx].name);
+			if(p != NULL) {
+				bpf_program__set_autoload(p, false);
+			}
 		}
 	}
-
 	return 0;
 }
 

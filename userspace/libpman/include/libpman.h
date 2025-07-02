@@ -262,7 +262,7 @@ int pman_detach_signal_deliver(void);
  * @param ppm_sc_of_interest list of interesting ppm_sc.
  * @returns `0` on success, `errno` in case of error.
  */
-int pman_set_autoload_programs(const bool ppm_sc_of_interest[PPM_SC_MAX]);
+int pman_disable_uninteresting_programs(const bool ppm_sc_of_interest[PPM_SC_MAX]);
 
 /////////////////////////////
 // MANAGE RINGBUFFERS
