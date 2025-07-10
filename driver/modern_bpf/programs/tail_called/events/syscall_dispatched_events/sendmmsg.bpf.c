@@ -71,28 +71,11 @@ static __always_inline long handle_exit(uint32_t index, void *ctx) {
 	                               (unsigned long)mmh.msg_hdr.msg_iov,
 	                               mmh.msg_hdr.msg_iovlen);
 
-	/* In case of failure `bytes_to_read` could be also lower than `snaplen`
-	 * but we will discover it directly into `auxmap__store_iovec_data_param`
-	 * otherwise we need to extract it now and it has a cost. Here we check just
-	 * the return value if the syscall is successful.
-	 */
-	dynamic_snaplen_args snaplen_args = {
-	        .only_port_range = true,
-	        .evt_type = PPME_SOCKET_SENDMMSG_X,
-	        .mmsg_index = index,
-	        .mm_args = data->args,
-	};
-	uint16_t snaplen = maps__get_snaplen();
-	apply_dynamic_snaplen(NULL, &snaplen, &snaplen_args);
-	if(mmh.msg_len > 0 && snaplen > mmh.msg_len) {
-		snaplen = mmh.msg_len;
-	}
-
 	/* Parameter 4: data (type: PT_BYTEBUF) */
 	auxmap__store_iovec_data_param(auxmap,
 	                               (unsigned long)mmh.msg_hdr.msg_iov,
 	                               mmh.msg_hdr.msg_iovlen,
-	                               snaplen);
+	                               0);
 
 	/* Parameter 5: tuple (type: PT_SOCKTUPLE)*/
 	auxmap__store_socktuple_param(auxmap, data->fd, OUTBOUND, mmh.msg_hdr.msg_name);

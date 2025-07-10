@@ -470,6 +470,6 @@ int pman_finalize_maps_after_loading(const bool ppm_sc_of_interest[PPM_SC_MAX]) 
 	/* We have to fill all ours tail tables. */
 	pman_fill_interesting_syscalls_table_64bit();
 	err = pman_fill_syscalls_tail_table(ppm_sc_of_interest);
-	err = err ?: pman_fill_syscall_exit_extra_tail_table();
+	err = err ?: pman_fill_syscall_exit_extra_tail_table(ppm_sc_of_interest);
 	return err;
 }

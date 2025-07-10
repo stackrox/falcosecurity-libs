@@ -427,9 +427,17 @@ uint64_t pman_get_probe_schema_ver(void);
  * `sys_exit_extra_code` is an enum defined in
  * `/driver/ppm_events_public.h`
  *
+ * @param ppm_sc_of_interest List of interesting syscalls.
+ *
+ * The provided list of syscalls is an array of booleans, where true
+ * means the syscall has been loaded into the kernel and a file
+ * descriptor for it should be added to the tail call map, otherwise
+ * it will be skipped. The index for each element corresponds to a
+ * syscall as defined in `driver/ppm_events_public.h`
+ *
  * @return `0` on success, `errno` in case of error.
  */
-int pman_fill_syscall_exit_extra_tail_table(void);
+int pman_fill_syscall_exit_extra_tail_table(const bool ppm_sc_of_interest[PPM_SC_MAX]);
 
 /**
  * @brief The syscall dispatchers will look into these tables

@@ -17,6 +17,7 @@ limitations under the License.
 */
 
 #include "events_prog_table.h"
+#include "scap_log.h"
 #include "state.h"
 #include <driver/feature_gates.h>
 #include <libpman.h>
