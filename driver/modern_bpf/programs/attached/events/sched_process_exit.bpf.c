@@ -103,6 +103,8 @@ static __always_inline pid_t find_new_reaper_pid(struct task_struct *father) {
 	 */
 	uint8_t cnt = 0;
 
+	// ROX-31971: some verifiers fail to interpret the end condition and loop infinitely.
+	#pragma unroll
 	for(struct task_struct *possible_reaper = READ_TASK_FIELD(father, real_parent);
 	    cnt < MAX_HIERARCHY_TRAVERSE;
 	    possible_reaper = BPF_CORE_READ(possible_reaper, real_parent)) {

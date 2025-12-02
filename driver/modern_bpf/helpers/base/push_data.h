@@ -262,7 +262,7 @@ static __always_inline uint16_t push__charbuf(uint8_t *data,
 static __always_inline uint16_t push__bytebuf(uint8_t *data,
                                               uint64_t *payload_pos,
                                               unsigned long bytebuf_pointer,
-                                              uint16_t len_to_read,
+                                              volatile uint16_t len_to_read,
                                               enum read_memory mem) {
 	if(mem == KERNEL) {
 		if(bpf_probe_read_kernel(&data[SAFE_ACCESS(*payload_pos)],

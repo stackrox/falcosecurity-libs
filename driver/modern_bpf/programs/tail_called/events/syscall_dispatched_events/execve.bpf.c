@@ -64,11 +64,8 @@ int BPF_PROG(execve_x, struct pt_regs *regs, long ret) {
 		                                      total_args_len - exe_arg_len,
 		                                      MAX_PROC_ARG_ENV - exe_arg_len);
 	} else {
-		unsigned long argv = extract__syscall_argument(regs, 1);
-
-		/* Parameter 2: exe (type: PT_CHARBUF) */
-		/* Parameter 3: args (type: PT_CHARBUFARRAY) */
-		auxmap__store_exe_args_failure(auxmap, (char **)argv);
+		// ROX-31971: this branch makes the verifier overflow, skip this case.
+		return 0;
 	}
 
 	/* Parameter 4: tid (type: PT_PID) */

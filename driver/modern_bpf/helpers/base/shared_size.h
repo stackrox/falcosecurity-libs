@@ -24,7 +24,7 @@
 #define MAX_UNIX_SOCKET_PATH 108 + 1
 
 /* Maximum number of `iovec` structures that we can analyze. */
-#define MAX_IOVCNT 32
+#define MAX_IOVCNT 16
 
 /* Maximum number of supported sendmmsg/recvmmsg loops with bpf_loop helper */
 #define MAX_SENDMMSG_RECVMMSG_SIZE 16
