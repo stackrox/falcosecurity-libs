@@ -122,12 +122,18 @@ struct {
                 },
 };
 
-static __always_inline bool sampling_logic_exit(void *ctx, uint32_t id) {
+/* Accept a pre-looked-up capture_settings pointer to avoid multiple
+ * bpf_map_lookup_elem calls within the same BPF program. Clang can
+ * optimize away null checks on repeated lookups, which the BPF verifier
+ * rejects on kernels < 6.17 with "R0 invalid mem access 'map_value_or_null'".
+ */
+static __always_inline bool sampling_logic_exit(void *ctx, uint32_t id,
+                                                struct capture_settings *settings) {
 	/* If dropping mode is not enabled we don't perform any sampling
 	 * false: means don't drop the syscall
 	 * true: means drop the syscall
 	 */
-	if(!maps__get_dropping_mode()) {
+	if(!settings->dropping_mode) {
 		return false;
 	}
 
@@ -141,7 +147,7 @@ static __always_inline bool sampling_logic_exit(void *ctx, uint32_t id) {
 		return true;
 	}
 
-	if((bpf_ktime_get_boot_ns() % SECOND_TO_NS) >= (SECOND_TO_NS / maps__get_sampling_ratio())) {
+	if((bpf_ktime_get_boot_ns() % SECOND_TO_NS) >= (SECOND_TO_NS / settings->sampling_ratio)) {
 		/* If we are starting the dropping phase we need to notify the userspace, otherwise, we
 		 * simply drop our event.
 		 * PLEASE NOTE: this logic is not per-CPU so it is best effort!
@@ -221,11 +227,22 @@ int BPF_PROG(sys_exit, struct pt_regs *regs, long ret) {
 		return 0;
 	}
 
-	if(sampling_logic_exit(ctx, syscall_id)) {
+	/* Do a single map lookup for capture_settings and reuse the pointer
+	 * for both sampling_logic_exit() and drop_failed check. This avoids
+	 * multiple bpf_map_lookup_elem calls whose null checks can be
+	 * optimized away by clang, causing BPF verifier failures on
+	 * kernels < 6.17.
+	 */
+	struct capture_settings *settings = maps__get_capture_settings();
+	if(!settings) {
 		return 0;
 	}
 
-	if(maps__get_drop_failed() && ret < 0) {
+	if(sampling_logic_exit(ctx, syscall_id, settings)) {
+		return 0;
+	}
+
+	if(settings->drop_failed && ret < 0) {
 		return 0;
 	}
 

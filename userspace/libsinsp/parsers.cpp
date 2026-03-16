@@ -1570,6 +1570,8 @@ void sinsp_parser::parse_execve_exit(sinsp_evt &evt, sinsp_parser_verdict &verdi
 		 * In older event versions we can only rely on our userspace reconstruction
 		 */
 
+		bool exepath_set = false;
+
 		// If we are not able to retrieve the enter event we can do nothing.
 		sinsp_evt *enter_evt = &m_tmp_evt;
 		if(retrieve_enter_event(*enter_evt, evt)) {
@@ -1659,6 +1661,29 @@ void sinsp_parser::parse_execve_exit(sinsp_evt &evt, sinsp_parser_verdict &verdi
 				}
 			}
 			evt.get_tinfo()->set_exepath(std::move(fullpath));
+			exepath_set = true;
+		}
+
+		/* Modern drivers no longer send enter events (marked EF_OLD_VERSION),
+		 * so the enter event reconstruction above will fail. Fall back to the
+		 * filename parameter (bprm->filename) from the exit event, which
+		 * contains the first argument to execve as provided by the caller.
+		 */
+		if(!exepath_set) {
+			/* Parameter 31: filename (type: PT_FSPATH) */
+			if(const auto filename_param = evt.get_param(30); !filename_param->empty()) {
+				std::string_view filename = filename_param->as<std::string_view>();
+				/* Skip fd-based execs (fexecve / container runtime re-exec).
+				 * These are intermediate exec steps; the real exec follows.
+				 */
+				if(filename != "<NA>" &&
+				   filename.substr(0, 8) != "/dev/fd/" &&
+				   filename.substr(0, 15) != "/proc/self/fd/") {
+					std::string fullpath = sinsp_utils::concatenate_paths(
+						evt.get_tinfo()->get_cwd(), filename);
+					evt.get_tinfo()->set_exepath(std::move(fullpath));
+				}
+			}
 		}
 	}
 
@@ -4271,7 +4296,7 @@ void sinsp_parser::parse_pidfd_getfd_exit(sinsp_evt &evt) const {
 	pidfd = evt.get_param(1)->as<int64_t>();
 
 	/* targetfd */
-	ASSERT(evt.get_param(2)->m_len == sizeof(int64_t));
+	ASSERT(evt.get_param(2)->len() == sizeof(int64_t));
 	ASSERT(evt.get_param_info(2)->type == PT_FD);
 	targetfd = evt.get_param(2)->as<int64_t>();
 

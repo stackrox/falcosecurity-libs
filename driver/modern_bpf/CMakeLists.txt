@@ -260,11 +260,19 @@ file(GLOB_RECURSE BPF_C_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.bp
 # Generate the events dimensions file generator executable.
 # ##################################################################################################
 
+# Compile driver sources directly instead of linking scap_event_schema to
+# avoid a cyclic dependency: scap_event_schema -> scap -> pman ->
+# ProbeSkeleton -> EventsDimensions -> events_dimensions_generator.
 add_executable(
-	events_dimensions_generator ${CMAKE_CURRENT_SOURCE_DIR}/definitions/generator/generator.cpp
+	events_dimensions_generator
+	${CMAKE_CURRENT_SOURCE_DIR}/definitions/generator/generator.cpp
+	${LIBS_DIR}/driver/event_table.c
+	${LIBS_DIR}/driver/flags_table.c
+	${LIBS_DIR}/driver/dynamic_params_table.c
 )
-target_link_libraries(events_dimensions_generator PRIVATE scap_event_schema)
-add_dependencies(events_dimensions_generator scap_event_schema)
+target_include_directories(events_dimensions_generator PRIVATE
+	${LIBS_DIR} ${LIBS_DIR}/userspace ${PROJECT_BINARY_DIR}
+)
 
 # ##################################################################################################
 # Generate the events dimensions file.

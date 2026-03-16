@@ -380,7 +380,7 @@ static __always_inline uint64_t extract__capability(struct task_struct *task,
 	unsigned long capability;
 	const struct cred *task_cred;
 
-	READ_TASK_FIELD_INTO(&task_cred, task, cred);
+	BPF_CORE_READ_INTO(&task_cred, task, cred);
 
 	if(task_cred == NULL)
 		return 0;
@@ -744,7 +744,7 @@ static __always_inline void extract__euid(struct task_struct *task, uint32_t *eu
 	const struct cred *task_cred;
 	*euid = UINT32_MAX;
 
-	READ_TASK_FIELD_INTO(&task_cred, task, cred);
+	BPF_CORE_READ_INTO(&task_cred, task, cred);
 
 	if(task_cred == NULL)
 		return;
@@ -760,8 +760,9 @@ static __always_inline void extract__euid(struct task_struct *task, uint32_t *eu
  */
 static __always_inline void extract__egid(struct task_struct *task, uint32_t *egid) {
 	const struct cred *task_cred;
+	*egid = UINT32_MAX;
 
-	READ_TASK_FIELD_INTO(&task_cred, task, cred);
+	BPF_CORE_READ_INTO(&task_cred, task, cred);
 
 	if(task_cred == NULL)
 		return;
@@ -914,7 +915,7 @@ static __always_inline bool groups_search(struct task_struct *task, uint32_t grp
 	struct group_info *group_info = NULL;
 	const struct cred *task_cred;
 
-	READ_TASK_FIELD_INTO(&task_cred, task, cred);
+	BPF_CORE_READ_INTO(&task_cred, task, cred);
 
 	if(task_cred == NULL)
 		return false;
@@ -970,11 +971,11 @@ static __always_inline bool extract__exe_writable(struct task_struct *task, stru
 	uint32_t fsgid;
 	const struct cred *task_cred;
 
-	READ_TASK_FIELD_INTO(&task_cred, task, cred);
+	BPF_CORE_READ_INTO(&task_cred, task, cred);
 
 	if(task_cred != NULL) {
-		READ_TASK_FIELD_INTO(&fsuid, task_cred, fsuid.val);
-		READ_TASK_FIELD_INTO(&fsgid, task_cred, fsgid.val);
+		BPF_CORE_READ_INTO(&fsuid, task_cred, fsuid.val);
+		BPF_CORE_READ_INTO(&fsgid, task_cred, fsgid.val);
 	}
 
 	/* HAS_UNMAPPED_ID() */

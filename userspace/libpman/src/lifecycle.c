@@ -128,7 +128,32 @@ int pman_prepare_progs_before_loading() {
 		progs[chosen_idx] = old_prog;
 	}
 
-	// Keep autoloading enabled for all TOCTOU mitigation 64 bit programs.
+	// Disable autoloading for TOCTOU mitigation 64-bit programs whose
+	// syscalls don't exist on this kernel (e.g. openat2 on kernels < 5.6).
+	// Without this, CO-RE relocations fail for missing BTF types.
+	for(int i = 0; i < TTM_MAX; i++) {
+		const char *prog_name = ttm_progs_table[i].ttm_64bit_prog.name;
+		if(prog_name == NULL) {
+			continue;
+		}
+		/* Check if the tracepoint exists: /sys/kernel/tracing/events/syscalls/sys_enter_<syscall>
+		 * The prog name is "<syscall>_e", so strip the "_e" suffix.
+		 */
+		char path[256];
+		snprintf(path, sizeof(path),
+		         "/sys/kernel/tracing/events/syscalls/sys_enter_%.*s",
+		         (int)(strlen(prog_name) - 2), prog_name);
+		if(access(path, F_OK) != 0) {
+			/* Also try debugfs mount point */
+			snprintf(path, sizeof(path),
+			         "/sys/kernel/debug/tracing/events/syscalls/sys_enter_%.*s",
+			         (int)(strlen(prog_name) - 2), prog_name);
+			if(access(path, F_OK) != 0) {
+				disable_prog_autoloading(msg, prog_name);
+			}
+		}
+	}
+
 	// Disable autoloading for unsupported TOCTOU mitigation ia-32 programs.
 	for(int i = 0; i < TTM_MAX; i++) {
 		const ttm_ia32_prog_t *ia32_progs = ttm_progs_table[i].ttm_ia32_progs;

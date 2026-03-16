@@ -131,6 +131,12 @@ int BPF_PROG(execve_x, struct pt_regs *regs, long ret) {
 
 SEC("tp_btf/sys_exit")
 int BPF_PROG(t1_execve_x, struct pt_regs *regs, long ret) {
+	/* ROX-31971: This tail call is never reached because execve_x returns
+	 * early for both success (ret == 0) and failure cases. Kept as a stub
+	 * to avoid exceeding the BPF verifier's 1M instruction limit on some
+	 * kernels (e.g. RHEL SAP 9.4).
+	 */
+#if 0
 	struct auxiliary_map *auxmap = auxmap__get();
 	if(!auxmap) {
 		return 0;
@@ -255,11 +261,14 @@ int BPF_PROG(t1_execve_x, struct pt_regs *regs, long ret) {
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
 	bpf_tail_call(ctx, &syscall_exit_extra_tail_table, T2_EXECVE_X);
+#endif
 	return 0;
 }
 
 SEC("tp_btf/sys_exit")
 int BPF_PROG(t2_execve_x, struct pt_regs *regs, long ret) {
+	/* ROX-31971: unreachable, see comment in t1_execve_x. */
+#if 0
 	struct auxiliary_map *auxmap = auxmap__get();
 	if(!auxmap) {
 		return 0;
@@ -294,6 +303,7 @@ int BPF_PROG(t2_execve_x, struct pt_regs *regs, long ret) {
 	auxmap__finalize_event_header(auxmap);
 
 	auxmap__submit_event(auxmap);
+#endif
 	return 0;
 }
 

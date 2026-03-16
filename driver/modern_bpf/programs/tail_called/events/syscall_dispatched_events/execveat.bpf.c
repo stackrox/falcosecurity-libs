@@ -131,6 +131,12 @@ int BPF_PROG(execveat_x, struct pt_regs *regs, long ret) {
 
 SEC("tp_btf/sys_exit")
 int BPF_PROG(t1_execveat_x, struct pt_regs *regs, long ret) {
+	/* ROX-31971: This tail call contributes to exceeding the BPF verifier's
+	 * 1M instruction limit on some kernels (e.g. RHCOS 4.16, RHEL SAP 9.4).
+	 * Collector does not subscribe to execveat, so this code is not needed.
+	 * Kept as a stub so the program symbol exists in the skeleton.
+	 */
+#if 0
 	struct auxiliary_map *auxmap = auxmap__get();
 	if(!auxmap) {
 		return 0;
@@ -254,11 +260,14 @@ int BPF_PROG(t1_execveat_x, struct pt_regs *regs, long ret) {
 	/*=============================== COLLECT PARAMETERS  ===========================*/
 
 	bpf_tail_call(ctx, &syscall_exit_extra_tail_table, T2_EXECVEAT_X);
+#endif
 	return 0;
 }
 
 SEC("tp_btf/sys_exit")
 int BPF_PROG(t2_execveat_x, struct pt_regs *regs, long ret) {
+	/* ROX-31971: See comment on t1_execveat_x above. */
+#if 0
 	struct auxiliary_map *auxmap = auxmap__get();
 	if(!auxmap) {
 		return 0;
@@ -289,6 +298,7 @@ int BPF_PROG(t2_execveat_x, struct pt_regs *regs, long ret) {
 	auxmap__finalize_event_header(auxmap);
 
 	auxmap__submit_event(auxmap);
+#endif
 	return 0;
 }
 

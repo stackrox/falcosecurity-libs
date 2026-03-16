@@ -22,6 +22,12 @@ limitations under the License.
 #ifndef ASSERT
 
 #include <assert.h>
+#include <stdio.h>
+
+#include <libscap/scap_log.h>
+
+// We expect the global logger_fn be provided from the outside
+extern falcosecurity_log_fn logger_fn;
 
 #ifdef _DEBUG
 
@@ -30,34 +36,36 @@ limitations under the License.
 #endif
 
 #ifdef ASSERT_TO_LOG
-#define ASSERT(X)                                              \
-	do {                                                       \
-		if(!(X)) {                                             \
-			libsinsp_logger()->format(sinsp_logger::SEV_DEBUG, \
-			                          "ASSERTION %s at %s:%d", \
-			                          #X,                      \
-			                          __FILE__,                \
-			                          __LINE__);               \
-		}                                                      \
+#define ASSERT(X)                                                                            \
+	do {                                                                                     \
+		if(!(X)) {                                                                           \
+			if(logger_fn != NULL) {                                                          \
+				char buf[512];                                                               \
+				snprintf(buf, sizeof(buf), "ASSERTION " #X " at %s:%d", __FILE__, __LINE__); \
+				logger_fn("libsinsp", buf, FALCOSECURITY_LOG_SEV_DEBUG);                      \
+			} else {                                                                         \
+				assert(X);                                                                   \
+			}                                                                                \
+		}                                                                                    \
 	} while(0)
 #else  // ASSERT_TO_LOG
-#define ASSERT(X) assert(X);
+#define ASSERT(X) assert(X)
 #endif  // ASSERT_TO_LOG
 
 #else  // _DEBUG
 
 #ifdef ASSERT_TO_LOG
-#define ASSERT(X)                                              \
-	do {                                                       \
-		if(!(X)) {                                             \
-			libsinsp_logger()->format(sinsp_logger::SEV_DEBUG, \
-			                          "ASSERTION %s at %s:%d", \
-			                          #X,                      \
-			                          __FILE__,                \
-			                          __LINE__);               \
-		}                                                      \
+#define ASSERT(X)                                                                            \
+	do {                                                                                     \
+		if(!(X)) {                                                                           \
+			if(logger_fn != NULL) {                                                          \
+				char buf[512];                                                               \
+				snprintf(buf, sizeof(buf), "ASSERTION " #X " at %s:%d", __FILE__, __LINE__); \
+				logger_fn("libsinsp", buf, FALCOSECURITY_LOG_SEV_DEBUG);                      \
+			}                                                                                \
+		}                                                                                    \
 	} while(0)
-#else
+#else  // ASSERT_TO_LOG
 #define ASSERT(X)
 #endif  // ASSERT_TO_LOG
 
