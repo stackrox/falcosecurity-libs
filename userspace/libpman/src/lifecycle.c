@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "state.h"
 #include <driver/feature_gates.h>
+#include <libscap/scap.h>
 #include "events_prog_table.h"
 
 int pman_open_probe() {
@@ -185,6 +186,40 @@ int pman_prepare_progs_before_loading() {
 			if(should_disable) {
 				disable_prog_autoloading(msg, ia32_prog->name);
 			}
+		}
+	}
+
+	return 0;
+}
+
+int pman_set_autoload_programs(const bool ppm_sc_of_interest[PPM_SC_MAX]) {
+	char msg[MAX_ERROR_MESSAGE_LEN];
+	char buff[256];
+
+	for(unsigned int i = 0; i < PPM_SC_MAX; i++) {
+		if(ppm_sc_of_interest[i]) {
+			continue;
+		}
+
+		const char *name = scap_get_ppm_sc_name(i);
+		if(name[0] == '\0') {
+			continue;
+		}
+
+		unsigned int name_len = strlen(name);
+		if(name_len >= sizeof(buff) - 3) {
+			continue;
+		}
+
+		memcpy(buff, name, name_len);
+		buff[name_len] = '_';
+		buff[name_len + 1] = 'x';
+		buff[name_len + 2] = '\0';
+
+		struct bpf_program *prog =
+		        bpf_object__find_program_by_name(g_state.skel->obj, buff);
+		if(prog != NULL) {
+			disable_prog_autoloading(msg, buff);
 		}
 	}
 

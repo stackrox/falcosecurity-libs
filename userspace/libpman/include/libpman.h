@@ -103,6 +103,16 @@ int pman_open_probe(void);
 int pman_prepare_progs_before_loading(void);
 
 /**
+ * @brief Disable autoloading for exit BPF programs whose syscalls
+ * are not in the set of interest. Must be called after
+ * pman_prepare_progs_before_loading() and before pman_load_probe().
+ *
+ * @param ppm_sc_of_interest array of PPM_SC_MAX booleans.
+ * @return `0` on success, `errno` in case of error.
+ */
+int pman_set_autoload_programs(const bool ppm_sc_of_interest[]);
+
+/**
  * @brief Load into the kernel all the programs and maps
  * contained into the skeleton.
  *

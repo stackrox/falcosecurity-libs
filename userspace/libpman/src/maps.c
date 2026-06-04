@@ -256,10 +256,10 @@ static int add_bpf_program_to_tail_table(int tail_table_fd, const char* bpf_prog
 	if(bpf_prog_fd <= 0) {
 		snprintf(error_message,
 		         MAX_ERROR_MESSAGE_LEN,
-		         "unable to get the fd for BPF program '%s'",
+		         "BPF program '%s' has no valid fd (not loaded)",
 		         bpf_prog_name);
-		pman_print_error((const char*)error_message);
-		goto clean_add_program_to_tail_table;
+		pman_print_msg(FALCOSECURITY_LOG_SEV_DEBUG, (const char*)error_message);
+		return 0;
 	}
 
 	if(bpf_map_update_elem(tail_table_fd, &key, &bpf_prog_fd, BPF_ANY)) {
