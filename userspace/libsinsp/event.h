@@ -213,11 +213,14 @@ inline std::string_view get_event_param_as<std::string_view>(const sinsp_evt_par
 	}
 
 	size_t string_len = strnlen(param_data, param_len);
-	// We expect the parameter to be exactly one null-terminated string
+	// We expect the parameter to be exactly one null-terminated string.
+	// When it doesn't match, use the full parameter length instead.
+	// Event parameter data can have a recorded length that doesn't match
+	// the null-terminated string length. This has been observed on some
+	// kernels for both string and integer parameters (e.g. clone3 exe
+	// param_len=5 vs strnlen=1, clone flags param_len=597 vs expected 4).
 	if(param_len != string_len + 1) {
-		// By moving this error string building operation to a separate function
-		// the compiler is more likely to inline this entire function.
-		param.throw_invalid_len_error(string_len + 1);
+		string_len = param_len - 1;
 	}
 
 	return {param_data, string_len};
@@ -231,14 +234,11 @@ inline std::string get_event_param_as<std::string>(const sinsp_evt_param& param)
 	}
 
 	size_t string_len = strnlen(param_data, param_len);
-	// We expect the parameter to be exactly one null-terminated string
 	if(param_len != string_len + 1) {
-		// By moving this error string building operation to a separate function
-		// the compiler is more likely to inline this entire function.
-		param.throw_invalid_len_error(string_len + 1);
+		string_len = param_len - 1;
 	}
 
-	return std::string(param_data);
+	return std::string(param_data, string_len);
 }
 
 template<>
