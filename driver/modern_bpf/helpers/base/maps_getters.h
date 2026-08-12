@@ -184,8 +184,37 @@ static __always_inline uint16_t maps__get_ppm_sc(uint16_t syscall_id) {
 /*=============================== AUXILIARY MAPS ===========================*/
 
 static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
-	uint32_t cpu_id = (uint32_t)bpf_get_smp_processor_id();
-	return (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_maps, &cpu_id);
+	/* Key by `pid_tgid` rather than CPU: BPF programs are preemptible on
+	 * kernels >= 5.11, so a per-CPU scratch buffer can be clobbered by
+	 * another program scheduled on the same CPU. A task only ever runs on
+	 * one CPU at a time, so `pid_tgid` uniquely identifies an in-flight
+	 * event build (stable across the tail-call chain). See
+	 * falcosecurity/libs#2719.
+	 */
+	uint64_t pid_tgid = bpf_get_current_pid_tgid();
+	struct auxiliary_map *auxmap =
+	        (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_maps, &pid_tgid);
+	if(auxmap) {
+		return auxmap;
+	}
+
+	/* First event for this task (or the entry was evicted from the LRU): we
+	 * need to create the entry. `bpf_map_update_elem` requires a value to
+	 * copy from; use the single-element init template (a 128 KB value cannot
+	 * live on the BPF stack). The auxmap does not need to be zeroed (the
+	 * header, payload_pos and lengths_pos are set explicitly by
+	 * auxmap__preload_event_header, and param data is written before it is
+	 * read), so the template contents are irrelevant. */
+	uint32_t zero = 0;
+	struct auxiliary_map *init =
+	        (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_map_init, &zero);
+	if(!init) {
+		return NULL;
+	}
+	if(bpf_map_update_elem(&auxiliary_maps, &pid_tgid, init, BPF_ANY)) {
+		return NULL;
+	}
+	return (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_maps, &pid_tgid);
 }
 
 /*=============================== AUXILIARY MAPS ===========================*/
