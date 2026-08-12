@@ -217,6 +217,20 @@ static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
 	return (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_maps, &pid_tgid);
 }
 
+/**
+ * @brief Release the current task's auxiliary map entry.
+ *
+ * Called once an event has been submitted (best effort). Freeing the entry
+ * immediately keeps the `auxiliary_maps` LRU hash populated only with events
+ * that are currently being built (bounded by the CPU count), rather than one
+ * entry per task that has ever produced an event. Entries left behind by
+ * abandoned events (e.g. a failed tail call) are reclaimed by LRU eviction.
+ */
+static __always_inline void maps__release_auxiliary_map() {
+	uint64_t pid_tgid = bpf_get_current_pid_tgid();
+	bpf_map_delete_elem(&auxiliary_maps, &pid_tgid);
+}
+
 /*=============================== AUXILIARY MAPS ===========================*/
 
 /*=============================== COUNTER MAPS ===========================*/

@@ -149,6 +149,11 @@ static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap) {
 		counter->n_drops_buffer++;
 		compute_event_types_stats(auxmap->event_type, counter);
 	}
+
+	/* The event has been handed to the ring buffer (or dropped); release this
+	 * task's auxiliary map entry so the LRU hash is not filled with one entry
+	 * per task that has ever produced an event. See falcosecurity/libs#2719. */
+	maps__release_auxiliary_map();
 	return;
 }
 

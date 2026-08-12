@@ -378,15 +378,15 @@ int pman_mark_single_64bit_syscall(int syscall_id, bool interesting) {
 
 static int size_auxiliary_maps() {
 	/* `auxiliary_maps` is an LRU hash keyed by `pid_tgid`, holding one scratch
-	 * entry per task that is currently building an event. Only one task runs
-	 * per CPU at a time, but a task can be preempted mid-build while another
-	 * runs on the same CPU, so we need headroom above the CPU count. We size
-	 * it at 4x the possible CPUs (with a sensible floor) so that LRU eviction
-	 * of an in-flight entry is effectively impossible. If an entry were ever
-	 * evicted mid-build the event would be dropped, never corrupted. */
-	uint32_t aux_entries = g_state.n_possible_cpus * 4;
-	if(aux_entries < 128) {
-		aux_entries = 128;
+	 * entry per event currently being built. Entries are released as soon as an
+	 * event is submitted, so at any instant the number of live entries is
+	 * bounded by the number of tasks building an event concurrently (at most
+	 * one per CPU). We size it at 2x the possible CPUs (with a small floor) to
+	 * leave headroom; the LRU reclaims any entries left behind by abandoned
+	 * events. */
+	uint32_t aux_entries = g_state.n_possible_cpus * 2;
+	if(aux_entries < 16) {
+		aux_entries = 16;
 	}
 	if(bpf_map__set_max_entries(g_state.skel->maps.auxiliary_maps, aux_entries)) {
 		pman_print_error("unable to set max entries for 'auxiliary_maps'");
