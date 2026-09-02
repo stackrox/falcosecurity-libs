@@ -198,19 +198,13 @@ static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
 		return auxmap;
 	}
 
-	/* First event for this task (or the entry was evicted from the LRU): we
-	 * need to create the entry. `bpf_map_update_elem` requires a value to
-	 * copy from; use the single-element init template (a 128 KB value cannot
-	 * live on the BPF stack). The auxmap does not need to be zeroed (the
-	 * header, payload_pos and lengths_pos are set explicitly by
-	 * auxmap__preload_event_header, and param data is written before it is
-	 * read), so the template contents are irrelevant. */
 	uint32_t zero = 0;
 	struct auxiliary_map *init =
 	        (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_map_init, &zero);
 	if(!init) {
 		return NULL;
 	}
+
 	if(bpf_map_update_elem(&auxiliary_maps, &pid_tgid, init, BPF_ANY)) {
 		return NULL;
 	}

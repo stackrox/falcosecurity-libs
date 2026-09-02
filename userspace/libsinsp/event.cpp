@@ -1735,14 +1735,14 @@ void sinsp_evt_param::throw_invalid_len_error(size_t requested_length) const {
 	const scap_evt *raw = m_evt->get_scap_evt();
 	const ppm_event_info *evtinfo = m_evt->get_info();
 	if(raw && evtinfo) {
-		std::stringstream diag;
-		diag << "event diagnostics:"
+        ss.str("");
+		ss << "event diagnostics:"
 		     << " hdr_nparams=" << raw->nparams
 		     << " table_nparams=" << evtinfo->nparams
 		     << " event_len=" << raw->len
 		     << " event_type=" << raw->type
 		     << " hdr_size=" << sizeof(struct ppm_evt_hdr);
-		libsinsp_logger()->log(diag.str(), sinsp_logger::SEV_ERROR);
+		libsinsp_logger()->log(ss.str(), sinsp_logger::SEV_ERROR);
 
 		// Dump the length array from the raw event.
 		// Layout: [ppm_evt_hdr][len0][len1]...[lenN][data0][data1]...
