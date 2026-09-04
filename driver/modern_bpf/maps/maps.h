@@ -147,16 +147,17 @@ struct {
  * @brief Auxiliary map where the event is temporally saved before being
  * pushed in the ringbuffer.
  *
- * This is keyed by `pid_tgid` (not CPU) and backed by an LRU hash to avoid a
+ * This is keyed by `pid_tgid` (not CPU) and backed by a hash map to avoid a
  * data-corruption race on preemptible kernels (Linux >= 5.11). BPF programs run
  * with `migrate_disable()` but are preemptible: a per-CPU scratch buffer can be
  * clobbered if a program is preempted mid-write and another program runs on the
  * same CPU. Keying by `pid_tgid` gives each in-flight task its own scratch
- * entry, since a task can only run on one CPU at a time. See
+ * entry, since a task can only run on one CPU at a time. Entries must not be
+ * evicted while a preempted program still holds a pointer to them. See
  * falcosecurity/libs#2719.
  */
 struct {
-	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, uint64_t);
 	__type(value, struct auxiliary_map);
 } auxiliary_maps __weak SEC(".maps");

@@ -127,6 +127,7 @@ int BPF_PROG(vfork_x, struct pt_regs *regs, long ret) {
 	 * for the verifier (limit 1000000 instructions).
 	 */
 	bpf_tail_call(ctx, &syscall_exit_extra_tail_table, T1_VFORK_X);
+	maps__release_auxiliary_map();
 	return 0;
 }
 
@@ -173,6 +174,7 @@ int BPF_PROG(t1_vfork_x, struct pt_regs *regs, long ret) {
 	 * for the verifier (limit 1000000 instructions).
 	 */
 	bpf_tail_call(ctx, &syscall_exit_extra_tail_table, T2_VFORK_X);
+	maps__release_auxiliary_map();
 	return 0;
 }
 

@@ -127,6 +127,7 @@ int BPF_PROG(clone3_x, struct pt_regs *regs, long ret) {
 	 * for the verifier (limit 1000000 instructions).
 	 */
 	bpf_tail_call(ctx, &syscall_exit_extra_tail_table, T1_CLONE3_X);
+	maps__release_auxiliary_map();
 	return 0;
 }
 
@@ -181,6 +182,7 @@ int BPF_PROG(t1_clone3_x, struct pt_regs *regs, long ret) {
 	 * for the verifier (limit 1000000 instructions).
 	 */
 	bpf_tail_call(ctx, &syscall_exit_extra_tail_table, T2_CLONE3_X);
+	maps__release_auxiliary_map();
 	return 0;
 }
 
