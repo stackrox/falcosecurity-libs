@@ -147,16 +147,17 @@ struct {
  * @brief Auxiliary map where the event is temporally saved before being
  * pushed in the ringbuffer.
  *
- * This is keyed by `pid_tgid` (not CPU) and backed by an LRU hash to avoid a
+ * This is keyed by `pid_tgid` (not CPU) and backed by a hash map to avoid a
  * data-corruption race on preemptible kernels (Linux >= 5.11). BPF programs run
  * with `migrate_disable()` but are preemptible: a per-CPU scratch buffer can be
  * clobbered if a program is preempted mid-write and another program runs on the
  * same CPU. Keying by `pid_tgid` gives each in-flight task its own scratch
- * entry, since a task can only run on one CPU at a time. See
+ * entry, since a task can only run on one CPU at a time. A full map drops a
+ * new event rather than evicting state that an in-flight tail call requires. See
  * falcosecurity/libs#2719.
  */
 struct {
-	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, uint64_t);
 	__type(value, struct auxiliary_map);
 } auxiliary_maps __weak SEC(".maps");
@@ -165,7 +166,7 @@ struct {
  * @brief Single-element template used to initialise a new `auxiliary_maps`
  * entry.
  *
- * `bpf_map_update_elem` on the LRU hash requires a source value to copy from
+ * `bpf_map_update_elem` on the hash requires a source value to copy from
  * when creating a new entry for a task. We cannot build a 128 KB value on the
  * BPF stack (512 byte limit), so we keep one element to copy from. Its contents
  * are irrelevant (the auxmap is always written before it is read), so it is

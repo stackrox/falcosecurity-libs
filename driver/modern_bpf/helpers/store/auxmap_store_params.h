@@ -60,12 +60,16 @@
 ////////////////////////////////
 
 /**
- * @brief Get the auxiliary map pointer for the current CPU.
+ * @brief Get or create the auxiliary map pointer for the current task.
  *
  * @return pointer to the auxmap
  */
 static __always_inline struct auxiliary_map *auxmap__get() {
 	return maps__get_auxiliary_map();
+}
+
+static __always_inline struct auxiliary_map *auxmap__lookup() {
+	return maps__lookup_auxiliary_map();
 }
 
 /////////////////////////////////
