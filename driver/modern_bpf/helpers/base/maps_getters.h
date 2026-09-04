@@ -188,8 +188,7 @@ static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
 	 * kernels >= 5.11, so a per-CPU scratch buffer can be clobbered by
 	 * another program scheduled on the same CPU. A task only ever runs on
 	 * one CPU at a time, so `pid_tgid` uniquely identifies an in-flight
-	 * event build (stable across the tail-call chain). The map must not evict
-	 * entries while their owner may still be preempted. See
+	 * event build (stable across the tail-call chain). See
 	 * falcosecurity/libs#2719.
 	 */
 	uint64_t pid_tgid = bpf_get_current_pid_tgid();
@@ -216,9 +215,10 @@ static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
  * @brief Release the current task's auxiliary map entry.
  *
  * Called once an event has been submitted (best effort). Freeing the entry
- * immediately keeps the `auxiliary_maps` hash populated only with events
+ * immediately keeps the `auxiliary_maps` LRU hash populated only with events
  * that are currently being built (bounded by the CPU count), rather than one
- * entry per task that has ever produced an event.
+ * entry per task that has ever produced an event. Entries left behind by
+ * abandoned events (e.g. a failed tail call) are reclaimed by LRU eviction.
  */
 static __always_inline void maps__release_auxiliary_map() {
 	uint64_t pid_tgid = bpf_get_current_pid_tgid();

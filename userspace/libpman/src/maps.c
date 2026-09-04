@@ -377,13 +377,13 @@ int pman_mark_single_64bit_syscall(int syscall_id, bool interesting) {
 }
 
 static int size_auxiliary_maps() {
-	/* `auxiliary_maps` is a hash keyed by `pid_tgid`, holding one scratch
+	/* `auxiliary_maps` is an LRU hash keyed by `pid_tgid`, holding one scratch
 	 * entry per event currently being built. Entries are released as soon as an
 	 * event is submitted, so at any instant the number of live entries is
 	 * bounded by the number of tasks building an event concurrently (at most
 	 * one per CPU). We size it at 3x the possible CPUs (with a small floor) to
-	 * leave headroom for incomplete events. A full map drops new events rather
-	 * than invalidating an event being built. */
+	 * leave headroom; the LRU reclaims any entries left behind by abandoned
+	 * events. */
 	uint32_t aux_entries = g_state.n_possible_cpus * 3;
 	if(aux_entries < 16) {
 		aux_entries = 16;
