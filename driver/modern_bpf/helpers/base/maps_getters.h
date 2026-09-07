@@ -183,9 +183,49 @@ static __always_inline uint16_t maps__get_ppm_sc(uint16_t syscall_id) {
 
 /*=============================== AUXILIARY MAPS ===========================*/
 
+static __always_inline struct auxiliary_map *maps__lookup_auxiliary_map() {
+	uint64_t pid_tgid = bpf_get_current_pid_tgid();
+	return (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_maps, &pid_tgid);
+}
+
 static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
-	uint32_t cpu_id = (uint32_t)bpf_get_smp_processor_id();
-	return (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_maps, &cpu_id);
+	/* Key by `pid_tgid` rather than CPU: BPF programs are preemptible on
+	 * kernels >= 5.11, so a per-CPU scratch buffer can be clobbered by
+	 * another program scheduled on the same CPU. A task only ever runs on
+	 * one CPU at a time, so `pid_tgid` uniquely identifies an in-flight
+	 * event build (stable across the tail-call chain). See
+	 * falcosecurity/libs#2719.
+	 */
+	uint64_t pid_tgid = bpf_get_current_pid_tgid();
+	struct auxiliary_map *auxmap = maps__lookup_auxiliary_map();
+	if(auxmap) {
+		return auxmap;
+	}
+
+	uint32_t zero = 0;
+	struct auxiliary_map *init =
+	        (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_map_init, &zero);
+	if(!init) {
+		return NULL;
+	}
+
+	if(bpf_map_update_elem(&auxiliary_maps, &pid_tgid, init, BPF_NOEXIST)) {
+		return NULL;
+	}
+	return maps__lookup_auxiliary_map();
+}
+
+/**
+ * @brief Release the current task's auxiliary map entry.
+ *
+ * Called once an event has been submitted (best effort). Freeing the entry
+ * immediately keeps the `auxiliary_maps` hash populated only with events
+ * that are currently being built (bounded by the CPU count), rather than one
+ * entry per task that has ever produced an event.
+ */
+static __always_inline void maps__release_auxiliary_map() {
+	uint64_t pid_tgid = bpf_get_current_pid_tgid();
+	bpf_map_delete_elem(&auxiliary_maps, &pid_tgid);
 }
 
 /*=============================== AUXILIARY MAPS ===========================*/

@@ -126,6 +126,7 @@ int BPF_PROG(execveat_x, struct pt_regs *regs, long ret) {
 	 * for the verifier (limit 1000000 instructions).
 	 */
 	bpf_tail_call(ctx, &syscall_exit_extra_tail_table, T1_EXECVEAT_X);
+	maps__release_auxiliary_map();
 	return 0;
 }
 
@@ -261,6 +262,7 @@ int BPF_PROG(t1_execveat_x, struct pt_regs *regs, long ret) {
 
 	bpf_tail_call(ctx, &syscall_exit_extra_tail_table, T2_EXECVEAT_X);
 #endif
+	maps__release_auxiliary_map();
 	return 0;
 }
 

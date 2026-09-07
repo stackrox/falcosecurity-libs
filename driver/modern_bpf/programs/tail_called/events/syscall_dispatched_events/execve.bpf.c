@@ -65,6 +65,7 @@ int BPF_PROG(execve_x, struct pt_regs *regs, long ret) {
 		                                      MAX_PROC_ARG_ENV - exe_arg_len);
 	} else {
 		// ROX-31971: this branch makes the verifier overflow, skip this case.
+		maps__release_auxiliary_map();
 		return 0;
 	}
 

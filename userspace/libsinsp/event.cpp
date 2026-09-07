@@ -1730,6 +1730,69 @@ void sinsp_evt_param::throw_invalid_len_error(size_t requested_length) const {
 	        "parameter raw data: \n" + buffer_to_multiline_hex(param_data, param_len),
 	        sinsp_logger::SEV_ERROR);
 
+	// Enhanced diagnostics: dump raw event structure to identify the
+	// root cause of parameter corruption (ROX-33614 investigation).
+	const scap_evt *raw = m_evt->get_scap_evt();
+	const ppm_event_info *evtinfo = m_evt->get_info();
+	if(raw && evtinfo) {
+        ss.str("");
+		ss << "event diagnostics:"
+		     << " hdr_nparams=" << raw->nparams
+		     << " table_nparams=" << evtinfo->nparams
+		     << " event_len=" << raw->len
+		     << " event_type=" << raw->type
+		     << " hdr_size=" << sizeof(struct ppm_evt_hdr);
+		libsinsp_logger()->log(ss.str(), sinsp_logger::SEV_ERROR);
+
+		// Dump the length array from the raw event.
+		// Layout: [ppm_evt_hdr][len0][len1]...[lenN][data0][data1]...
+		// Each length entry is uint16_t (non-large) or uint32_t (large).
+		const char *evt_base = reinterpret_cast<const char *>(raw);
+		const char *len_array = evt_base + sizeof(struct ppm_evt_hdr);
+		bool is_large = (evtinfo->flags & EF_LARGE_PAYLOAD) != 0;
+		uint32_t len_entry_size = is_large ? sizeof(uint32_t) : sizeof(uint16_t);
+		uint32_t len_array_bytes = raw->nparams * len_entry_size;
+
+		// Dump all param lengths from the raw length array.
+		std::stringstream lens;
+		lens << "raw param lengths (" << (is_large ? "large" : "u16") << "):";
+		for(uint32_t i = 0; i < raw->nparams && i < PPM_MAX_EVENT_PARAMS; i++) {
+			uint32_t plen = 0;
+			if(is_large) {
+				memcpy(&plen, len_array + i * sizeof(uint32_t), sizeof(uint32_t));
+			} else {
+				uint16_t plen16 = 0;
+				memcpy(&plen16, len_array + i * sizeof(uint16_t), sizeof(uint16_t));
+				plen = plen16;
+			}
+			lens << " [" << i << "]=" << plen;
+		}
+		libsinsp_logger()->log(lens.str(), sinsp_logger::SEV_ERROR);
+
+		// Dump the raw event header + length array as hex.
+		size_t hdr_and_lens = sizeof(struct ppm_evt_hdr) + len_array_bytes;
+		size_t dump_len = std::min(hdr_and_lens, (size_t)256);
+		libsinsp_logger()->log(
+		        "raw header+lengths (" + std::to_string(dump_len) + " bytes):\n" +
+		                buffer_to_multiline_hex(evt_base, dump_len),
+		        sinsp_logger::SEV_ERROR);
+
+		// Dump the first 128 bytes of the param data region.
+		const char *data_region = len_array + len_array_bytes;
+		size_t data_avail = 0;
+		if(raw->len > hdr_and_lens) {
+			data_avail = raw->len - hdr_and_lens;
+		}
+		size_t data_dump = std::min(data_avail, (size_t)128);
+		if(data_dump > 0) {
+			libsinsp_logger()->log(
+			        "param data region (first " + std::to_string(data_dump) +
+			                " of " + std::to_string(data_avail) + " bytes):\n" +
+			                buffer_to_multiline_hex(data_region, data_dump),
+			        sinsp_logger::SEV_ERROR);
+		}
+	}
+
 	throw sinsp_exception(error_string);
 }
 
