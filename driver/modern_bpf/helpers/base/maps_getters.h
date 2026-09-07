@@ -209,7 +209,7 @@ static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
 		return NULL;
 	}
 
-	if(bpf_map_update_elem(&auxiliary_maps, &pid_tgid, init, BPF_ANY)) {
+	if(bpf_map_update_elem(&auxiliary_maps, &pid_tgid, init, BPF_NOEXIST)) {
 		return NULL;
 	}
 	return maps__lookup_auxiliary_map();
