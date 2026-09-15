@@ -60,12 +60,16 @@
 ////////////////////////////////
 
 /**
- * @brief Get the auxiliary map pointer for the current CPU.
+ * @brief Get or create the auxiliary map pointer for the current task.
  *
  * @return pointer to the auxmap
  */
 static __always_inline struct auxiliary_map *auxmap__get() {
 	return maps__get_auxiliary_map();
+}
+
+static __always_inline struct auxiliary_map *auxmap__lookup() {
+	return maps__lookup_auxiliary_map();
 }
 
 /////////////////////////////////
@@ -123,12 +127,12 @@ static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap) {
 	if(!rb) {
 		// this should never happen because we check it in sys_enter/sys_exit
 		bpf_printk("FAILURE: unable to obtain the ring buffer");
-		return;
+		goto out;
 	}
 
 	struct counter_map *counter = maps__get_counter_map();
 	if(!counter) {
-		return;
+		goto out;
 	}
 
 	/* This counts the event seen by the drivers even if they are dropped because the buffer is
@@ -137,7 +141,7 @@ static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap) {
 
 	if(auxmap->payload_pos > MAX_EVENT_SIZE) {
 		counter->n_drops_max_event_size++;
-		return;
+		goto out;
 	}
 
 	/* `BPF_RB_NO_WAKEUP` means that we don't send to userspace a notification
@@ -147,8 +151,9 @@ static __always_inline void auxmap__submit_event(struct auxiliary_map *auxmap) {
 	if(err) {
 		counter->n_drops_buffer++;
 		compute_event_types_stats(auxmap->event_type, counter);
-		return;
 	}
+	out:
+	maps__release_auxiliary_map();
 	return;
 }
 

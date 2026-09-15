@@ -149,15 +149,37 @@ struct {
  */
 
 /**
- * @brief For every CPU on the system we have an auxiliary
- * map where the event is temporally saved before being
+ * @brief Auxiliary map where the event is temporarily saved before being
  * pushed in the ringbuffer.
+ *
+ * This is keyed by `pid_tgid` rather than CPU to avoid a data-corruption race
+ * on preemptible kernels. BPF programs can be preempted while writing an
+ * event, allowing another task on the same CPU to clobber a per-CPU scratch
+ * entry. A task can only run on one CPU at a time, so `pid_tgid` uniquely
+ * identifies an in-flight event build. A full map drops a new event rather
+ * than evicting state required by an in-flight tail call.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, uint64_t);
+	__type(value, struct auxiliary_map);
+} auxiliary_maps __weak SEC(".maps");
+
+/**
+ * @brief Single-element template used to initialize a new `auxiliary_maps`
+ * entry.
+ *
+ * A hash update requires a source value. We cannot build this 128 KB value on
+ * the 512-byte BPF stack, so this array supplies a value to copy. Its contents
+ * are overwritten before use. A regular ARRAY is required because a
+ * BPF_MAP_TYPE_PERCPU_ARRAY element is limited to 32 KB.
  */
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
 	__type(key, uint32_t);
 	__type(value, struct auxiliary_map);
-} auxiliary_maps __weak SEC(".maps");
+} auxiliary_map_init __weak SEC(".maps");
 
 /**
  * @brief For every CPU on the system we have a counter

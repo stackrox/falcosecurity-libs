@@ -293,16 +293,15 @@ static __always_inline void ringbuf__store_u64(struct ringbuf_struct *ringbuf, u
 /**
  * @brief Store the size of a message extracted from an `iovec` struct array.
  *
- * @param auxmap pointer to the ringbuf in which we are storing the param.
+ * @param ringbuf pointer to the ringbuf in which we are storing the param.
  * @param iov_pointer pointer to `iovec` struct array.
  * @param iov_cnt number of `iovec` structs to be read from userspace.
  */
 static __always_inline void ringbuf__store_iovec_size_param(struct ringbuf_struct *ringbuf,
                                                             unsigned long iov_pointer,
                                                             unsigned long iov_cnt) {
-	/* The idea here is to use the auxmap of this CPU as a scratch space
-	 * and normally use the ringbuf to send data to userspace. Note that
-	 * we are running on this CPU so nobody else can use the auxmap in the meanwhile.
+	/* The idea here is to use the auxmap as a scratch space
+	 * and normally use the ringbuf to send data to userspace.
 	 * Here we don't have to use the second half of the map, we can use all the space
 	 * we want since we will never use the map to send data to userspace!
 	 */
@@ -324,6 +323,7 @@ static __always_inline void ringbuf__store_iovec_size_param(struct ringbuf_struc
 	                       SAFE_ACCESS(total_iovec_size),
 	                       (void *)iov_pointer)) {
 		ringbuf__store_u32(ringbuf, 0);
+		maps__release_auxiliary_map();
 		return;
 	}
 
@@ -348,4 +348,5 @@ static __always_inline void ringbuf__store_iovec_size_param(struct ringbuf_struc
 		}
 	}
 	ringbuf__store_u32(ringbuf, total_size_to_read);
+	maps__release_auxiliary_map();
 }

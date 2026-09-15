@@ -124,9 +124,34 @@ static __always_inline uint16_t maps__get_ppm_sc(uint16_t syscall_id) {
 
 /*=============================== AUXILIARY MAPS ===========================*/
 
+static __always_inline struct auxiliary_map *maps__lookup_auxiliary_map() {
+	uint64_t pid_tgid = bpf_get_current_pid_tgid();
+	return (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_maps, &pid_tgid);
+}
+
 static __always_inline struct auxiliary_map *maps__get_auxiliary_map() {
-	uint32_t cpu_id = (uint32_t)bpf_get_smp_processor_id();
-	return (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_maps, &cpu_id);
+	uint64_t pid_tgid = bpf_get_current_pid_tgid();
+	struct auxiliary_map *auxmap = maps__lookup_auxiliary_map();
+	if(auxmap) {
+		return auxmap;
+	}
+
+	uint32_t zero = 0;
+	struct auxiliary_map *init =
+	        (struct auxiliary_map *)bpf_map_lookup_elem(&auxiliary_map_init, &zero);
+	if(!init) {
+		return NULL;
+	}
+
+	if(bpf_map_update_elem(&auxiliary_maps, &pid_tgid, init, BPF_NOEXIST)) {
+		return NULL;
+	}
+	return maps__lookup_auxiliary_map();
+}
+
+static __always_inline void maps__release_auxiliary_map() {
+	uint64_t pid_tgid = bpf_get_current_pid_tgid();
+	bpf_map_delete_elem(&auxiliary_maps, &pid_tgid);
 }
 
 /*=============================== AUXILIARY MAPS ===========================*/
