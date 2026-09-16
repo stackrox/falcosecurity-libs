@@ -282,8 +282,13 @@ int pman_fill_extra_syscall_calls_table() {
 /*=============================== BPF_MAP_TYPE_ARRAY ===============================*/
 
 static int size_auxiliary_maps() {
-	/* We always allocate auxiliary maps from all the CPUs, even if some of them are not online. */
-	if(bpf_map__set_max_entries(g_state.skel->maps.auxiliary_maps, g_state.n_possible_cpus)) {
+	/* Each entry represents one event currently being built. Allow headroom
+	 * beyond one task per possible CPU for overlapping BPF execution. */
+	uint32_t aux_entries = g_state.n_possible_cpus * 3;
+	if(aux_entries < 16) {
+		aux_entries = 16;
+	}
+	if(bpf_map__set_max_entries(g_state.skel->maps.auxiliary_maps, aux_entries)) {
 		pman_print_error("unable to set max entries for 'auxiliary_maps'");
 		return errno;
 	}
