@@ -75,6 +75,9 @@ public:
 	void set_track_connection_status(bool enabled);
 	bool get_track_connection_status() const { return m_track_connection_status; }
 
+	void set_use_trusted_exepath(bool enabled);
+	bool get_use_trusted_exepath() const { return m_use_trusted_exepath; }
+
 private:
 	//
 	// Helpers
@@ -276,4 +279,7 @@ private:
 	scap_platform* const& m_scap_platform;
 
 	bool m_track_connection_status = false;
+
+	// When true, the exepath is taken from the `trusted_exepath` event parameter.
+	bool m_use_trusted_exepath = false;
 };

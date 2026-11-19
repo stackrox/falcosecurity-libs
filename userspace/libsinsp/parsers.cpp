@@ -41,16 +41,6 @@ limitations under the License.
 #include <libsinsp/user.h>
 #include <libsinsp/packed_data.h>
 
-/*
- * TODO: Trusted exepath is temporary disabled due to it's impact on builtin
- * policies. Enable as soon as possible.
- */
-#if defined(ENABLE_TRUSTED_EXEPATH)
-#define USE_TRUSTED_EXEPATH true
-#else
-#define USE_TRUSTED_EXEPATH false
-#endif
-
 sinsp_parser::sinsp_parser(const sinsp_mode &sinsp_mode,
                            const scap_machine_info *const &machine_info,
                            const std::vector<std::string> &event_sources,
@@ -92,6 +82,10 @@ sinsp_parser::~sinsp_parser() {}
 
 void sinsp_parser::set_track_connection_status(bool enabled) {
 	m_track_connection_status = enabled;
+}
+
+void sinsp_parser::set_use_trusted_exepath(bool enabled) {
+	m_use_trusted_exepath = enabled;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1562,7 +1556,7 @@ void sinsp_parser::parse_execve_exit(sinsp_evt &evt, sinsp_parser_verdict &verdi
 	}
 
 	// Set the exepath.
-	if(USE_TRUSTED_EXEPATH && !evt.get_param(27)->empty()) {
+	if(m_use_trusted_exepath && !evt.get_param(27)->empty()) {
 		/* Parameter 28: trusted_exepath (type: PT_FSPATH) */
 		evt.get_tinfo()->set_exepath(evt.get_param(27)->as<std::string>());
 	} else {

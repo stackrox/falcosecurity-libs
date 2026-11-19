@@ -136,6 +136,8 @@ TEST_F(sinsp_with_test_input, EXECVE_missing_process_execve_repair) {
 TEST_F(sinsp_with_test_input, EXECVE_exepath_with_trusted_exepath) {
 	DEFAULT_TREE
 
+	m_inspector.get_parser()->set_use_trusted_exepath(true);
+
 	/* Now we call an execve on p6_t1 */
 	generate_execve_enter_and_exit_event(0,
 	                                     p6_t1_tid,
